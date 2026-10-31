@@ -1,0 +1,7 @@
+configuration:
+  speicherort:
+    name: Speicherort für Fotos und Bilder
+    description: >-
+      Ordner auf dem Netzlaufwerk, das Home Assistant unter „Einstellungen → System → Speicher“ eingebunden hat,
+      z. B. /share/netzlaufwerk/mtg-binder oder /media/netzlaufwerk/mtg-binder. Die Datenbank bleibt immer im
+      Add-on. Leer lassen nur zum Ausprobieren (dann liegt alles auf dem Mini-PC).

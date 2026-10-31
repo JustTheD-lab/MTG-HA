@@ -1,0 +1,385 @@
+/* Bibliothek im Stil „Galerie“: dunkler Raum, die Binder als schlichte Rücken auf feinen Messinglinien,
+   darüber eine ruhige Suche. Farben, Schrift und Bewegung kommen aus basis.css.
+   Klassen beginnen mit „regal-“. */
+
+.regal-szene {
+  --rh: 270px;            /* Höhe eines 3x3-Rückens */
+  --ts: 1;                /* Schriftmaßstab der Rücken */
+  --fach-rand: 8px;
+  position: relative;
+  max-width: 1080px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(28px, env(safe-area-inset-top)) var(--rand-sicher) max(48px, env(safe-area-inset-bottom));
+  padding-right: max(16px, env(safe-area-inset-right));
+  overflow-x: hidden; overflow-x: clip; overflow-y: visible;
+}
+@media (min-width: 700px)  { .regal-szene { --rh: 310px; --ts: 1.08; --fach-rand: 14px; } }
+@media (min-width: 1100px) { .regal-szene { --rh: 350px; --ts: 1.16; } }
+
+.regal-szene [hidden] { display: none !important; }
+
+/* ---------- Kopf ---------- */
+
+.regal-kopf { padding: 8px 0 22px; text-align: center; }
+.regal-titel-haupt { font-size: clamp(2rem, 8vw, 3rem); font-weight: 600; letter-spacing: -0.03em; }
+/* Zahlen: Binder und Kisten getrennt (nie zusammengezählt); am Handy untereinander, ab 600 px nebeneinander */
+.regal-zahlen {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  margin: 8px 0 0; font-size: 0.92rem; color: var(--text-3); letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.regal-zahlen-teil { white-space: nowrap; }
+@media (min-width: 600px) {
+  .regal-zahlen { flex-direction: row; justify-content: center; gap: 0; }
+  .regal-zahlen-teil ~ .regal-zahlen-teil { margin-left: 16px; padding-left: 16px; border-left: 1px solid var(--linie-stark); }
+}
+
+/* Statuszeile: Zustand der Erkennung und Prüfen-Pille, dezent; die Höhe ist reserviert (kein Springen beim Laden) */
+.regal-status {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 18px;
+  min-height: 32px; margin-top: 12px;
+}
+.regal-erkennung { display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-3); cursor: default; }
+.regal-punkt { flex: none; width: 7px; height: 7px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.regal-erkennung--aktiv { color: var(--text-2); }
+.regal-erkennung--aktiv .regal-punkt { background: var(--erfolg, var(--messing)); box-shadow: none; }
+/* Prüfen-Pille: sichtbar klein, das Tippziel reicht per Pseudoelement auf 44 px */
+.regal-pruefen { position: relative; min-height: 32px; padding: 0 0.9em; font-size: 0.84rem; color: var(--text-2); }
+.regal-pruefen::after { content: ""; position: absolute; inset: -6px -4px; }
+.regal-pruefen-zahl { color: var(--messing-hell); font-variant-numeric: tabular-nums; }
+
+/* Aktionen unter dem Titel: „Neuer Binder" und „Neue Kiste" (nur angemeldet) und Anmelde-Knopf,
+   zentriert, umbrechen am Handy */
+.regal-aktionen { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 18px; }
+.regal-neu svg, .regal-neue-kiste svg { flex: none; }
+
+/* ---------- Suche ---------- */
+
+.regal-kasten { max-width: 520px; margin: 0 auto 28px; }
+.regal-kasten-feld {
+  display: flex; align-items: center; gap: 4px; min-height: 48px; padding: 0 4px 0 16px;
+  border: 1px solid var(--linie-stark); border-radius: 999px; background: var(--flaeche-1);
+  color: var(--text-3);
+  transition: border-color var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve);
+}
+.regal-kasten-feld svg { flex: none; }
+.regal-kasten-feld:focus-within { border-color: var(--messing); background: var(--flaeche-2); color: var(--messing); }
+.regal-kasten-eingabe {
+  appearance: none; -webkit-appearance: none; flex: 1; min-width: 0; min-height: 46px;
+  padding: 0 8px; border: 0; background: transparent; outline: none;
+  color: var(--text); font-family: var(--schrift); font-size: 16px;   /* 16 px: iOS zoomt sonst */
+}
+.regal-kasten-eingabe::placeholder { color: var(--text-3); }
+.regal-kasten-eingabe::-webkit-search-cancel-button,
+.regal-kasten-eingabe::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+.regal-kasten-leer {
+  appearance: none; flex: none; display: grid; place-items: center; width: 44px; height: 44px;
+  border: 0; border-radius: 50%; background: transparent; color: var(--text-2); cursor: pointer;
+}
+.regal-kasten-leer:hover { color: var(--text); background: var(--flaeche-hover); }
+
+/* ---------- Treffer ---------- */
+
+.regal-treffer { max-width: 980px; margin: 0 auto; }
+.regal-treffer-kopf { margin: 0 0 16px; text-align: center; font-size: 0.92rem; color: var(--text-2); }
+.regal-treffer-hinweis { margin: 16px 0 0; text-align: center; font-size: 0.85rem; color: var(--text-3); }
+
+.regal-karteikarten {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 10px;
+}
+
+.regal-karteikarte {
+  display: flex; align-items: center; gap: 14px; min-height: 112px; padding: 12px 14px 12px 12px;
+  border: 1px solid var(--linie); border-radius: var(--radius); background: var(--flaeche-2);
+  color: var(--text); text-decoration: none;
+  transition: background-color var(--dauer-kurz) var(--kurve), border-color var(--dauer-kurz) var(--kurve);
+}
+@media (hover: hover) { .regal-karteikarte:hover { background: var(--flaeche-hover); border-color: var(--linie-stark); } }
+.regal-karteikarte:active { background: var(--flaeche-3); }
+
+.regal-vorschau {
+  position: relative; flex: none; width: 60px; aspect-ratio: 63 / 88;
+  border-radius: 3px; background: var(--flaeche-3); box-shadow: var(--schatten-karte);
+}
+.regal-vorschau img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 3px; }
+/* Rückfall ohne Bild: schlichte Kartenfläche */
+.regal-vorschau--leer { border: 1px solid var(--linie-stark); background: var(--flaeche-1); }
+.regal-vorschau--leer img { display: none; }
+
+.regal-karte-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.regal-karte-name { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; overflow-wrap: anywhere; }
+.regal-karte-daten { font-size: 0.82rem; color: var(--text-2); }
+.regal-karte-ort { margin-top: 4px; font-size: 0.88rem; font-weight: 500; color: var(--messing); }
+.regal-karte-lage { font-size: 0.82rem; color: var(--text-2); }
+.regal-karte-hinweis { margin-top: 2px; font-size: 0.78rem; color: var(--warnung); }
+.regal-karte--geprueft .regal-karte-hinweis { color: var(--text-3); }
+
+/* Abzeichen an der oberen rechten Kartenecke: gefüllt = offen, Ring mit Häkchen = geprüft */
+.regal-abzeichen {
+  position: absolute; top: -7px; right: -7px; z-index: 2;
+  display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  font-size: 0.72rem; font-weight: 700; line-height: 1; color: #1a1408;
+  box-shadow: 0 0 0 2px var(--flaeche-2);
+}
+.regal-siegel { background: var(--warnung); color: #fff; }
+.regal-lesezeichen { background: var(--hinweis); }
+.regal-abzeichen--geprueft { background: var(--flaeche-2); }
+.regal-siegel--geprueft { box-shadow: inset 0 0 0 1.5px var(--warnung), 0 0 0 2px var(--flaeche-2); color: var(--warnung); }
+.regal-lesezeichen--geprueft { box-shadow: inset 0 0 0 1.5px var(--hinweis), 0 0 0 2px var(--flaeche-2); color: var(--hinweis); }
+
+/* ---------- Regal: Rücken auf Messinglinien ---------- */
+
+.regal-moebel { position: relative; padding-top: 8px; }
+.regal-korpus { display: block; }
+.regal-boden { position: relative; margin-bottom: 8px; }
+
+.regal-fach {
+  position: relative; list-style: none; margin: 0; padding: 0 var(--fach-rand);
+  display: flex; align-items: flex-end; justify-content: center; gap: 4px;  /* wie ausgestellt: mittig */
+  height: calc(var(--rh) * 1.1 + 24px);
+}
+.regal-fach--frei { height: 120px; }
+
+/* Regalboden: 1-px-Linie in Messing, zu den Rändern auslaufend */
+.regal-brett {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--messing-dunkel) 8%, var(--messing) 50%, var(--messing-dunkel) 92%, transparent);
+  opacity: 0.8;
+}
+
+.regal-leer-hinweis { align-self: center; margin: 0 auto; padding: 0 12px; text-align: center; color: var(--text-3); }
+
+/* ---------- Rücken ---------- */
+
+.regal-platz { display: flex; align-items: flex-end; flex: none; }
+
+.regal-ruecken {
+  /* Standard: gedecktes Braun */
+  --r-grund: var(--binder-sonst); --r-text: #f4ece4; --r-text-2: rgba(244, 236, 228, 0.68);
+  --r-linie: rgba(255, 255, 255, 0.14);
+
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  position: relative; display: flex; flex-direction: column; flex: none;
+  width: var(--breite, 76px); height: calc(var(--rh) * var(--faktor, 1));
+  margin: 0; padding: 0; border: 0; border-radius: 3px 3px 0 0;
+  background: var(--r-grund); color: var(--r-text); text-align: center;
+  transform-origin: 50% 100%;
+  transition: transform var(--dauer-kurz) var(--kurve), opacity var(--dauer) var(--kurve);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.07), inset -1px 0 0 rgba(0, 0, 0, 0.28);
+}
+@media (hover: hover) { .regal-ruecken:hover { transform: translateY(-6px); } }
+.regal-ruecken:active { transform: translateY(-2px); }
+.regal-ruecken:focus-visible { outline-offset: 4px; }
+
+.regal-farbe-schwarz      { --r-grund: var(--binder-schwarz); box-shadow: inset 0 0 0 1px var(--linie-stark); }
+.regal-farbe-blau         { --r-grund: var(--binder-blau); }
+.regal-farbe-gelb         { --r-grund: var(--binder-gelb); --r-text: #20170a; --r-text-2: rgba(32, 23, 10, 0.72); --r-linie: rgba(32, 23, 10, 0.22); }
+.regal-farbe-durchsichtig { --r-grund: var(--binder-durchsichtig); --r-text: #1d1b18; --r-text-2: rgba(29, 27, 24, 0.7); --r-linie: rgba(29, 27, 24, 0.2); }
+.regal-farbe-gruen        { --r-grund: #2f5444; }
+.regal-farbe-rot          { --r-grund: #6a2b2a; }
+.regal-farbe-braun        { --r-grund: var(--binder-sonst); }
+
+.regal-titelfeld {
+  flex: 1 1 auto; min-height: 0; display: flex; justify-content: center;
+  margin: 16px 6px 0; padding-bottom: 12px;
+}
+.regal-titel {
+  display: block; height: 100%; overflow: hidden; text-align: center;
+  writing-mode: vertical-rl; white-space: nowrap; text-overflow: ellipsis;
+  font-weight: 600; letter-spacing: -0.01em; line-height: 1.15;
+  font-size: calc(var(--titel, 1.1rem) * var(--ts));
+  color: var(--r-text);
+}
+
+.regal-zahlfeld {
+  flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 52px; padding: 9px 4px 11px; border-top: 1px solid var(--r-linie);
+  font-size: calc(0.78rem * var(--ts)); line-height: 1.2; color: var(--r-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.regal-zahl-karten { font-weight: 600; color: var(--r-text); white-space: nowrap; }
+.regal-zahl-raster { white-space: nowrap; }
+.regal-zahl-wert { font-size: 0.92em; font-weight: 600; color: inherit; }   /* lesbar auf jeder Binderfarbe */
+
+/* Herausnehmen und Zurückstellen: nur transform und opacity */
+@keyframes regal-heraus {
+  from { transform: translateY(0) scale(1); }
+  to   { transform: translateY(-12px) scale(1.14); }
+}
+@keyframes regal-hinein {
+  from { transform: translateY(-12px) scale(1.14); }
+  to   { transform: translateY(0) scale(1); }
+}
+.regal-ruecken.regal-heraus { z-index: 6; transition: none; animation: regal-heraus var(--dauer) var(--kurve) both; }
+.regal-ruecken.regal-zurueck { z-index: 6; transition: none; animation: regal-hinein var(--dauer-lang) var(--kurve) both; }
+.regal-geht .regal-ruecken:not(.regal-heraus) { opacity: 0.5; }
+
+@media (max-width: 420px) {
+  .regal-fach { --fach-rand: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .regal-karteikarte, .regal-ruecken, .regal-kasten-feld, .regal-kiste { transition: none; }
+}
+
+/* Punkt oben am Rücken: Karten mit unsicherer Erkennung, die noch nicht geprüft sind */
+.regal-offen {
+  position: absolute; top: 8px; left: 50%; width: 8px; height: 8px; margin-left: -4px;
+  border-radius: 50%; background: var(--warnung); box-shadow: 0 0 0 2px var(--r-grund);
+}
+
+/* Fotos mit Fehler: Punkt oben rechts am Rücken (rechts vom Punkt für offene Karten) */
+.regal-fehler {
+  position: absolute; top: 8px; right: 8px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--warnung); box-shadow: 0 0 0 2px var(--r-grund);
+}
+
+/* Fotos in der Erkennung: schmaler Messing-Strich unten am Rücken, über der Zahlenspalte */
+.regal-arbeit {
+  position: absolute; bottom: 4px; left: 50%; width: 18px; height: 2px; margin-left: -9px;
+  border-radius: 1px; background: var(--messing);
+}
+
+/* ---------- Regalboden „Kisten" ---------- */
+
+.regal-kistenboden { margin-top: 30px; }
+
+/* Beschriftung des Bodens: kleines Etikett zwischen zwei Haarlinien */
+.regal-boden-titel {
+  display: flex; align-items: center; justify-content: center; gap: 14px; margin: 0 0 18px;
+}
+.regal-boden-titel::before, .regal-boden-titel::after {
+  content: ""; flex: 0 1 120px; height: 1px; background: var(--linie);
+}
+
+/* Raster der Kisten: Handy 2 bis 3 je Reihe, ab Tablet so viele, wie hineinpassen; kein waagrechtes Scrollen */
+.regal-kisten {
+  list-style: none; margin: 0; padding: 0 var(--fach-rand);
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; row-gap: 26px;
+}
+@media (min-width: 480px) { .regal-kisten { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 700px) {
+  .regal-kisten { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); column-gap: 16px; row-gap: 30px; }
+}
+
+/* Jede Reihe steht auf einer feinen Messinglinie; die Linien benachbarter Kisten laufen ineinander */
+.regal-kistenplatz { position: relative; display: flex; }
+.regal-kistenplatz::after {
+  content: ""; position: absolute; left: -8px; right: -8px; bottom: 0; height: 1px;
+  background: var(--messing-dunkel); opacity: 0.6; pointer-events: none;
+}
+
+/* Etikettfarben (Plakette der Kiste und Farbwahl im Dialog) */
+.regal-ek-messing { --ek: var(--messing); }
+.regal-ek-silber  { --ek: #b9bdc4; }
+.regal-ek-kupfer  { --ek: #c07a52; }
+.regal-ek-gruen   { --ek: #6aa386; }
+.regal-ek-blau    { --ek: #6a93c4; }
+.regal-ek-rot     { --ek: #cf6e66; }
+
+.regal-kiste {
+  --ek: var(--messing);
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  position: relative; flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+  margin: 0; padding: 0; border: 0; background: none; color: var(--text); text-align: center;
+  transform-origin: 50% 60%;
+  transition: transform var(--dauer-kurz) var(--kurve), opacity var(--dauer) var(--kurve);
+}
+@media (hover: hover) { .regal-kiste:hover { transform: translateY(-4px); } }
+.regal-kiste:active { transform: translateY(-1px); }
+.regal-kiste:focus-visible { outline-offset: 4px; }
+
+/* Angedeutete Kartenkanten: ein schmaler Streifen feiner Linien über der Front (reines CSS) */
+.regal-kiste-kanten {
+  flex: none; display: block; height: 18px; margin: 0 8px;
+  border-radius: 2px 2px 0 0;
+  background:
+    repeating-linear-gradient(180deg, rgba(244, 241, 236, 0.30) 0 1px, transparent 1px 3px),
+    linear-gradient(90deg, var(--linie-stark) 0 1px, transparent 1px calc(100% - 1px), var(--linie-stark) calc(100% - 1px));
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 90%);
+  mask-image: linear-gradient(180deg, transparent, #000 90%);
+}
+
+/* Front der Kiste: flache dunkle Box in Vorderansicht, unten bündig auf der Messinglinie */
+.regal-kiste-front {
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
+  min-height: 96px; padding: 14px 8px 12px;
+  border: 1px solid var(--linie-stark); border-bottom: 0; border-radius: var(--radius-klein) var(--radius-klein) 0 0;
+  background: var(--flaeche-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: border-color var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve);
+}
+@media (hover: hover) { .regal-kiste:hover .regal-kiste-front { border-color: var(--messing-dunkel); background: var(--flaeche-3); } }
+
+/* Messing-Etikett mit dem Namen */
+.regal-kiste-etikett {
+  display: block; align-self: stretch; padding: 5px 8px; border-radius: 3px;
+  background: var(--ek); color: #17130b;
+}
+.regal-kiste-name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  font-size: 0.88rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.22; overflow-wrap: anywhere;
+}
+
+/* Karten und Posten: am Handy zwei Zeilen, auf breiten Bildschirmen eine Zeile mit Mittelpunkt */
+.regal-kiste-zahlen {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  font-size: 0.66rem; letter-spacing: 0.05em; font-variant-numeric: tabular-nums;
+}
+.regal-kiste-karten { color: var(--text-2); font-weight: 600; white-space: nowrap; }
+.regal-kiste-posten { white-space: nowrap; }
+.regal-kiste-trenner { display: none; }
+@media (min-width: 700px) {
+  .regal-kiste-zahlen { flex-direction: row; justify-content: center; gap: 0; }
+  .regal-kiste-trenner { display: inline; white-space: pre; }
+}
+@media (prefers-reduced-motion: reduce) { .regal-sammlung { transition: none; } }
+
+/* Nach vorn ziehen und zurückstellen: nur transform und opacity */
+@keyframes regal-kiste-heraus {
+  from { transform: translateY(0) scale(1); }
+  to   { transform: translateY(-6px) scale(1.12); }
+}
+@keyframes regal-kiste-hinein {
+  from { transform: translateY(-6px) scale(1.12); }
+  to   { transform: translateY(0) scale(1); }
+}
+.regal-kiste.regal-heraus { z-index: 6; transition: none; animation: regal-kiste-heraus var(--dauer) var(--kurve) both; }
+.regal-kiste.regal-zurueck { z-index: 6; transition: none; animation: regal-kiste-hinein var(--dauer-lang) var(--kurve) both; }
+.regal-geht .regal-kiste:not(.regal-heraus) { opacity: 0.5; }
+
+/* ---------- Etikett „Sammlung“ über den Böden ---------- */
+
+.regal-sammlung {
+  appearance: none; -webkit-appearance: none; cursor: pointer; display: flex; align-items: center; gap: 12px;
+  width: calc(100% - 2 * var(--fach-rand)); max-width: 460px; min-height: 52px; margin: 0 auto 22px; padding: 6px 12px 6px 6px;
+  background: var(--flaeche-2); color: var(--text); border: 1px solid var(--linie-stark); border-radius: var(--radius);
+  text-align: left;
+  transition: border-color var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve);
+}
+.regal-sammlung:hover { border-color: var(--messing-dunkel); background: var(--flaeche-3); }
+.regal-sammlung-etikett {
+  flex: none; padding: 7px 14px; border-radius: 4px; background: var(--messing); color: #17130b;
+  font-size: 0.92rem; font-weight: 600; letter-spacing: -0.01em;
+}
+.regal-sammlung-zahlen { flex: 1 1 auto; min-width: 0; font-variant-numeric: tabular-nums; letter-spacing: 0.05em; }
+.regal-sammlung-pfeil { flex: none; color: var(--text-3); }
+
+/* ---------- Dialog „Neue Kiste" (liegt außerhalb der Szene) ---------- */
+
+.regal-kf { margin: 0; padding: 0; border: 0; min-width: 0; }
+.regal-kf legend { margin: 0; padding: 16px 0 6px; }
+.regal-kf-liste { display: flex; flex-wrap: wrap; gap: 8px; }
+.regal-kf-wahl { position: relative; display: inline-flex; }
+.regal-kf-eingabe { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.regal-kf-pille {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 12px;
+  border: 1px solid var(--linie-stark); border-radius: 999px; font-size: 0.94rem; color: var(--text-2);
+  transition: border-color var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve);
+}
+.regal-kf-chip { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--ek, var(--messing)); }
+.regal-kf-eingabe:checked + .regal-kf-pille { border-color: var(--messing); background: var(--messing-schleier); color: var(--text); }
+.regal-kf-eingabe:focus-visible + .regal-kf-pille { outline: 2px solid var(--messing); outline-offset: 2px; }

@@ -1,0 +1,403 @@
+/* Lesetisch im Stil „Galerie": dunkler Raum, der Binder aufgeschlagen, glatte Flächen.
+   Alle Klassen beginnen mit „tisch-". Farben, Schrift und Dauer nur über die Variablen aus basis.css.
+   Animiert werden nur transform und opacity (siehe lesetisch.js). */
+
+/* ---------- Farben je Binder ---------- */
+
+.tisch {
+  /* Standard (schwarz): dunkler Einband, dunkle Hüllen */
+  --einband: var(--binder-schwarz);
+  --einband-kante: #38383e;
+  --seite-grund: #0f0f11;
+  --huelle-kante: rgba(255, 255, 255, 0.15);
+  --huelle-grund: rgba(255, 255, 255, 0.045);
+  --huelle-leer: rgba(255, 255, 255, 0.02);
+}
+.tisch[data-farbe="durchsichtig"] {
+  --einband: #3b3b41;
+  --einband-kante: #55555c;
+  --seite-grund: var(--binder-durchsichtig);
+  --huelle-kante: rgba(40, 36, 30, 0.34);
+  --huelle-grund: rgba(255, 255, 255, 0.4);
+  --huelle-leer: rgba(255, 255, 255, 0.28);
+}
+.tisch[data-farbe="gelb"] {
+  --einband: #5e4614;
+  --einband-kante: #7a5c1c;
+  --seite-grund: #b48a3a;
+  --huelle-kante: rgba(60, 38, 8, 0.4);
+  --huelle-grund: rgba(255, 235, 170, 0.16);
+  --huelle-leer: rgba(255, 235, 170, 0.1);
+}
+.tisch[data-farbe="blau"] {
+  --einband: var(--binder-blau);
+  --einband-kante: #46658d;
+  --seite-grund: #121a27;
+}
+.tisch[data-farbe="gruen"] {
+  --einband: #2c4a3a;
+  --einband-kante: #436b55;
+  --seite-grund: #101a15;
+}
+.tisch[data-farbe="rot"] {
+  --einband: #5a2a2a;
+  --einband-kante: #86413f;
+  --seite-grund: #1c1111;
+}
+.tisch[data-farbe="braun"] {
+  --einband: #4a3a2e;
+  --einband-kante: #6d5946;
+  --seite-grund: #17130f;
+}
+.tisch[data-farbe="sonst"] {
+  --einband: var(--binder-sonst);
+  --einband-kante: #7a6552;
+  --seite-grund: #17130f;
+}
+
+/* ---------- Tisch ---------- */
+
+.tisch {
+  position: relative;
+  display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh;
+  overflow: hidden;
+  color: var(--text);
+}
+.tisch-hinein { animation: tisch-hinein var(--dauer) var(--kurve) backwards; }
+@keyframes tisch-hinein { from { opacity: 0; } to { opacity: 1; } }
+
+.tisch-auflage { position: relative; flex: 1; min-height: 0; }
+
+.tisch-buehne {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  padding: clamp(10px, 2vh, 24px) clamp(10px, 2vw, 32px) clamp(16px, 3vh, 32px);
+}
+
+/* ---------- Leiste ---------- */
+
+.tisch-leiste {
+  position: relative; z-index: 2; flex: none;
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px max(var(--rand-sicher), 24px);
+  border-bottom: 1px solid var(--linie);
+}
+.tisch-leiste-rest { display: contents; }
+.tisch-titel {
+  flex: 1 1 auto; min-width: 0; margin: 0;
+  font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tisch-zurueck { flex: none; padding-left: 0.8em; }
+.tisch-sym { flex: none; display: block; }
+.tisch-aktionen { flex: none; display: flex; align-items: center; gap: 14px; }
+.tisch-bildart { display: flex; flex: none; }
+.tisch-bildart[hidden], .tisch-seiten[hidden] { display: none; }
+.tisch-seiten { flex: none; }
+@media (max-width: 479px) {
+  .tisch-seiten-text { display: none; }
+  .tisch-seiten { width: 44px; padding: 0; }
+}
+.tisch-bildart .knopf { border-radius: 0; min-width: 44px; font-size: 0.88rem; }
+.tisch-bildart .knopf:first-child { border-radius: 999px 0 0 999px; padding-left: 1.2em; }
+.tisch-bildart .knopf:last-child { border-radius: 0 999px 999px 0; border-left-width: 0; padding-right: 1.2em; }
+.tisch-nav { flex: none; display: flex; align-items: center; gap: 8px; }
+.tisch-seitenzahl {
+  margin: 0; min-width: 10em; text-align: center;
+  font-size: 0.9rem; font-weight: 500; color: var(--text-2); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tisch-pfeil { width: 44px; padding: 0; }
+.tisch-pfeil:disabled { opacity: 0.3; }
+
+/* Handy: zwei Zeilen oben, Blättern als Leiste unten */
+.tisch-einzel .tisch-leiste {
+  display: grid; grid-template-columns: auto 1fr; gap: 8px 10px;
+  padding: max(8px, env(safe-area-inset-top)) var(--rand-sicher) 10px;
+}
+.tisch-einzel .tisch-titel { font-size: 1.1rem; }
+.tisch-titel:has(.tisch-wert) { display: flex; align-items: baseline; gap: 0.4em; }
+.tisch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tisch-wert { flex: none; font-size: 0.78em; font-weight: 500; letter-spacing: 0; }
+.tisch-einzel .tisch-aktionen { grid-column: 1 / -1; gap: 8px; justify-content: flex-end; }
+.tisch-einzel .tisch-bildart { flex: 1 1 auto; min-width: 0; }
+.tisch-einzel .tisch-bildart .knopf { flex: 1; justify-content: center; }
+.tisch-einzel .tisch-nav {
+  position: relative; z-index: 2; justify-content: space-between; gap: 8px;
+  padding: 8px var(--rand-sicher) max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--linie);
+}
+.tisch-einzel .tisch-nav .tisch-pfeil { width: 64px; }
+.tisch-einzel .tisch-nav[hidden] { display: none; }
+.tisch-einzel .tisch-buehne { padding: 10px 8px; }
+
+/* ---------- Binder ---------- */
+
+.tisch-binder {
+  position: relative; flex: none;
+  width: var(--binder-b); height: var(--binder-h);
+  /* abgeleitete Maße (die Seitenbreite setzt lesetisch.js) */
+  --innen: calc(var(--seite-b) * 0.035);
+  --luecke: calc(var(--seite-b) * 0.03);
+}
+.tisch-aufgeschlagen {
+  position: absolute; inset: 0;
+  perspective: 4500px;
+}
+
+/* Einbandhälften: glatte Fläche in der Binderfarbe */
+.tisch-halbe {
+  position: absolute; top: 0; bottom: 0;
+  background: var(--einband);
+  box-shadow: inset 0 0 0 1px var(--einband-kante), var(--schatten-hoch);
+}
+.tisch-halbe-l { left: 0; width: 50%; border-radius: var(--radius) 2px 2px var(--radius); }
+.tisch-halbe-r { right: 0; width: 50%; border-radius: 2px var(--radius) var(--radius) 2px; }
+.tisch-halbe-einzel { inset: 0; border-radius: 4px var(--radius) var(--radius) 4px; }
+
+/* Seitenflächen: so groß wie eine Seite, in den Einband eingelegt */
+.tisch-flaeche {
+  position: absolute; top: var(--rand); z-index: 0;
+  width: var(--seite-b); height: var(--seite-h);
+}
+.tisch-flaeche-l { right: 0; }
+.tisch-flaeche-r { left: 0; }
+.tisch-flaeche-einzel { left: var(--rand-links); }
+
+/* Weicher Schatten zum Rücken hin */
+.tisch-flaeche::after, .tisch-blatt-vorn::after, .tisch-blatt-hinten::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 10%; z-index: 2; pointer-events: none;
+}
+.tisch-flaeche-r::after, .tisch-blatt-vorn::after { left: 0; background: linear-gradient(90deg, rgba(0, 0, 0, 0.28), transparent); }
+.tisch-flaeche-l::after, .tisch-blatt-hinten::after { right: 0; background: linear-gradient(270deg, rgba(0, 0, 0, 0.28), transparent); }
+.tisch-flaeche-einzel::after { left: 0; background: linear-gradient(90deg, rgba(0, 0, 0, 0.24), transparent); width: 6%; }
+
+/* ---------- Seite und Taschen ---------- */
+
+.tisch-seite {
+  position: absolute; inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--spalten), 1fr);
+  grid-template-rows: repeat(var(--zeilen), 1fr);
+  gap: var(--luecke);
+  padding: var(--innen);
+  background: var(--seite-grund);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+/* Innenseite des Einbands: glatt, in Einbandfarbe */
+.tisch-vorsatz { display: block; padding: 0; background: var(--einband); box-shadow: inset 0 0 0 1px var(--einband-kante); }
+
+.tisch-tasche {
+  position: relative; min-width: 0; min-height: 0;
+  border-radius: calc(var(--tasche-b) * 0.045);
+  border: 1px solid var(--huelle-kante);
+  background: var(--huelle-grund);
+}
+.tisch-tasche-leer { background: var(--huelle-leer); border: 1px dashed var(--linie-stark); }
+.tisch[data-farbe="durchsichtig"] .tisch-tasche-leer, .tisch[data-farbe="gelb"] .tisch-tasche-leer { border-color: var(--huelle-kante); }
+
+.tisch-karte {
+  appearance: none; position: absolute; inset: 3% 3.5%; padding: 0; margin: 0;
+  border: 0; border-radius: var(--radius-karte) / 3.2%;
+  overflow: hidden; cursor: pointer;
+  background: var(--flaeche-3);
+  box-shadow: var(--schatten-karte);
+  transition: transform var(--dauer-kurz) var(--kurve);
+}
+.tisch-karte img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tisch-karte:active { transform: scale(0.97); }
+.tisch-karte:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; z-index: 3; }
+@media (hover: hover) {
+  .tisch-karte:hover { transform: translateY(-1.5%) scale(1.03); z-index: 3; }
+}
+
+.tisch-foto {
+  position: absolute; inset: 3% 3.5%; overflow: hidden;
+  border-radius: var(--radius-karte) / 3.2%; background: var(--flaeche-3);
+}
+.tisch-foto img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Rückseite: abgedunkelt und entsättigt; unsichere Tasche: Foto unverändert */
+.tisch-tasche-rueckseite .tisch-foto img { filter: grayscale(0.85) brightness(0.55); }
+.tisch-etikett {
+  position: absolute; left: 50%; top: 50%; z-index: 1; transform: translate(-50%, -50%);
+  font-size: max(0.6rem, calc(var(--tasche-b) * 0.075)); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text); white-space: nowrap; pointer-events: none;
+}
+
+/* Rückfall: schlichte Kartenfläche mit Namen */
+.tisch-ersatz {
+  width: 100%; height: 100%; padding: 10% 8%;
+  display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0.3em;
+  text-align: center; overflow: hidden;
+  background: var(--flaeche-3); color: var(--text-2);
+  font-size: calc(var(--tasche-b) * 0.07);
+}
+.tisch-ersatz-name { color: var(--text); font-weight: 600; letter-spacing: -0.02em; font-size: 1.3em; line-height: 1.15; }
+
+/* ---------- Abzeichen für unsichere Erkennung ---------- */
+
+/* Rund, an der oberen rechten Kartenecke; sitzt zum größten Teil außerhalb der Karte,
+   damit die Namenszeile frei bleibt. */
+.tisch-abz {
+  --abz: max(18px, calc(var(--tasche-b) * 0.17));
+  position: absolute; z-index: 3; top: calc(var(--abz) * -0.34); right: calc(var(--abz) * -0.34);
+  width: var(--abz); height: var(--abz); border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: calc(var(--abz) * 0.66); font-weight: 700; line-height: 1;
+  color: #fff; pointer-events: none;
+  box-shadow: 0 0 0 1.5px var(--raum);
+}
+.tisch-abz-unsicher { background: var(--warnung); }
+.tisch-abz-druck_offen { background: var(--hinweis); color: #1a1408; }
+.tisch-abz .tisch-sym { width: 62%; height: 62%; }
+/* Geprüft: nur der Ring in der Farbe, Füllung dunkel, Häkchen */
+.tisch-abz-geprueft { background: var(--flaeche-2); }
+.tisch-abz-geprueft.tisch-abz-unsicher { color: var(--warnung); box-shadow: inset 0 0 0 2px var(--warnung), 0 0 0 1.5px var(--raum); }
+.tisch-abz-geprueft.tisch-abz-druck_offen { color: var(--hinweis); box-shadow: inset 0 0 0 2px var(--hinweis), 0 0 0 1.5px var(--raum); }
+
+.tisch-anzahl {
+  position: absolute; z-index: 3; left: 6%; bottom: 4.5%; padding: 0.05em 0.55em; pointer-events: none;
+  background: var(--flaeche-2); color: var(--messing-hell); border: 1px solid var(--linie-stark); border-radius: 999px;
+  font-weight: 600; font-size: max(0.62rem, calc(var(--tasche-b) * 0.08)); line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Rücken, Ringe, Blattecken ---------- */
+
+.tisch-ruecken {
+  position: absolute; top: var(--rand); height: var(--seite-h); width: 0; left: 50%; pointer-events: none;
+}
+.tisch-einzel .tisch-ruecken { left: var(--rand-links); }
+/* dezente Punkte statt Ringe */
+.tisch-ring {
+  position: absolute; left: calc(var(--seite-b) * -0.011); width: calc(var(--seite-b) * 0.022); aspect-ratio: 1;
+  border-radius: 50%; background: var(--einband); box-shadow: inset 0 0 0 1px var(--einband-kante);
+}
+.tisch-ring:nth-child(1) { top: 12%; }
+.tisch-ring:nth-child(2) { top: 50%; margin-top: calc(var(--seite-b) * -0.011); }
+.tisch-ring:nth-child(3) { bottom: 12%; }
+
+.tisch-wurf {
+  position: absolute; top: var(--rand); width: var(--seite-b); height: var(--seite-h); opacity: 0; pointer-events: none;
+}
+.tisch-wurf-l { left: var(--rand); background: linear-gradient(90deg, transparent 30%, rgba(0, 0, 0, 0.7)); }
+.tisch-wurf-r { left: 50%; background: linear-gradient(270deg, transparent 30%, rgba(0, 0, 0, 0.7)); }
+
+/* Blattecke unten außen: runder Pfeil im Einbandrand, ganze Fläche (44 px) blättert */
+.tisch-ecke {
+  appearance: none; position: absolute; bottom: 0; width: 44px; height: 44px; padding: 0; border: 0;
+  background: transparent; cursor: pointer; z-index: 4; color: var(--text-2);
+  display: grid; place-items: center;
+}
+.tisch-ecke[hidden] { display: none; }
+.tisch-spielt .tisch-ecke { visibility: hidden; }
+.tisch-ecke-r { right: 0; }
+.tisch-ecke-l { left: 0; }
+.tisch-ecke-knopf {
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--flaeche-2); border: 1px solid var(--linie-stark);
+  transition: transform var(--dauer-kurz) var(--kurve), border-color var(--dauer-kurz) var(--kurve), color var(--dauer-kurz) var(--kurve);
+}
+.tisch-ecke-knopf .tisch-sym { width: 14px; height: 14px; }
+.tisch-ecke:hover .tisch-ecke-knopf, .tisch-ecke:focus-visible .tisch-ecke-knopf {
+  transform: scale(1.15); border-color: var(--messing); color: var(--messing-hell);
+}
+
+/* ---------- Umblättern (3D) ---------- */
+
+.tisch-blatt {
+  position: absolute; top: var(--rand); left: 50%;
+  width: var(--seite-b); height: var(--seite-h);
+  transform-origin: 0 50%; transform-style: preserve-3d;
+}
+.tisch-einzel .tisch-blatt { left: var(--rand-links); }
+.tisch-blatt-vorn, .tisch-blatt-hinten {
+  position: absolute; inset: 0;
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+}
+.tisch-blatt-hinten { transform: rotateY(180deg); }
+.tisch-dunkel { position: absolute; inset: 0; z-index: 3; background: #000; opacity: 0; pointer-events: none; }
+
+/* ---------- Einband von außen (Öffnen) ---------- */
+
+.tisch-deckel {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 12%;
+  background: var(--einband); box-shadow: inset 0 0 0 1px var(--einband-kante);
+}
+.tisch-deckel::before {
+  content: ""; position: absolute; inset: 6%; pointer-events: none; border: 1px solid var(--messing-dunkel); border-radius: 3px;
+}
+.tisch-deckel-titel {
+  text-align: center; font-size: calc(var(--seite-b) * 0.07); font-weight: 600; letter-spacing: -0.02em; line-height: 1.2;
+  color: var(--text);
+}
+
+/* Handy: Seite kippt um die Ringe, Perspektive etwas näher */
+.tisch-einzel .tisch-aufgeschlagen { perspective: 2400px; }
+
+/* ---------- Leerseiten ---------- */
+
+.tisch-leerseite {
+  position: absolute; left: 50%; top: 50%; z-index: 1; transform: translate(-50%, -50%);
+  padding: 0.4em 1em; border-radius: 999px; white-space: nowrap; pointer-events: none;
+  background: var(--flaeche-2); border: 1px solid var(--linie-stark); color: var(--text-2);
+}
+
+/* ---------- Fotoseiten ohne Taschen: Platzhalter und Tafel ---------- */
+
+.tisch-tasche-platz { background: var(--huelle-leer); }
+.tisch-platzkarte {
+  position: absolute; inset: 3% 3.5%; border-radius: var(--radius-karte) / 3.2%;
+  background: var(--huelle-kante); opacity: 0.3;
+}
+.tisch-tafel {
+  position: absolute; left: 50%; top: 50%; z-index: 2; transform: translate(-50%, -50%);
+  width: 84%; max-height: 90%; overflow: hidden; padding: 0.9em 1em;
+  display: flex; flex-direction: column; align-items: center; gap: 0.6em; text-align: center;
+  background: var(--flaeche-2); border: 1px solid var(--linie-stark); border-radius: var(--radius);
+  box-shadow: var(--schatten-karte); color: var(--text-2);
+  font-size: clamp(0.82rem, calc(var(--seite-b) * 0.04), 1rem); line-height: 1.4;
+}
+.tisch-tafel-text { margin: 0; overflow-wrap: anywhere; color: var(--text); }
+.tisch-tafel-fehler .tisch-tafel-text {
+  color: #f1b9b0; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tisch-tafel-still .tisch-tafel-text { color: var(--text-2); }
+.tisch-tafel code { font-size: 0.92em; color: var(--text); background: var(--flaeche-3); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+.tisch-tafel-name { margin: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tisch-tafel .meldung { margin: 0; text-align: center; }
+.tisch-puls {
+  display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.6em; border-radius: 50%;
+  background: var(--messing); vertical-align: 0.05em;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tisch-seite[data-status="in_verarbeitung"] .tisch-platzkarte { animation: tisch-atmen 1.8s ease-in-out infinite; }
+  .tisch-seite[data-status="in_verarbeitung"] .tisch-tasche:nth-child(even) .tisch-platzkarte { animation-delay: -0.9s; }
+  .tisch-puls { animation: tisch-atmen 1.2s ease-in-out infinite; }
+}
+@keyframes tisch-atmen { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.65; } }
+
+/* Binder ohne Seiten */
+.tisch-leer { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.tisch-leer .hinweis { margin: 0; }
+
+/* ---------- Dialog „Seiten" ---------- */
+
+.tisch-v-teil { padding: 16px 0 18px; border-bottom: 1px solid var(--linie); }
+.tisch-v-teil:last-child { border-bottom: 0; }
+.tisch-v-teil[hidden] { display: none; }
+.tisch-v-teil .dialog-text { margin: 6px 0 0; }
+.tisch-v-zeile { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.tisch-v-zeile .knopf { flex: 0 1 auto; }
+.tisch-v-leerseite + .tisch-v-leerseite { margin-top: 18px; }
+.tisch-v-zahl { display: flex; align-items: center; gap: 14px; }
+.tisch-v-wert { min-width: 2ch; text-align: center; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tisch-v .meldung.tisch-v-gut { color: var(--text-2); }
+.tisch-v-verlauf { list-style: none; margin: 8px 0 0; padding: 0; }
+.tisch-v-eintrag { display: flex; flex-direction: column; gap: 1px; padding: 9px 0; border-top: 1px solid var(--linie); }
+.tisch-v-eintrag:first-child { border-top: 0; }
+.tisch-v-leer { color: var(--text-3); }
+@media (max-width: 699px) {
+  .tisch-v-zeile .knopf { flex: 1 1 auto; }
+}

@@ -1,0 +1,237 @@
+/* Gemeinsame Grundlage im Stil „Galerie": fast schwarzer Raum, warmes Licht von oben,
+   die Karten als Hauptdarsteller, Messing nur als feine Linie und Akzent.
+   Flächen sind glatt (keine Maserung, kein Leder, kein Folienglanz); Tiefe entsteht aus
+   Helligkeitsstufen und wenigen weichen Schatten. Die Ansichten nutzen nur diese Variablen. */
+
+@font-face { font-family: "Inter"; font-weight: 100 900; font-style: normal; font-display: swap;
+  src: url("../schriften/inter-latin-wght-normal.woff2") format("woff2-variations"),
+       url("../schriften/inter-latin-wght-normal.woff2") format("woff2"); }
+
+:root {
+  /* Raum und Flächen (dunkel nach hell) */
+  --raum: #111113;
+  --flaeche-1: #18181b;      /* Tisch, Regalwand */
+  --flaeche-2: #1f1f23;      /* Binder, Tafeln */
+  --flaeche-3: #2a2a2f;      /* Taschen, Felder */
+  --flaeche-hover: #313137;
+  --linie: #2c2c31;          /* Haarlinie */
+  --linie-stark: #3d3d44;
+
+  /* Text */
+  --text: #f4f1ec;
+  --text-2: #a8a39b;
+  --text-3: #75716b;
+
+  /* Messing: Akzent, Fokus, aktive Zustände */
+  --messing: #c9a46a;
+  --messing-hell: #e2c48f;
+  --messing-dunkel: #8a6d40;
+  --messing-schleier: rgba(201, 164, 106, 0.14);
+
+  /* Binderfarben (Buchrücken, Seiten) */
+  --binder-schwarz: #26262a;
+  --binder-durchsichtig: #d9d5cd;
+  --binder-gelb: #d6a440;
+  --binder-blau: #2f4a6b;
+  --binder-sonst: #5b4a3c;
+
+  /* Zeichen für unsichere Erkennung */
+  --warnung: #c4574a;        /* Erkennung unsicher */
+  --hinweis: #d6a440;        /* Name sicher, Druck offen */
+
+  /* Licht: ein einziger, sehr weicher Lichtkegel von oben */
+  --licht: radial-gradient(ellipse 60% 45% at 50% -5%, rgba(255, 214, 160, 0.10), transparent 70%);
+
+  --schatten-karte: 0 1px 2px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.25);
+  --schatten-hoch: 0 12px 40px rgba(0, 0, 0, 0.55);
+
+  --radius-klein: 6px;
+  --radius: 10px;
+  --radius-gross: 16px;
+  --radius-karte: 4.5%;      /* echte Kartenecken, relativ zur Kartenbreite */
+
+  --schrift: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Rückfall für ältere Ansichten, die noch die alten Namen nutzen */
+  --schrift-titel: var(--schrift);
+  --schrift-text: var(--schrift);
+
+  /* Bewegung: kurz und klar; bei „Bewegung reduzieren" auf 0 */
+  --dauer-kurz: 140ms;
+  --dauer: 280ms;
+  --dauer-lang: 520ms;
+  --kurve: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --rand-sicher: max(16px, env(safe-area-inset-left));
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dauer-kurz: 0ms; --dauer: 0ms; --dauer-lang: 0ms; }
+  *, *::before, *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: var(--licht), var(--raum);
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--schrift);
+  font-size: 16px;
+  line-height: 1.5;
+  font-feature-settings: "cv11", "ss01";   /* ruhigere Ziffern und Formen von Inter */
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+#buehne { min-height: 100%; position: relative; }
+
+/* `hidden` gilt immer, auch gegen display-Regeln einzelner Bausteine (z. B. .knopf) */
+[hidden] { display: none !important; }
+
+/* Add-on: Netzlaufwerk nicht erreichbar (app.js) */
+.speicher-hinweis {
+  position: fixed; z-index: 50; left: 0; right: 0; top: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(6px + env(safe-area-inset-top)) var(--rand-sicher) 6px;
+  background: #3a1f1b; border-bottom: 1px solid var(--warnung);
+  color: var(--text); font-size: 0.86rem; line-height: 1.35;
+}
+.speicher-text { flex: 1; margin: 0; }
+.speicher-zu {
+  flex: none; width: 44px; height: 44px; margin: -6px -10px -6px 0; border: 0; background: none;
+  font-size: 1.4rem; line-height: 1; cursor: pointer; color: var(--text);
+}
+@media (max-width: 699px) { .speicher-hinweis { font-size: 0.8rem; } }
+
+/* Preise im unteren Sechzehntel der Karte (gemeinsam.js: preisStreifen). Schrift wächst mit der Kartenbreite. */
+.tisch-karte, .kiste-kachel { container-type: inline-size; }
+.preis-streifen {
+  position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 6.25%;
+  display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 6%;
+  background: rgba(12, 12, 14, 0.8); color: var(--text); pointer-events: none;
+  font-size: clamp(6px, 5.6cqw, 13px); font-weight: 600; line-height: 1; white-space: nowrap;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+.preis-streifen > span:last-child { color: var(--messing-hell); }
+
+/* Gesamtwerte (Binder, Kisten, Sammlung) */
+.wert { font-variant-numeric: tabular-nums; color: var(--messing-hell); white-space: nowrap; }
+
+/* Add-on: PC verbinden (pcverbinden.js) */
+.pc-angaben { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; margin: 14px 0; }
+.pc-angaben dt { color: var(--text-3); font-size: 0.86rem; }
+.pc-angaben dd { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.pc-angaben code, .pc-code { font-size: 0.86rem; overflow-wrap: anywhere; }
+.pc-code { padding: 6px 8px; border: 1px solid var(--messing-dunkel); border-radius: var(--radius-klein);
+  background: var(--messing-schleier); user-select: all; }
+.pc-einmal, .pc-hinweis { color: var(--text-3); font-size: 0.84rem; }
+
+h1, h2, h3, .titel { font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin: 0; }
+
+/* Kleine Beschriftung über Werten und Abschnitten */
+.etikett {
+  font-size: 0.72rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3);
+}
+
+button { font: inherit; color: inherit; }
+
+/* Knopf: Haarlinie, ruhig; aktiv mit Messing */
+.knopf {
+  appearance: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.45em;
+  min-height: 44px; padding: 0 1.05em;
+  border: 1px solid var(--linie-stark);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.94rem; font-weight: 500; letter-spacing: -0.005em;
+  transition: background-color var(--dauer-kurz) var(--kurve), border-color var(--dauer-kurz) var(--kurve),
+              color var(--dauer-kurz) var(--kurve);
+}
+.knopf:hover { background: var(--flaeche-hover); border-color: var(--text-3); }
+.knopf:disabled { opacity: 0.4; cursor: default; }
+.knopf[aria-pressed="true"] { background: var(--messing); border-color: var(--messing); color: #1a1408; }
+
+:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; }
+.knopf:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; }
+
+/* Lade- und Fehlerhinweis */
+.hinweis {
+  margin: 20vh auto 0; max-width: 32em; padding: 0 var(--rand-sicher);
+  text-align: center; font-size: 1.05rem; color: var(--text-2);
+}
+
+.nur-vorleser {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+/* Knopf-Varianten: Hauptaktion in Messing, Warnung (Entfernen), nur Symbol (44 x 44) */
+.knopf-haupt { background: var(--messing); border-color: var(--messing); color: #1a1408; }
+.knopf-haupt:hover { background: var(--messing-hell); border-color: var(--messing-hell); }
+.knopf-gefahr { border-color: var(--warnung); color: #f1b9b0; }
+.knopf-gefahr:hover { background: rgba(196, 87, 74, 0.16); border-color: var(--warnung); }
+.knopf-sym { width: 44px; padding: 0; flex: none; }
+
+/* Eingabefelder: mindestens 16 px Schrift (sonst zoomt iOS), 44 px hoch */
+.feld {
+  display: block; width: 100%; min-height: 44px; padding: 0 12px;
+  background: var(--flaeche-3); color: var(--text);
+  border: 1px solid var(--linie-stark); border-radius: var(--radius-klein);
+  font: inherit; font-size: 16px;
+}
+.feld:focus-visible { outline: 2px solid var(--messing); outline-offset: 1px; border-color: var(--messing-dunkel); }
+select.feld { appearance: none; padding-right: 36px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-2) 50%), linear-gradient(135deg, var(--text-2) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+.feld-etikett { display: block; margin: 14px 0 6px; }
+.meldung { min-height: 1.4em; margin: 8px 0 0; color: #f1b9b0; font-size: 0.94rem; }
+.meldung:empty { min-height: 0; }
+
+/* Dialoge (natives <dialog>, siehe js/dialog.js): ruhige Tafel; .dialog-voll füllt am Handy den Bildschirm */
+.dialog {
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px);
+  padding: 0; margin: auto;
+  display: flex; flex-direction: column;
+  background: var(--flaeche-2); color: var(--text);
+  border: 1px solid var(--linie-stark); border-radius: var(--radius-gross);
+  box-shadow: var(--schatten-hoch);
+  overflow: hidden;            /* nur der Inhaltsbereich rollt; Kopf und Fuß bleiben stehen */
+}
+.dialog:not([open]) { display: none; }
+.dialog::backdrop { background: rgba(8, 8, 10, 0.72); }
+.dialog-klein { width: min(440px, calc(100vw - 32px)); }
+.dialog-kopf {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 12px 12px 20px; border-bottom: 1px solid var(--linie);
+}
+.dialog-titel { font-size: 1.15rem; }
+.dialog-inhalt { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 4px 20px 16px; overscroll-behavior: contain; }
+.dialog-text { margin: 14px 0 0; color: var(--text-2); }
+.dialog-text code { font-size: 0.9em; color: var(--text); background: var(--flaeche-3); padding: 2px 6px; border-radius: 4px; }
+.dialog-fuss {
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px;
+  padding: 12px 16px; border-top: 1px solid var(--linie);
+}
+.dialog-fuss:empty { display: none; }
+@media (max-width: 699px) {
+  .dialog-voll {
+    width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0;
+    border: 0; border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+  }
+  .dialog-voll .dialog-fuss { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .dialog-fuss > .knopf { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dialog[open] { animation: dialog-auf var(--dauer) var(--kurve); }
+  @keyframes dialog-auf { from { opacity: 0; transform: translate3d(0, 12px, 0); } to { opacity: 1; transform: none; } }
+}
+
+/* Anmelde-Knopf in den Kopfleisten (js/anmeldung.js) */
+.anmelde-knopf[data-angemeldet="true"] { color: var(--messing-hell); border-color: var(--messing-dunkel); }
+@media (max-width: 479px) { .anmelde-knopf .anmelde-text { display: none; } .anmelde-knopf { width: 44px; padding: 0; } }

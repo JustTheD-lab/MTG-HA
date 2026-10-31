@@ -1,0 +1,163 @@
+/* Upload-Dialog (js/hochladen.js) – Stil „Galerie": glatte Flächen, Haarlinien, Messing nur als Akzent.
+   Klassen beginnen mit „hl-". Farben, Schrift und Bewegung kommen aus basis.css. */
+
+/* Am PC eine breite Tafel; am Handy füllt .dialog-voll den Bildschirm (basis.css) */
+@media (min-width: 700px) {
+  .hl-dialog { width: min(720px, calc(100vw - 48px)); }
+}
+.hl-dialog .dialog-inhalt {
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+  padding-bottom: 20px;
+}
+.hl-dialog .dialog-fuss { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+
+.hl-wurzel { min-width: 0; }
+.hl-wurzel [hidden] { display: none !important; }
+.hl-abschnitt { margin-top: 20px; }
+.hl-abschnitt > .etikett, .hl-gruppe > .etikett { display: block; margin: 0 0 8px; }
+.hl-text-gross { margin: 0; font-size: 1.05rem; color: var(--text); }
+.hl-wurzel .feld { max-width: 100%; }
+
+/* ---------- Neuer Binder ---------- */
+
+.hl-neu { margin-top: 4px; padding: 4px 14px 14px; border: 1px solid var(--linie); border-radius: var(--radius); background: var(--flaeche-1); }
+.hl-gruppe { margin: 14px 0 0; padding: 0; border: 0; min-width: 0; }
+.hl-gruppe > legend { padding: 0; }
+.hl-farbname { margin-left: 6px; color: var(--messing-hell); letter-spacing: 0.04em; }
+
+/* Segmente: zusammenhängende Pillengruppe (echte Radioknöpfe, Pfeiltasten gehen) */
+.hl-segmente { display: inline-flex; border: 1px solid var(--linie-stark); border-radius: 999px; overflow: hidden; }
+.hl-segment { position: relative; display: block; cursor: pointer; }
+.hl-segment + .hl-segment { border-left: 1px solid var(--linie-stark); }
+.hl-segment input, .hl-farbe input {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer;
+}
+.hl-segment span {
+  display: flex; align-items: center; justify-content: center; min-width: 84px; min-height: 44px; padding: 0 18px;
+  font-weight: 500; color: var(--text-2);
+  transition: background-color var(--dauer-kurz) var(--kurve), color var(--dauer-kurz) var(--kurve);
+}
+.hl-segment input:checked + span { background: var(--messing); color: #1a1408; }
+.hl-segment input:focus-visible + span { outline: 2px solid var(--messing-hell); outline-offset: -4px; }
+
+/* Farbfelder */
+.hl-farben { display: flex; flex-wrap: wrap; gap: 4px 0; margin-left: -4px; }
+@media (min-width: 560px) { .hl-farben { gap: 4px 6px; } }
+.hl-farbe { position: relative; display: block; width: 44px; height: 44px; cursor: pointer; }
+.hl-punkt {
+  position: absolute; inset: 7px; border-radius: 50%; background: var(--c, var(--binder-sonst));
+  border: 1px solid var(--linie-stark);
+  transition: box-shadow var(--dauer-kurz) var(--kurve);
+}
+.hl-punkt[data-farbe="schwarz"] { --c: var(--binder-schwarz); }
+.hl-punkt[data-farbe="durchsichtig"] { --c: var(--binder-durchsichtig); }
+.hl-punkt[data-farbe="gelb"] { --c: var(--binder-gelb); }
+.hl-punkt[data-farbe="blau"] { --c: var(--binder-blau); }
+.hl-punkt[data-farbe="gruen"] { --c: #3f6b4a; }
+.hl-punkt[data-farbe="rot"] { --c: #8f3a34; }
+.hl-punkt[data-farbe="braun"] { --c: var(--binder-sonst); }
+.hl-farbe input:checked + .hl-punkt { box-shadow: 0 0 0 2px var(--flaeche-1), 0 0 0 3.5px var(--messing); }
+.hl-farbe input:focus-visible + .hl-punkt { outline: 2px solid var(--messing-hell); outline-offset: 4px; }
+
+/* ---------- Ablage ---------- */
+
+.hl-ablage {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 20px 16px;
+  border: 1px dashed var(--linie-stark); border-radius: var(--radius); color: var(--text-3); text-align: center;
+  transition: border-color var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve), color var(--dauer-kurz) var(--kurve);
+}
+.hl-ablage.hl-ziehen { border-color: var(--messing); background: var(--messing-schleier); color: var(--messing-hell); }
+.hl-ablage-text { margin: 0; font-size: 0.88rem; color: var(--text-3); }
+@media (hover: none) { .hl-nur-maus { display: none; } }
+
+/* ---------- Liste ---------- */
+
+.hl-liste { list-style: none; margin: 0; padding: 0; }
+.hl-huelle { margin: 0; padding: 0; }
+
+.hl-zwischen {
+  appearance: none; display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; min-height: 44px; margin: 0; padding: 0 12px;
+  border: 0; background: transparent; cursor: pointer;
+  font-size: 0.85rem; font-weight: 500; color: var(--text-3);
+  transition: color var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve);
+}
+.hl-zwischen:hover { color: var(--messing-hell); background: var(--messing-schleier); }
+.hl-zwischen:focus-visible { outline-offset: -2px; }
+
+.hl-eintrag {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr); grid-template-areas: "bild text" "bild knoepfe";
+  column-gap: 12px; row-gap: 2px; align-items: center; padding: 10px;
+  border: 1px solid var(--linie); border-radius: var(--radius); background: var(--flaeche-1);
+}
+.hl-eintrag[data-zustand="ungueltig"], .hl-eintrag[data-zustand="fehler"] { border-color: var(--warnung); }
+.hl-eintrag[data-zustand="fertig"] { border-color: var(--messing-dunkel); }
+.hl-eintrag[data-zustand="uebersprungen"], .hl-eintrag[data-zustand="abgebrochen"] { opacity: 0.6; }
+
+.hl-vorschau {
+  grid-area: bild; align-self: start; display: grid; place-items: center; width: 56px; height: 72px;
+  border-radius: 4px; background: var(--flaeche-3); color: var(--text-3); overflow: hidden;
+}
+.hl-bild { display: block; width: 100%; height: 100%; object-fit: contain; }
+
+.hl-text { grid-area: text; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.hl-meta { font-size: 0.86rem; color: var(--text-2); }
+.hl-fehler { font-size: 0.86rem; color: #f1b9b0; overflow-wrap: anywhere; }
+
+.hl-knoepfe { grid-area: knoepfe; display: flex; gap: 4px; margin-left: -10px; }
+.hl-knoepfe .knopf-sym { border-color: transparent; color: var(--text-2); }
+.hl-knoepfe .knopf-sym:hover:not(:disabled) { border-color: var(--linie-stark); color: var(--text); }
+.hl-knoepfe .hl-weg:hover:not(:disabled) { color: #f1b9b0; border-color: var(--warnung); }
+
+@media (min-width: 560px) {
+  .hl-eintrag { grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: "bild text knoepfe"; column-gap: 14px; }
+  .hl-vorschau { align-self: center; }
+  .hl-knoepfe { margin-left: 0; }
+}
+
+.hl-summe { margin: 12px 0 0; font-size: 0.92rem; color: var(--text-2); }
+
+/* ---------- Fortschritt, Rückfrage, Abschluss ---------- */
+
+.hl-lauf { margin-top: 16px; }
+.hl-ziel { margin: 0 0 10px; font-weight: 500; overflow-wrap: anywhere; }
+.hl-gesamt, .hl-balken {
+  display: block; height: 6px; overflow: hidden; border-radius: 999px; background: var(--flaeche-3);
+}
+.hl-balken { height: 4px; margin-top: 6px; }
+.hl-fuell {
+  display: block; width: 100%; height: 100%; background: var(--messing);
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform var(--dauer-kurz) linear;
+}
+.hl-lauftext:empty { display: none; }
+.hl-lauftext { margin: 8px 0 0; font-size: 0.92rem; color: var(--text-2); }
+
+.hl-frage {
+  margin: 14px 0 0; padding: 12px 14px; border: 1px solid var(--warnung); border-radius: var(--radius);
+  background: rgba(196, 87, 74, 0.1);
+}
+.hl-frage p { margin: 0; overflow-wrap: anywhere; }
+.hl-frage-name { font-weight: 600; margin-bottom: 4px !important; }
+.hl-frage-text { color: var(--text); }
+
+.hl-abschluss { margin: 14px 0 0; padding: 12px 14px; border: 1px solid var(--messing-dunkel); border-radius: var(--radius); background: var(--messing-schleier); }
+.hl-abschluss p { margin: 0; }
+.hl-abschluss-text { font-weight: 500; }
+.hl-abschluss-erkennung { margin-top: 6px !important; font-size: 0.92rem; color: var(--text-2); overflow-wrap: anywhere; }
+.hl-abschluss-erkennung:empty { display: none; }
+
+/* Während der Übertragung und danach: nur Ziel, Fortschritt und Liste */
+.hl-wurzel:not([data-phase="auswahl"]) [data-teil="binder"],
+.hl-wurzel:not([data-phase="auswahl"]) [data-teil="stelle"],
+.hl-wurzel:not([data-phase="auswahl"]) [data-teil="nachtrag"],
+.hl-wurzel:not([data-phase="auswahl"]) .hl-ablage,
+.hl-wurzel:not([data-phase="auswahl"]) .hl-summe,
+.hl-wurzel:not([data-phase="auswahl"]) .hl-knoepfe,
+.hl-wurzel:not([data-phase="auswahl"]) .hl-zwischen,
+.hl-wurzel:not([data-phase="auswahl"]) [data-teil="fotos"] > .etikett { display: none; }
+.hl-wurzel:not([data-phase="auswahl"]) [data-teil="fotos"] { margin-top: 14px; }
+.hl-wurzel:not([data-phase="auswahl"]) .hl-huelle + .hl-huelle { margin-top: 8px; }
+.hl-wurzel:not([data-phase="auswahl"]) .hl-eintrag { grid-template-columns: 56px minmax(0, 1fr); grid-template-areas: "bild text"; }

@@ -1,0 +1,137 @@
+/* Liste abziehen (Dialog aus der Gesamtsammlung, js/abzug.js). Klassen mit Vorsatz abzug-.
+   Stil „Galerie“: glatte Flächen, Haarlinien, Messing nur als Akzent. Der Druck zeigt nur die Entnahmeliste. */
+
+@media (min-width: 700px) {
+  .dialog.abzug-dialog { width: min(1040px, calc(100vw - 32px)); height: min(880px, calc(100dvh - 32px)); }
+}
+.abzug-dialog .dialog-fuss { align-items: center; }
+.abzug-dialog .dialog-fuss .knopf { white-space: normal; text-align: center; }
+
+.abzug-tabs, .abzug-sichten, .abzug-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.abzug-tab, .abzug-sicht, .abzug-fil { min-height: 40px; font-size: 0.9rem; }
+@media (max-width: 699px) { .abzug-tab, .abzug-sicht, .abzug-fil { min-height: 44px; } }
+.abzug-meldung { margin-top: 10px; }
+.abzug-datei-name { margin: 14px 0 0; color: var(--text-2); overflow-wrap: anywhere; }
+.abzug-wahl-datei { position: relative; margin-top: 18px; }
+.abzug-datei { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 0; }
+.abzug-wahl-datei:focus-within { outline: 2px solid var(--messing); outline-offset: 2px; }
+
+/* Summen */
+.abzug-summen { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 14px 0 0; }
+.abzug-summen > div { padding: 8px 12px; background: var(--flaeche-1); border: 1px solid var(--linie); border-radius: var(--radius); }
+.abzug-summen dt { font-size: 0.74rem; color: var(--text-3); line-height: 1.25; }
+.abzug-summen dd { margin: 2px 0 0; font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.abzug-summen small { font-size: 0.74rem; font-weight: 400; color: var(--text-3); }
+.abzug-s-voll { border-left: 3px solid #6aa386 !important; }
+.abzug-s-teilweise { border-left: 3px solid var(--hinweis) !important; }
+.abzug-s-fehlt { border-left: 3px solid var(--warnung) !important; }
+.abzug-s-pruefen { border-left: 3px solid #6a93c4 !important; }
+.abzug-s-entnahme { border-color: var(--messing-dunkel) !important; background: var(--messing-schleier) !important; }
+
+/* Warnung bei schon abgezogener Datei */
+.abzug-warnung {
+  margin: 14px 0 0; padding: 12px 16px; border: 1px solid var(--warnung); border-radius: var(--radius);
+  background: rgba(196, 87, 74, 0.12); color: #f6d3cd;
+}
+.abzug-warnung ul { margin: 6px 0 0; padding-left: 20px; }
+.abzug-warnung p { margin: 8px 0 0; font-size: 0.92rem; }
+
+/* Positionen */
+.abzug-filter { margin-top: 12px; }
+.abzug-positionen { margin-top: 6px; }
+.abzug-positionen[data-filter="voll"] .abzug-pos:not([data-status="voll"]),
+.abzug-positionen[data-filter="teilweise"] .abzug-pos:not([data-status="teilweise"]),
+.abzug-positionen[data-filter="fehlt"] .abzug-pos:not([data-status="fehlt"]),
+.abzug-positionen[data-filter="pruefen"] .abzug-pos:not([data-status="pruefen"]) { display: none; }
+.abzug-pos {
+  margin-top: 10px; padding: 12px 14px; background: var(--flaeche-1); border: 1px solid var(--linie); border-radius: var(--radius);
+  content-visibility: auto; contain-intrinsic-size: auto 130px;
+}
+.abzug-status-voll { border-left: 3px solid #6aa386; }
+.abzug-status-teilweise { border-left: 3px solid var(--hinweis); }
+.abzug-status-fehlt { border-left: 3px solid var(--warnung); }
+.abzug-status-pruefen { border-left: 3px solid #6a93c4; }
+.abzug-poskopf { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.abzug-name { font-size: 1.02rem; min-width: 0; overflow-wrap: anywhere; }
+.abzug-chip {
+  flex: none; padding: 1px 9px; border: 1px solid var(--linie-stark); border-radius: 999px; font-size: 0.72rem;
+  font-weight: 500; letter-spacing: 0.03em; color: var(--text-2);
+}
+.abzug-status-voll .abzug-chip { border-color: #6aa386; color: #a9d2bc; }
+.abzug-status-teilweise .abzug-chip { border-color: var(--hinweis); color: var(--hinweis); }
+.abzug-status-fehlt .abzug-chip { border-color: var(--warnung); color: #f1b9b0; }
+.abzug-status-pruefen .abzug-chip { border-color: #6a93c4; color: #a9c4e6; }
+.abzug-chip-grau { margin-left: 8px; }
+.abzug-meta { margin: 4px 0 0; font-size: 0.84rem; color: var(--text-3); }
+.abzug-zahlen { margin: 4px 0 0; font-size: 0.92rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.abzug-zahlen strong { color: var(--text); }
+.abzug-zeilen { list-style: none; margin: 8px 0 0; padding: 0; }
+.abzug-zeile { border-top: 1px solid var(--linie); }
+.abzug-wahl { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.abzug-haken { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--messing); cursor: pointer; }
+.abzug-menge { flex: none; min-width: 2.2em; font-weight: 600; color: var(--messing-hell); font-variant-numeric: tabular-nums; }
+.abzug-ort { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: 0.92rem; }
+.abzug-von { flex: none; font-size: 0.8rem; color: var(--text-3); text-align: right; }
+@media (max-width: 479px) { .abzug-wahl { flex-wrap: wrap; row-gap: 0; } .abzug-von { flex: 1 0 100%; text-align: left; padding-left: 32px; margin-top: -6px; padding-bottom: 6px; } }
+.abzug-hinweis { margin-top: 8px; padding: 8px 12px; border-radius: var(--radius-klein); font-size: 0.9rem; }
+.abzug-pruefen { background: rgba(106, 147, 196, 0.12); border: 1px solid rgba(106, 147, 196, 0.5); }
+.abzug-hinweis p { margin: 0; }
+.abzug-hinweis ul { margin: 6px 0 0; padding-left: 18px; }
+.abzug-link { color: var(--messing-hell); text-underline-offset: 3px; display: inline-block; min-height: 32px; line-height: 32px; }
+.abzug-aehnlich { margin-top: 10px; color: var(--text-2); font-size: 0.9rem; }
+.abzug-aehnlich summary { cursor: pointer; min-height: 32px; }
+.abzug-aehnlich ul { margin: 4px 0 0; padding-left: 20px; }
+
+/* Entnahmeliste nach Ort */
+.abzug-ortgruppe { margin-top: 18px; }
+.abzug-ortkopf { font-size: 1.02rem; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.abzug-ortzahl { font-size: 0.8rem; font-weight: 400; color: var(--text-3); }
+.abzug-tabelle { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 0.9rem; }
+.abzug-tabelle th { padding: 6px 8px; text-align: left; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-3); border-bottom: 1px solid var(--linie-stark); }
+.abzug-tabelle td { padding: 7px 8px; border-bottom: 1px solid var(--linie); vertical-align: top; overflow-wrap: anywhere; }
+.abzug-r { text-align: right !important; font-variant-numeric: tabular-nums; }
+.abzug-kasten { width: 26px; }
+.abzug-feld { display: inline-block; width: 14px; height: 14px; border: 1.5px solid var(--text-3); border-radius: 3px; vertical-align: middle; }
+.abzug-leer { margin: 16px 0 0; color: var(--text-2); }
+@media screen and (max-width: 699px) {
+  .abzug-tabelle thead { display: none; }
+  .abzug-tabelle tr { display: grid; grid-template-columns: 26px 3em minmax(0, 1fr); gap: 0 6px; padding: 6px 0; border-bottom: 1px solid var(--linie); }
+  .abzug-tabelle td { border: 0; padding: 1px 0; }
+  .abzug-tabelle td:nth-child(4), .abzug-tabelle td:nth-child(5) { grid-column: 3; font-size: 0.82rem; color: var(--text-3); }
+  .abzug-tabelle td:nth-child(6) { display: none; }
+}
+
+/* Ergebnis und Protokoll */
+.abzug-erfolg { margin: 16px 0 0; font-size: 1.1rem; }
+.abzug-protokoll { list-style: none; margin: 14px 0 0; padding: 0; }
+.abzug-prot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  padding: 12px 0; border-bottom: 1px solid var(--linie); }
+.abzug-prot-text { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.abzug-prot-meta { display: block; margin-top: 2px; font-size: 0.84rem; color: var(--text-3); }
+.abzug-prot-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Druck: nur die Entnahmeliste, schwarz auf weiß. Auf dem Bildschirm ist der Block unsichtbar. */
+.abzug-druck { display: none; }
+@media print {
+  body.abzug-druckt > *:not(.abzug-druck) { display: none !important; }
+  body.abzug-druckt { background: #fff !important; color: #000; overflow: visible; height: auto; }
+  body.abzug-druckt .abzug-druck { display: block; padding: 0; color: #000; background: #fff; font: 10.5pt/1.35 system-ui, "Segoe UI", sans-serif; }
+  .abzug-druck h1 { margin: 0 0 4pt; font-size: 16pt; letter-spacing: 0; }
+  .abzug-druck p { margin: 0 0 8pt; color: #333; }
+  .abzug-druck h3 { margin: 14pt 0 3pt; font-size: 12pt; color: #000; break-after: avoid; }
+  .abzug-druck .abzug-ortzahl { color: #444; }
+  .abzug-druck .abzug-ortgruppe { margin-top: 0; }
+  .abzug-druck .abzug-tabelle { font-size: 10pt; color: #000; }
+  .abzug-druck .abzug-tabelle th { color: #444; border-bottom: 1px solid #000; }
+  .abzug-druck .abzug-tabelle td { border-bottom: 1px solid #bbb; }
+  .abzug-druck .abzug-tabelle tr { break-inside: avoid; }
+  .abzug-druck .abzug-feld { border-color: #000; width: 11pt; height: 11pt; }
+}
+
+/* Fußleiste kompakt: Hauptaktion in voller Breite oben, die übrigen Knöpfe daneben */
+@media (max-width: 699px) {
+  .abzug-dialog .dialog-fuss { gap: 8px; }
+  .abzug-dialog .dialog-fuss .knopf { flex: 1 1 28%; min-width: 0; padding: 0 0.6em; font-size: 0.86rem; }
+  .abzug-dialog .dialog-fuss .abzug-los { flex: 1 1 100%; order: -1; font-size: 0.94rem; }
+}

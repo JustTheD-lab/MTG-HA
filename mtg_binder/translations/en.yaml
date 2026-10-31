@@ -1,0 +1,5 @@
+configuration:
+  speicherort:
+    name: Speicherort für Fotos und Bilder
+    description: >-
+      Ordner auf dem Netzlaufwerk (z. B. /share/netzlaufwerk/mtg-binder). Die Datenbank bleibt im Add-on.

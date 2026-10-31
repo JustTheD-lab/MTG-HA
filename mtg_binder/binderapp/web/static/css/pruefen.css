@@ -1,0 +1,231 @@
+/* Prüfansicht im Stil „Galerie": die Karten nebeneinander (eigenes Foto und Scryfall-Bild), daneben bzw.
+   darunter eine ruhige dunkle Tafel, unten eine feste Leiste mit den großen Tasten.
+   Nur Variablen aus basis.css; animiert wird nur transform und opacity. Klassen mit Vorsatz „pruef-". */
+
+.pruef {
+  display: flex; flex-direction: column; box-sizing: border-box;
+  max-width: 1320px; min-height: 100vh; min-height: 100dvh; margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) var(--rand-sicher) 0;
+}
+
+/* Kopf: Zurück, Titel mit Fortschritt, vorheriger Fall, Anmelden */
+.pruef-kopf { display: flex; align-items: center; gap: 12px; padding: 6px 0 10px; }
+.pruef-titel { flex: 1 1 auto; min-width: 0; }
+.pruef-titel h1 { font-size: 1.35rem; }
+.pruef-fortschritt {
+  margin: 0; min-height: 1.4em; color: var(--text-2); font-size: 0.95rem; font-variant-numeric: tabular-nums;
+}
+.pruef-balken { height: 3px; overflow: hidden; border-radius: 2px; background: var(--linie); }
+.pruef-balken span {
+  display: block; width: 100%; height: 100%; background: var(--messing);
+  transform-origin: left center; transform: scaleX(0);
+  transition: transform var(--dauer) var(--kurve);
+}
+
+.pruef-haupt { flex: 1 1 auto; padding: 18px 0 28px; }
+.pruef-meldung { margin: 18vh auto 0; max-width: 30em; text-align: center; color: var(--text-2); }
+.pruef-haupt > .pruef-meldung + .knopf { display: flex; margin: 16px auto 0; }
+
+/* Ein Fall: Bilder, dann Tafel (PC: nebeneinander) */
+.pruef-fall {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px;
+  animation: pruef-ein var(--dauer) var(--kurve);
+}
+@keyframes pruef-ein { from { opacity: 0; transform: translate3d(14px, 0, 0); } to { opacity: 1; transform: none; } }
+
+.pruef-bilder { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; }
+.pruef-paar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: 100%; max-width: 560px; }
+.pruef-bilder[data-ansicht="foto"] .pruef-spalte[data-bild="scryfall"],
+.pruef-bilder[data-ansicht="scryfall"] .pruef-spalte[data-bild="foto"] { display: none; }
+.pruef-bilder[data-ansicht="foto"] .pruef-paar,
+.pruef-bilder[data-ansicht="scryfall"] .pruef-paar,
+.pruef-bilder[data-ansicht="einzeln"] .pruef-paar { grid-template-columns: minmax(0, 320px); justify-content: center; }
+
+.pruef-spalte { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; }
+.pruef-unterschrift { text-align: center; }
+.pruef-karte {
+  appearance: none; display: block; width: 100%; margin: 0; padding: 0;
+  border: 0; background: none; color: inherit; font: inherit; text-align: inherit;
+  border-radius: var(--radius-karte);
+}
+button.pruef-karte { cursor: pointer; }
+button.pruef-karte:focus-visible { outline: 2px solid var(--messing); outline-offset: 3px; }
+.pruef-rahmen {
+  position: relative; display: block; width: 100%; aspect-ratio: 63 / 88; overflow: hidden;
+  border-radius: var(--radius-karte); background: var(--flaeche-3); box-shadow: var(--schatten-karte);
+}
+.pruef-bild { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pruef-flaeche {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.4em; padding: 12%; text-align: center; background: var(--flaeche-3); color: var(--text-2);
+}
+.pruef-flaeche strong { font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; color: var(--text); overflow-wrap: anywhere; }
+.pruef-flaeche small { font-size: 0.85rem; }
+
+/* Umschalter am Handy: nebeneinander, nur das Foto oder nur das Scryfall-Bild */
+.pruef-schalter {
+  display: inline-flex; padding: 3px; gap: 2px;
+  border: 1px solid var(--linie-stark); border-radius: 999px; background: var(--flaeche-1);
+}
+.pruef-schalter .pruef-schalter-teil {
+  min-height: 40px; padding: 0 0.9em; border-color: transparent; background: transparent; color: var(--text-2);
+  font-size: 0.88rem;
+}
+.pruef-schalter .pruef-schalter-teil:hover { background: var(--flaeche-hover); border-color: transparent; color: var(--text); }
+.pruef-schalter .pruef-schalter-teil[aria-pressed="true"] { background: var(--messing); border-color: transparent; color: #1a1408; }
+
+/* Tafel mit Name, Druck, Erkennung, Ort, Gründen */
+.pruef-tafel {
+  display: flex; flex-direction: column; gap: 0.95rem; min-width: 0; box-sizing: border-box;
+  padding: 1.2rem 1.25rem; overflow-wrap: anywhere;
+  background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius-gross);
+  box-shadow: var(--schatten-karte);
+}
+.pruef-name { font-size: clamp(1.4rem, 5vw, 1.8rem); }
+.pruef-druck { margin: -0.45rem 0 0; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.pruef-status { display: flex; align-items: center; gap: 0.6em; margin: 0; font-weight: 500; }
+.pruef-punkt { flex: none; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%; background: var(--warnung); }
+.pruef-status-name_sicher .pruef-punkt { background: var(--hinweis); }
+.pruef-status-geprueft .pruef-punkt { background: var(--flaeche-2); border: 2px solid var(--messing); }
+.pruef-ort { display: flex; flex-direction: column; gap: 0.2rem; margin: 0; }
+.pruef-link {
+  align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px;
+  color: var(--messing-hell); text-underline-offset: 3px;
+}
+.pruef-frage { margin: 0; color: var(--text-2); }
+.pruef-gruende .etikett { display: block; margin-bottom: 0.35rem; }
+.pruef-gruende ul { margin: 0; padding: 0; list-style: none; }
+.pruef-gruende li { position: relative; padding-left: 1rem; color: var(--text-2); font-size: 0.95rem; line-height: 1.45; }
+.pruef-gruende li + li { margin-top: 0.3rem; }
+.pruef-gruende li::before {
+  content: ""; position: absolute; left: 0; top: 0.6em; width: 5px; height: 5px; border-radius: 50%; background: var(--linie-stark);
+}
+
+/* „Mehr": Anzahl, Foil, Sprache, Rückgängig, Entfernen */
+.pruef-mehr { padding-top: 0.8rem; border-top: 1px solid var(--linie); }
+.pruef-mehr-knopf { min-height: 44px; }
+.pruef-mehr-knopf::after {
+  content: ""; width: 7px; height: 7px; margin-left: 0.2em;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
+}
+.pruef-mehr-knopf[aria-expanded="true"]::after { transform: rotate(225deg) translate(-2px, -2px); }
+.pruef-mehr-inhalt { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.pruef-mehr-inhalt[hidden] { display: none; }
+.pruef-zeile { display: grid; grid-template-columns: 6rem minmax(0, 1fr); align-items: center; gap: 10px; }
+.pruef-zeile-unten { display: flex; flex-wrap: wrap; gap: 10px; }
+.pruef-zaehler { display: flex; align-items: center; gap: 8px; }
+.pruef-anzahl { width: 5.4rem; text-align: center; -moz-appearance: textfield; appearance: textfield; }
+.pruef-anzahl::-webkit-outer-spin-button, .pruef-anzahl::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pruef-zeile .pruef-sprache { max-width: 18rem; }
+.pruef-foil { justify-self: start; min-height: 44px; }
+.pruef-foil[aria-pressed="true"] { background: var(--messing-schleier); border-color: var(--messing); color: var(--messing-hell); }
+
+/* Feste Leiste unten: Rückmeldung mit Rückgängig und die großen Tasten */
+.pruef-unten {
+  position: sticky; bottom: 0; z-index: 3;
+  margin: 0 calc(-1 * var(--rand-sicher)); padding: 10px var(--rand-sicher) calc(env(safe-area-inset-bottom, 0px) + 12px);
+  background: var(--raum); border-top: 1px solid var(--linie);   /* deckend: nichts scheint durch */
+}
+.pruef-leiste {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  box-sizing: border-box; min-height: 48px; margin: 0 auto 10px; padding: 4px 4px 4px 16px;
+  border: 1px solid var(--linie-stark); border-radius: 999px; background: var(--flaeche-2); color: var(--text-2);
+}
+.pruef-leiste[hidden] { display: none; }
+.pruef-leiste-text { min-width: 0; font-size: 0.95rem; }
+.pruef-leiste-text strong { color: var(--messing-hell); font-weight: 600; }
+.pruef-leiste-fehler { padding: 8px 16px; border-color: var(--warnung); color: #f1b9b0; }
+.pruef-rueck { flex: none; min-height: 44px; }
+.pruef-aktionen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0 auto; }
+.pruef-aktionen[hidden] { display: none; }
+.pruef-aktionen[data-anzahl="3"] > :first-child { grid-column: 1 / -1; }
+.pruef-aktionen .pruef-taste-breit { grid-column: 1 / -1; }
+.pruef-taste { min-height: 56px; font-size: 1.05rem; font-weight: 600; }
+.pruef-hinweis { margin: 8px 0 0; text-align: center; color: var(--text-3); font-size: 0.9rem; }
+.pruef-hinweis[hidden] { display: none; }
+
+/* Ende der Liste / alles geprüft */
+.pruef-ende { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 28rem; margin: 12vh auto 0; text-align: center; }
+.pruef-ende h2 { font-size: 1.6rem; }
+.pruef-ende p { margin: 0; color: var(--text-2); }
+.pruef-ende .pruef-taste { width: 100%; max-width: 20rem; }
+.pruef-ende-zeichen {
+  display: grid; place-items: center; width: 64px; height: 64px;
+  border: 1.5px solid var(--messing); border-radius: 50%; color: var(--messing-hell);
+}
+.pruef-ende-zeichen svg { width: 28px; height: 28px; }
+
+/* Breite Ansicht (PC): Bilder links, Tafel rechts, Tasten in einer Reihe */
+@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
+  .pruef-fall { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 44px; align-items: start; }
+  .pruef-schalter { display: none; }
+  .pruef-bilder[data-ansicht="foto"] .pruef-spalte[data-bild="scryfall"],
+  .pruef-bilder[data-ansicht="scryfall"] .pruef-spalte[data-bild="foto"] { display: flex; }
+  .pruef-bilder[data-ansicht="foto"] .pruef-paar,
+  .pruef-bilder[data-ansicht="scryfall"] .pruef-paar { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; }
+  .pruef-bilder[data-ansicht="einzeln"] .pruef-paar { grid-template-columns: minmax(0, 340px); }
+  .pruef-paar { max-width: none; gap: 20px; }
+  .pruef-unten > * { max-width: 900px; }
+  .pruef-aktionen { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pruef-aktionen[data-anzahl="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pruef-aktionen[data-anzahl="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pruef-aktionen[data-anzahl="3"] > :first-child, .pruef-aktionen .pruef-taste-breit { grid-column: auto; }
+}
+
+/* Dialog für genau eine Karte: immer einspaltig, Bilder etwas kleiner */
+.pruef-fall.pruef-fall-kompakt { grid-template-columns: minmax(0, 1fr); gap: 16px; animation: none; }
+.pruef-fall-kompakt .pruef-paar { max-width: 460px; gap: 12px; }
+.pruef-b { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.pruef-b .pruef-leiste { position: sticky; bottom: 0; z-index: 1; }
+.pruef-b .pruef-haupt { padding: 0; }
+.pruef-b .pruef-meldung { margin-top: 10vh; }
+.pruef-dialog .dialog-fuss .pruef-hinweis { flex: 1 0 100%; margin: 0; }
+
+/* Dialoge: Druck ändern und Keine Karte */
+@media (min-width: 700px) {
+  .dialog.pruef-dialog { width: min(900px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); }
+}
+.pruef-druckwahl { padding-bottom: 8px; }
+.pruef-treffer {
+  max-height: 40vh; margin: 8px 0 0; padding: 0; overflow: auto; list-style: none;
+  border: 1px solid var(--linie-stark); border-radius: var(--radius); background: var(--flaeche-3);
+}
+.pruef-treffer[hidden] { display: none; }
+.pruef-treffer li + li { border-top: 1px solid var(--linie); }
+.pruef-treffer-eintrag {
+  appearance: none; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; min-height: 48px; padding: 8px 14px; border: 0; background: none;
+  color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.pruef-treffer-eintrag:hover { background: var(--flaeche-hover); }
+.pruef-treffer-eintrag small { color: var(--text-2); }
+.pruef-treffer-leer { padding: 12px 14px; color: var(--text-2); }
+.pruef-drucke-titel { margin: 18px 0 4px; font-size: 1rem; color: var(--text-2); font-weight: 500; letter-spacing: 0; }
+.pruef-drucke { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 10px; }
+.pruef-kachel {
+  appearance: none; display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 8px;
+  border: 1px solid var(--linie); border-radius: var(--radius); background: var(--flaeche-1);
+  color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  content-visibility: auto; contain-intrinsic-size: 150px 300px;
+}
+.pruef-kachel:hover { background: var(--flaeche-hover); }
+.pruef-kachel[aria-selected="true"] { border-color: var(--messing); background: var(--messing-schleier); }
+.pruef-kachel-bild {
+  position: relative; display: block; width: 100%; aspect-ratio: 63 / 88; overflow: hidden;
+  border-radius: var(--radius-karte); background: var(--flaeche-3);
+}
+.pruef-kachel-text { display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; color: var(--text-2); overflow-wrap: anywhere; }
+.pruef-kachel-text strong { color: var(--text); font-size: 0.92rem; font-weight: 600; line-height: 1.25; }
+.pruef-kachel-aktuell { align-self: flex-start; margin-top: 2px; color: var(--messing-hell); font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.pruef-mehr-drucke { display: flex; margin: 16px auto 4px; }
+.pruef-mehr-drucke[hidden] { display: none; }
+.pruef-wahl { display: flex; flex: 1 0 100%; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pruef-wahl-text { flex: 1 0 100%; margin: 0; color: var(--text-2); font-size: 0.95rem; }
+.pruef-wahl-feld { display: flex; flex: 1 1 12rem; align-items: center; gap: 8px; min-width: 0; }
+.pruef-wahl-feld .feld { flex: 1 1 auto; width: auto; min-width: 0; }
+.pruef-wahl .pruef-foil { flex: none; }
+.pruef-keine-tasten { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.pruef-keine-hilfe { margin: 14px 0 0; color: var(--text-3); font-size: 0.9rem; }
+.pruef-keine-hilfe strong { color: var(--text-2); font-weight: 500; }
+
