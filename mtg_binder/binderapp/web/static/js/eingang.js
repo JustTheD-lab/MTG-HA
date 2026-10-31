@@ -47,7 +47,7 @@ function fotoHtml(f) {
   const k = f.karte;
   const name = k
     ? `<a class="eingang-name${k.status !== 'sicher' && !k.geprueft ? ' eingang-name--pruefen' : ''}"`
-      + ` href="#/kiste/${Number(k.kiste_id)}/karte/${Number(k.id)}">${esc(k.name)}`
+      + ` href="${k.kiste_id ? `#/kiste/${Number(k.kiste_id)}` : '#/sammlung'}/karte/${Number(k.id)}">${esc(k.name)}`
       + `${k.status !== 'sicher' && !k.geprueft ? ' <span class="eingang-pruefen">prüfen</span>' : ''}</a>`
     : (f.status === 'fehler' && f.fehler ? `<span class="eingang-grund">${esc(f.fehler)}</span>` : '');
   const aktion = (f.status === 'neu' || f.status === 'fehler' || verworfen)

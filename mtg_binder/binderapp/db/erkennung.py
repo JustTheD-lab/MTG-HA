@@ -121,16 +121,24 @@ def scan_holen(con, nutzer: int, hoechstens: int) -> list[dict]:
 
 
 def scan_kiste(con, nutzer: int) -> int:
-    """Die Kiste „Scan-Eingang“: über die Marke, sonst eine gleichnamige übernehmen, sonst neu anlegen."""
+    """Die Kiste „Scan-Eingang“: über die Marke, sonst eine gleichnamige ohne Herkunft übernehmen, sonst neu anlegen.
+    Eine gleichnamige Kiste aus einem ManaBox-Import (extern_name gesetzt) bleibt unberührt, damit ihr Import
+    wiederholbar bleibt; dann heißt die neue Kiste „Scan-Eingang 2“ usw."""
     z = con.execute("SELECT id FROM kiste WHERE nutzer_id = ? AND extern_name = ?", (nutzer, SCAN_MARKE)).fetchone()
     if z is not None:
         return z["id"]
-    z = con.execute("SELECT id FROM kiste WHERE nutzer_id = ? AND name = ?", (nutzer, SCAN_KISTE)).fetchone()
+    z = con.execute("SELECT id FROM kiste WHERE nutzer_id = ? AND name = ? AND extern_name IS NULL",
+                    (nutzer, SCAN_KISTE)).fetchone()
     if z is not None:
         aendern(con, nutzer, QUELLE, "kiste", z["id"], {"extern_name": SCAN_MARKE})
         return z["id"]
+    vergeben = {r["name"] for r in con.execute("SELECT name FROM kiste WHERE nutzer_id = ?", (nutzer,))}
+    name, n = SCAN_KISTE, 1
+    while name in vergeben:
+        n += 1
+        name = f"{SCAN_KISTE} {n}"
     platz = con.execute("SELECT COALESCE(MAX(regalplatz), 0) + 1 FROM kiste WHERE nutzer_id = ?", (nutzer,)).fetchone()[0]
-    return einfuegen(con, nutzer, QUELLE, "kiste", {"nutzer_id": nutzer, "name": SCAN_KISTE, "regalplatz": platz,
+    return einfuegen(con, nutzer, QUELLE, "kiste", {"nutzer_id": nutzer, "name": name, "regalplatz": platz,
                                                     "extern_name": SCAN_MARKE})
 
 
