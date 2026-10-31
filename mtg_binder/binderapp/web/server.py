@@ -60,7 +60,7 @@ from binderapp.db import seiten
 from binderapp.db.datenbank import MINDEST, aendern, einfuegen, schreiben, verbinden, version
 from binderapp.db.seiten import Fehler
 from binderapp.preise import werte
-from binderapp.web import abzug, hochladen, kisten, kistenschreiben, pc, pruefen, sammlung
+from binderapp.web import abzug, hochladen, kisten, kistenschreiben, pc, pruefen, sammlung, scan
 from binderapp.web.anmeldung import COOKIE, DAUER, Anmeldung
 from binderapp.web.helfer import Helfer
 from binderapp.web.speicher import MELDUNG as MELDUNG_SPEICHER
@@ -278,6 +278,9 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
                                    "Bitte zuerst: python -m binderapp.db.migrieren")
     if speicher.fotos_ok():
         hochladen.teile_aufraeumen(fotos / "upload")
+        hochladen.teile_aufraeumen(fotos / "scan")
+    if speicher.bilder_ok():
+        hochladen.teile_aufraeumen(bilder / "scan")
 
     def db():
         if not datenbank.exists():
@@ -601,7 +604,8 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
 
     # Routen-Module (Prüfansicht, Bulkkisten) bekommen Datenbank, Anmeldung und Katalog über den Helfer.
     h = Helfer(datenbank, NUTZER, schreibend=schreibend, katalog_pfad=katalog, bilder_ordner=bilder,
-               sicherung_ordner=sicherungen, sicherungen_behalten=sicherungen_behalten)
+               sicherung_ordner=sicherungen, sicherungen_behalten=sicherungen_behalten, fotos_ordner=fotos,
+               speicher=speicher, max_foto_bytes=anmeldung.max_foto_bytes())
 
     api = Router(routes=[
         Route("/regal", regal),
@@ -628,6 +632,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         *kistenschreiben.routen(h),
         *sammlung.routen(h),
         *abzug.routen(h),
+        *scan.routen(h),
     ])
     async def zu_gross(request, ausnahme):
         """Riesige IDs in der Adresse (SQLite kennt nur 64 Bit) sind schlicht nicht vorhanden, kein Serverfehler."""

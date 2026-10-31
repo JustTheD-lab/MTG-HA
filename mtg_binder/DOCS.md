@@ -41,6 +41,20 @@ Veränderung gegen Vortag, 3 und 30 Tage – erst, wenn genug Tage gesammelt sin
 Damit die Karten ihrem Cardmarket-Produkt zugeordnet werden, braucht das Add-on den Katalog ab Version 2: Den
 schickt die Erkennung am PC beim nächsten Start automatisch.
 
+## Bulk-Scan mit dem Card Slinger
+
+1. Handy über dem Card Slinger befestigen, im Regal auf **„Scannen“** tippen, dann **„Scan starten“**.
+   Die Kamera geht im Browser nur über HTTPS: Home Assistant am Handy über die **Nabu-Casa-Adresse** öffnen
+   (über `http://<IP>:8123` bleibt die Kamera gesperrt).
+2. Den Rahmen mit dem Regler so einstellen, dass er die Karte in der Scanzone umschließt. Zu Beginn muss die
+   Scanzone leer sein: Das erste ruhige Bild merkt sich das Add-on als „leer“.
+3. Karten einwerfen. Das Handy schickt laufend ein kleines Graustufenbild der Scanzone; das Add-on erkennt
+   Bewegung, wartet, bis die Karte still liegt, und löst dann genau ein Foto aus (Klick-Ton, Zähler). Eine Karte
+   sollte etwa eine Sekunde liegen, bevor die nächste kommt.
+4. „Letztes verwerfen“ nimmt ein falsches Foto zurück, „Jetzt auslösen“ erzwingt eines. „Fertig“ beendet den
+   Durchgang. Die Fotos liegen unverändert unter `fotos/scan/<Durchgang>/` und erscheinen im **Scan-Eingang**.
+   Gelöscht wird dort nichts, verworfene Fotos lassen sich zurückholen.
+
 ## Wo liegt was?
 
 | Was | Wo |
@@ -49,6 +63,7 @@ schickt die Erkennung am PC beim nächsten Start automatisch.
 | Kartenkatalog, Schlüssel (nur als Hash) | im Add-on (`/data/katalog.sqlite`, `/data/pc_schluessel`) |
 | Sicherungen | im Add-on (`/data/sicherung`), die jüngsten 10 bleiben; vor jedem Update automatisch |
 | Fotos und Vorschaubilder | auf dem Netzlaufwerk unter dem Speicherort (`fotos/`, `bilder/`), **nicht** in den Backups |
+| Scan-Fotos | auf dem Netzlaufwerk unter `fotos/scan/`, Vorschauen unter `bilder/scan/` |
 
 Ist das Netzlaufwerk nicht erreichbar, kannst du weiter blättern, suchen und prüfen, nur ohne Bilder.
 Hochladen ist dann gesperrt, oben steht ein Hinweis.

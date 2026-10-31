@@ -143,6 +143,19 @@ function sammlungHtml(s) {
     + '<path d="M9 5l7 7-7 7"/></svg></button>';
 }
 
+/** Platz „Scan-Eingang“ im Stil der Sammlung (Bulk-Scan). Ohne Schnittstelle (alte Datenbank) gibt es ihn nicht. */
+function scanPlatzHtml(s) {
+  const g = s?.gesamt;
+  if (!g || typeof g.fotos !== 'number') return '';
+  const text = `${mehrzahl(g.fotos, 'Foto', 'Fotos')} · ${g.wartend ?? 0} warten`;
+  return `<button type="button" class="regal-sammlung scan-platz" aria-label="Scan-Eingang, ${esc(text)}">`
+    + '<span class="regal-sammlung-etikett">Scan-Eingang</span>'
+    + `<span class="regal-sammlung-zahlen etikett">${esc(text)}</span>`
+    + '<svg class="regal-sammlung-pfeil" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+    + '<path d="M9 5l7 7-7 7"/></svg></button>';
+}
+
 /** Zweiter Regalboden unter den Bindern. Ohne Kisten-Schnittstelle (Datenbank Version 2) gibt es ihn nicht. */
 function kistenbodenHtml(kisten) {
   return '<section class="regal-kistenboden" aria-label="Kisten im Regal">'
@@ -510,9 +523,11 @@ export async function zeigen(wurzel, parameter, vorher) {
   const kistenAnfrage = holen('/api/kisten').catch(() => null);   // ohne Kisten-Schnittstelle bleibt das Regal wie bisher
   // Version 2 der Datenbank (verfuegbar: false): kein Etikett „Sammlung“, die Route wird gar nicht erst gefragt
   const sammlungAnfrage = kistenAnfrage.then((k) => (k?.verfuegbar === true ? holen('/api/sammlung').catch(() => null) : null));
-  const [{ binder }, , kistenAntwort, sammlung] = await Promise.all([
-    holen('/api/regal'), laden(), kistenAnfrage, sammlungAnfrage,
+  const scanAnfrage = holen('/api/scan').catch(() => null);   // 409/Fehler: Scan-Funktionen ausblenden
+  const [{ binder }, , kistenAntwort, sammlung, scanStand] = await Promise.all([
+    holen('/api/regal'), laden(), kistenAnfrage, sammlungAnfrage, scanAnfrage,
   ]);
+  const scanDa = Boolean(scanStand?.gesamt);
   const karten = binder.reduce((summe, b) => summe + (b.karten ?? 0), 0);
   // Version 2 der Datenbank: verfuegbar ist false, dann gibt es weder Kistenboden noch Zahlen dazu
   const kistenDa = kistenAntwort?.verfuegbar === true;
@@ -541,7 +556,7 @@ export async function zeigen(wurzel, parameter, vorher) {
     + '</div></form>'
     + '<p class="nur-vorleser" role="status" aria-live="polite"></p>'
     + '<section class="regal-treffer" id="regal-treffer" aria-label="Treffer" hidden></section>'
-    + '<div class="regal-moebel">' + sammlungHtml(sammlung)
+    + '<div class="regal-moebel">' + sammlungHtml(sammlung) + scanPlatzHtml(scanStand)
     + '<div class="regal-korpus" role="group" aria-label="Binder im Regal"></div>'
     + (kistenDa ? kistenbodenHtml(kisten) : '')
     + '</div>';
@@ -589,7 +604,14 @@ export async function zeigen(wurzel, parameter, vorher) {
       delete pcKnopf.dataset.offen;
     }
   });
-  szene.querySelector('.regal-aktionen').append(neu, neueKiste, pcKnopf, anmeldeKnopf());
+  const scannen = document.createElement('button');
+  scannen.type = 'button';
+  scannen.className = 'knopf regal-scannen';
+  scannen.setAttribute('aria-label', 'Karten mit der Kamera scannen');
+  scannen.innerHTML = '<span>Scannen</span>';
+  scannen.hidden = !(scanDa && angemeldet());
+  scannen.addEventListener('click', () => gehe('#/scan'));
+  szene.querySelector('.regal-aktionen').append(neu, neueKiste, scannen, pcKnopf, anmeldeKnopf());
 
   const plaetze = binder.map((b) => {
     const li = elementAus(rueckenHtml(b));
@@ -613,6 +635,7 @@ export async function zeigen(wurzel, parameter, vorher) {
     statusUhr: 0, statusLaeuft: false, statusZeit: 0, sichtbar: null,
     sitzung: () => {
       neu.hidden = !angemeldet(); neueKiste.hidden = !(kistenDa && angemeldet()); pcKnopf.hidden = !sitzung().ha;
+      scannen.hidden = !(scanDa && angemeldet());
     },
   };
   const { moebel, treffer, eingabe, leerknopf } = zustand;
@@ -620,6 +643,7 @@ export async function zeigen(wurzel, parameter, vorher) {
 
   // Binder oder Kiste herausnehmen: die Animation übernimmt `verlassen`, die Navigation geschieht hier
   moebel.addEventListener('click', (ereignis) => {
+    if (ereignis.target.closest('.scan-platz')) { gehe('#/scan/eingang'); return; }
     if (ereignis.target.closest('.regal-sammlung')) { gehe('#/sammlung'); return; }
     const knopf = ereignis.target.closest('.regal-ruecken');
     if (knopf) { gehe(`#/binder/${knopf.dataset.binder}`); return; }

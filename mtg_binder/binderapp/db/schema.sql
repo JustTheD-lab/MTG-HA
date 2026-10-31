@@ -1,4 +1,4 @@
--- Datenmodell der MTG-Binder-App (Stand 27.10.2026, Version 3)
+-- Datenmodell der MTG-Binder-App (Stand 31.10.2026, Version 5)
 --
 -- Binder → Seite → Tasche → Karte. Jede Sammlung gehört einem Nutzer.
 -- Fotos tragen den Verarbeitungsstatus (späterer Upload-Puffer, Phase 5).
@@ -167,6 +167,35 @@ CREATE TABLE IF NOT EXISTS preisabruf (
     gespeichert    INTEGER NOT NULL            -- davon in der Sammlung, gespeichert
 );
 
+-- Bulk-Scan (ab Version 5): ein Durchgang je Scan-Sitzung am Handy (Card Slinger), darin die Einzelfotos, die
+-- das Add-on aus dem Livestream ausgelöst hat (binderapp.scan). Fotos werden nie gelöscht, „verworfen“ ist ein Status.
+CREATE TABLE IF NOT EXISTS scan_durchgang (
+    id         INTEGER PRIMARY KEY,
+    nutzer_id  INTEGER NOT NULL REFERENCES nutzer(id),
+    begonnen   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    beendet    TEXT,
+    geaendert  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS scan_foto (
+    id            INTEGER PRIMARY KEY,
+    durchgang_id  INTEGER NOT NULL REFERENCES scan_durchgang(id),
+    nummer        INTEGER NOT NULL CHECK (nummer >= 1),   -- Reihenfolge im Durchgang
+    datei         TEXT NOT NULL UNIQUE,      -- relativ zum Fotoordner, z. B. scan/3/00012.jpg
+    vorschau      TEXT,                      -- relativ zu bilder/, vom Handy verkleinert (kein Bildpaket im Add-on)
+    sha256        TEXT NOT NULL,
+    groesse       INTEGER NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'neu'
+                  CHECK (status IN ('neu', 'in_verarbeitung', 'erkannt', 'fehler', 'verworfen')),
+    fehler        TEXT,
+    erkennung     TEXT,                      -- Erkennungsstand (Commit), Teilrunde B
+    karte_id      INTEGER REFERENCES karte(id) ON DELETE SET NULL,
+    ausloeser     TEXT,                      -- JSON: Grund und Messwerte der Auslösung (zum Einstellen)
+    aufgenommen   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    geaendert     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    UNIQUE (durchgang_id, nummer)
+);
+
 -- Änderungshistorie: eine Zeile je Änderung, mit Quelle und den geänderten Feldern als JSON.
 CREATE TABLE IF NOT EXISTS historie (
     id         INTEGER PRIMARY KEY,
@@ -212,5 +241,8 @@ CREATE INDEX IF NOT EXISTS i_historie_schritt ON historie(schritt);
 -- ab Version 4: Preise
 CREATE INDEX IF NOT EXISTS i_kd_cardmarket    ON kartendaten(cardmarket_id);
 CREATE INDEX IF NOT EXISTS i_preis_tag        ON preis(tag);
+-- ab Version 5: Bulk-Scan
+CREATE INDEX IF NOT EXISTS i_scan_foto_status ON scan_foto(status, id);
+CREATE INDEX IF NOT EXISTS i_scan_durchgang   ON scan_durchgang(nutzer_id, id);
 
-PRAGMA user_version = 4;
+PRAGMA user_version = 5;

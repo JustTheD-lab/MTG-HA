@@ -9,6 +9,8 @@
 //   #/sammlung                 Gesamtsammlung (Binder und Kisten): dieselbe Ansicht wie die Kiste (kiste.js)
 //                              mit `sammlung: true` und `kiste: null`
 //   #/sammlung/karte/12        dazu Karte 12 groß
+//   #/scan                     Bulk-Scan mit der Handykamera (scan.js)
+//   #/scan/eingang             Scan-Eingang: Durchgänge und ihre Fotos (eingang.js)
 //   #/pruefen                  Prüfansicht: unsichere Karten nacheinander
 //   #/pruefen/karte/12         dazu Karte 12 groß
 //
@@ -24,10 +26,12 @@ import * as lesetisch from './lesetisch.js';
 import * as kiste from './kiste.js';
 import * as pruefen from './pruefen.js';
 import * as karte from './karte.js';
+import * as scan from './scan.js';
+import * as eingang from './eingang.js';
 import { laden as sitzungLaden } from './anmeldung.js';
 import { holen } from './gemeinsam.js';
 
-const ANSICHTEN = { regal, lesetisch, kiste, pruefen };
+const ANSICHTEN = { regal, lesetisch, kiste, pruefen, scan, eingang };
 const buehne = document.getElementById('buehne');
 let aktuell = null;  // { name, parameter }
 let laeuft = Promise.resolve();
@@ -52,6 +56,10 @@ export function lesen(hash) {
   if (teile[0] === 'sammlung') {
     return { ansicht: 'kiste', binder: null, kiste: null, sammlung: true, seite: null,
              karte: teile[1] === 'karte' ? zahl(teile[2]) : null };
+  }
+  if (teile[0] === 'scan') {   // #/scan Kamera, #/scan/eingang Scan-Eingang
+    return { ansicht: teile[1] === 'eingang' ? 'eingang' : 'scan', binder: null, kiste: null, sammlung: false,
+             seite: null, karte: null };
   }
   if (teile[0] === 'pruefen') {
     return { ansicht: 'pruefen', binder: null, kiste: null, sammlung: false, seite: null,

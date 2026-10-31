@@ -15,8 +15,8 @@ from datetime import datetime
 from pathlib import Path
 
 SCHEMA = Path(__file__).with_name("schema.sql")
-TABELLEN = {"binder", "seite", "tasche", "kiste", "karte", "foto", "nutzer"}
-VERSION = 4          # Stand von schema.sql (PRAGMA user_version); 4: Preise (31.10.2026)
+TABELLEN = {"binder", "seite", "tasche", "kiste", "karte", "foto", "nutzer", "scan_durchgang", "scan_foto"}
+VERSION = 5          # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan (31.10.2026)
 MINDEST = 2          # ältester Stand, mit dem Server und Verarbeiter noch laufen (ohne Kisten)
 WARTEZEIT = 10       # Sekunden Wartezeit, wenn ein anderer Prozess gerade schreibt
 
@@ -93,7 +93,7 @@ def fehlende_spalten(con) -> list[str]:
 
 
 def migrieren(con) -> list[str]:
-    """Bringt eine Datenbank der Version 1, 2 oder 3 auf Version 4. Wiederholbar: Vorhandenes bleibt, wie es ist.
+    """Bringt eine Datenbank der Version 1 bis 4 auf Version 5 (5 bringt nur neue Tabellen). Wiederholbar: Vorhandenes bleibt, wie es ist.
 
     Gibt die ausgeführten Schritte zurück (leer, wenn nichts zu tun war). Daten werden nicht
     verändert; neue Spalten bekommen ihren Standardwert (Fotos: Quelle „import", Seiten: Art „foto",

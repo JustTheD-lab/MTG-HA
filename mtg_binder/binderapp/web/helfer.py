@@ -13,6 +13,7 @@ eigenen Zugriff auf Anmeldung und Datenbankpfad, und Tests können einen Helfer 
     h.katalog()                  nur lesende Verbindung zum Scryfall-Katalog oder None (Raspi: immer None)
     h.nutzer                     Nutzer-ID (bis zur Benutzerverwaltung 1)
     h.bilder, h.sicherungen      Ordner der Vorschaubilder und der Sicherungen (im Add-on getrennt gesetzt)
+    h.fotos, h.speicher          Ordner der Originalfotos, Prüfung des Netzlaufwerks (Bulk-Scan)
 """
 from __future__ import annotations
 
@@ -70,10 +71,23 @@ class Helfer:
         return Path(self.bilder_ordner) if self.bilder_ordner else Path(self.datenbank).parent / "bilder"
 
     sicherungen_behalten: int | None = None  # Add-on: nur die jüngsten n Sicherungen behalten (PC: alle)
+    fotos_ordner: Path | None = None      # Originalfotos (Bulk-Scan: scan/<Durchgang>/)
+    speicher: object | None = None        # web/speicher.Speicher: Netzlaufwerk erreichbar? (None: immer ja)
+    max_foto_bytes: int = 40 * 1024 * 1024
 
     @property
     def sicherungen(self) -> Path:
         return Path(self.sicherung_ordner) if self.sicherung_ordner else Path(self.datenbank).parent.parent / "sicherung"
+
+    @property
+    def fotos(self) -> Path:
+        return Path(self.fotos_ordner) if self.fotos_ordner else Path(self.datenbank).parent.parent / "photos"
+
+    def fotos_ok(self) -> bool:
+        return self.speicher is None or self.speicher.fotos_ok()
+
+    def bilder_ok(self) -> bool:
+        return self.speicher is None or self.speicher.bilder_ok()
 
     def sichern(self) -> Path:
         """Sichert die Datenbank (vor Listen-Import und Abzug); im Add-on danach ältere Sicherungen weg."""

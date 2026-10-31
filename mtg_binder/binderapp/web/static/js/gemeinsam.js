@@ -43,16 +43,18 @@ export function fehlerText(status) {
 /** Schreibt über die Schnittstelle: senden('/api/binder', { daten: {...} }), Methode POST, PATCH oder DELETE.
     Gibt die JSON-Antwort zurück. Wirft SchnittstellenFehler mit dem Satz aus {"fehler": "…"}. Meldet sich
     der Server mit 401 (Sitzung abgelaufen), gibt es zusätzlich das Ereignis 'binder:abgelaufen'
-    (anmeldung.js macht daraus 'binder:sitzung'). */
-export async function senden(pfad, { methode = 'POST', daten, datei } = {}) {
+    (anmeldung.js macht daraus 'binder:sitzung'). `datei` (File, Blob oder Uint8Array) ist roh der Rumpf, als `typ`
+    (Standard text/csv; Bulk-Scan: image/jpeg und application/octet-stream). `signal`: AbortSignal zum Abbrechen. */
+export async function senden(pfad, { methode = 'POST', daten, datei, typ = 'text/csv', signal } = {}) {
   let antwort;
-  const mitDatei = datei !== undefined && datei !== null;   // die Datei (File/Blob) selbst ist der Rumpf, als text/csv
+  const mitDatei = datei !== undefined && datei !== null;
   try {
     antwort = await fetch(adresse(pfad), {
       method: methode,
+      signal,
       headers: {
         Accept: 'application/json',
-        ...(mitDatei ? { 'Content-Type': 'text/csv' } : daten !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(mitDatei ? { 'Content-Type': typ } : daten !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       body: mitDatei ? datei : (daten !== undefined ? JSON.stringify(daten) : undefined),
       credentials: 'same-origin',

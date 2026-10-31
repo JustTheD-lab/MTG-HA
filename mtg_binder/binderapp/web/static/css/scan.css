@@ -1,0 +1,105 @@
+/* Scan-Ansicht (Kamera) und Scan-Eingang im Stil „Galerie“. Handy zuerst. */
+
+/* ---------- Regal: Platz „Scan-Eingang“ und Knopf „Scannen“ ---------- */
+.scan-platz .regal-sammlung-etikett { background: var(--flaeche-3); color: var(--text); border: 1px solid var(--linie-stark); }
+
+/* ---------- Kamera-Ansicht ---------- */
+.scan {
+  position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+  background: #000; color: var(--text);
+  padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+}
+.scan-kopf { display: flex; align-items: center; gap: 12px; padding: 6px var(--rand-sicher); flex: none; }
+.scan-titel { font-size: 1.15rem; flex: 1; }
+.scan-zaehler-box { display: flex; align-items: baseline; gap: 6px; }
+.scan-zaehler { font-size: 1.6rem; font-weight: 600; color: var(--messing-hell); font-variant-numeric: tabular-nums; }
+.scan-start { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 20px;
+  padding: 24px var(--rand-sicher); text-align: center; }
+.scan-start[hidden] { display: none; }
+.scan-text { max-width: 30em; margin: 0; color: var(--text-2); }
+.scan-los { min-height: 56px; padding: 0 2em; font-size: 1.05rem; }
+
+.scan-lauf { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.scan-lauf[hidden] { display: none; }
+.scan-buehne { position: relative; flex: 1; min-height: 0; background: #050505; overflow: hidden; }
+.scan-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.scan-rahmen {
+  position: absolute; box-sizing: border-box; pointer-events: none;
+  border: 2px solid var(--messing-hell); border-radius: 4.5% / 3.2%;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+}
+.scan-blitz { animation: scan-blitz 0.35s ease-out; }
+@keyframes scan-blitz {
+  0% { background: rgba(255, 255, 255, 0.55); border-color: #fff; }
+  100% { background: transparent; }
+}
+.scan-letztes { position: absolute; right: 10px; bottom: 10px; height: 72px; width: auto; aspect-ratio: 63 / 88;
+  object-fit: cover; border: 1px solid var(--linie-stark); border-radius: 4px; box-shadow: var(--schatten-karte); }
+
+.scan-info { flex: none; padding: 8px var(--rand-sicher) 0; }
+.scan-status { margin: 0; font-weight: 600; }
+.scan-nebenzeile { margin: 2px 0 0; display: flex; gap: 14px; font-size: 0.84rem; color: var(--text-2); }
+.scan-warten.scan-aktiv { color: var(--messing-hell); }
+.scan-fps { color: var(--text-3); }
+.scan-messwerte { margin: 4px 0 0; font-size: 0.78rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.scan-info .meldung { margin: 4px 0 0; }
+.scan-regler { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.scan-regler input { flex: 1; min-width: 0; accent-color: var(--messing); height: 32px; }
+.scan-prozent { min-width: 3.2em; text-align: right; font-size: 0.86rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.scan-umschalter { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; font-size: 0.86rem; color: var(--text-2); }
+
+.scan-knoepfe { flex: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  padding: 8px var(--rand-sicher) 12px; }
+.scan-knoepfe .knopf { min-height: 52px; }
+.scan-fertig, .scan-jetzt { font-weight: 600; }
+
+@media (min-width: 900px) {
+  .scan-lauf { flex-direction: row; }
+  .scan-buehne { flex: 1 1 auto; }
+  .scan-info, .scan-knoepfe { width: 340px; }
+  .scan-lauf { display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-rows: 1fr auto auto; }
+  .scan-lauf[hidden] { display: none; }
+  .scan-buehne { grid-row: 1 / 4; }
+  .scan-info { grid-column: 2; grid-row: 1; overflow: auto; }
+  .scan-knoepfe { grid-column: 2; grid-row: 2; }
+}
+
+/* ---------- Scan-Eingang ---------- */
+.eingang { max-width: 960px; margin: 0 auto; padding: calc(12px + env(safe-area-inset-top)) var(--rand-sicher) 40px; }
+.eingang-titelzeile { display: flex; align-items: center; gap: 12px; }
+.eingang-titel { flex: 1; min-width: 0; font-size: 1.4rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 420px) { .eingang-titel { font-size: 1.2rem; } }
+.eingang-hinweis { margin: 14px 0 18px; color: var(--text-2); font-size: 0.94rem; }
+.eingang-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.eingang-durchgang { background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius); overflow: hidden; }
+.eingang-kopf { appearance: none; width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 64px;
+  background: transparent; border: 0; color: var(--text); text-align: left; cursor: pointer; }
+.eingang-kopf:hover { background: var(--flaeche-3); }
+.eingang-mini { flex: none; width: 36px; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 3px; background: var(--flaeche-3); }
+.eingang-mini--leer { display: block; border: 1px dashed var(--linie-stark); }
+.eingang-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.eingang-zeit { font-weight: 600; }
+.eingang-zahlen { color: var(--text-2); font-size: 0.86rem; }
+.eingang-abzeichen { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--messing); color: #1a1408; font-size: 0.72rem; font-weight: 600; }
+.eingang-pfeil { flex: none; color: var(--text-3); transition: transform var(--dauer-kurz) var(--kurve); }
+.eingang-kopf[aria-expanded="true"] .eingang-pfeil { transform: rotate(180deg); }
+.eingang-fotos { padding: 4px 12px 14px; border-top: 1px solid var(--linie); }
+.eingang-leer { color: var(--text-3); margin: 14px 0; }
+.eingang-raster { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 12px 10px;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+.eingang-foto { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.eingang-bild { appearance: none; padding: 0; border: 1px solid var(--linie-stark); border-radius: 4px; background: var(--flaeche-3);
+  aspect-ratio: 63 / 88; overflow: hidden; cursor: zoom-in; display: flex; align-items: center; justify-content: center; }
+.eingang-bild img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.eingang-platzhalter { font-size: 0.74rem; color: var(--text-3); padding: 4px; text-align: center; }
+.eingang-nummer { position: absolute; top: 4px; left: 4px; min-width: 22px; padding: 0 6px; border-radius: 999px;
+  background: rgba(12, 12, 14, 0.8); font-size: 0.74rem; font-variant-numeric: tabular-nums; text-align: center; }
+.eingang-status { font-size: 0.78rem; color: var(--text-2); }
+.eingang-foto[data-status="fehler"] .eingang-status { color: #f1b9b0; }
+.eingang-foto[data-status="erkannt"] .eingang-status { color: var(--messing-hell); }
+.eingang-aktion { min-height: 44px; font-size: 0.84rem; padding: 0 0.6em; }
+.eingang-foto--verworfen .eingang-bild { opacity: 0.35; filter: grayscale(1); }
+.eingang-foto--verworfen .eingang-status { color: var(--text-3); }
+.eingang-gross { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; object-fit: contain; }
+.eingang-dialog .dialog-inhalt { display: flex; align-items: center; justify-content: center; padding: 8px; }
+@media (min-width: 700px) { .eingang-dialog { width: min(900px, calc(100vw - 32px)); height: calc(100dvh - 32px); } }
