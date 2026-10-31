@@ -39,6 +39,7 @@ from starlette.routing import Route
 
 from binderapp.db import erkennung
 from binderapp.db.datenbank import schreiben, verbinden, version
+from binderapp.preise import zeitplan
 from binderapp.web.speicher import MELDUNG, Speicher
 
 NUTZER = 1
@@ -328,7 +329,9 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
                 con.execute("RELEASE kartendaten")
                 log.warning("Kartendaten nicht nachgetragen (Katalog): %s", f)
             return ergebnis
-        return JSONResponse(await run_in_threadpool(schreibvorgang, arbeit))
+        antwort = await run_in_threadpool(schreibvorgang, arbeit)
+        zeitplan.anstossen()   # Preise der neuen Karten bald nachtragen (nicht erst beim stündlichen Blick)
+        return JSONResponse(antwort)
 
     async def fehlgeschlagen(request):
         foto_id = _id(request)
@@ -417,7 +420,9 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
                 con.execute("RELEASE kartendaten")
                 log.warning("Kartendaten nicht nachgetragen (Katalog): %s", f)
             return ergebnis
-        return JSONResponse(await run_in_threadpool(schreibvorgang, arbeit))
+        antwort = await run_in_threadpool(schreibvorgang, arbeit)
+        zeitplan.anstossen()   # Preise der neuen Karten bald nachtragen
+        return JSONResponse(antwort)
 
     async def scan_fehler(request):
         scan_id = _id(request)
@@ -459,6 +464,7 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
                 kartendaten_nachtragen(con, katalog)   # Lücken aus der Zeit ohne Katalog füllen
             return katalog_stand(katalog)
         stand_neu = await run_in_threadpool(pruefen_und_ersetzen)
+        zeitplan.anstossen()   # neuer Katalog kann fehlende Cardmarket-IDs liefern
         return JSONResponse({"katalog": stand_neu, "gemeldet": gebaut[:40], "groesse": groesse}, status_code=201)
 
     routen = [

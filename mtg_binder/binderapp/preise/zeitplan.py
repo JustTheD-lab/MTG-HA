@@ -1,6 +1,6 @@
 """Täglicher Preisabruf im Add-on (Entscheidung des Nutzers: das Add-on holt die Preise selbst, unabhängig vom PC).
 
-Ein Hintergrund-Thread schaut stündlich nach:
+Ein Hintergrund-Thread schaut stündlich nach, nach `anstossen()` (neue Karten) schon nach etwa 30 Sekunden:
 - Ist der letzte Abruf älter als 20 Stunden (oder gibt es noch keinen), wird die Datei neu geladen.
 - Sonst: Haben neue Karten (Erkennung, „Karte hinzufügen“) Produkte ohne Preis für den neuesten Tag, werden
   sie aus der schon geladenen Datei nachgetragen (ohne neuen Download).
@@ -62,16 +62,40 @@ def einmal(datenbank: Path, ordner: Path, katalog: Path | None) -> dict | None:
     return ergebnis
 
 
+BUENDELN = 30          # Sekunden: nach einem Anstoß noch so lange warten, damit ein ganzer Lauf zusammenkommt
+
+_aktiv: "Preisabruf | None" = None
+
+
+def anstossen() -> None:
+    """Neue Karten (Erkennung, Bulk-Scan, Druck ändern, Karte hinzufügen): Preise bald nachtragen statt erst beim
+    nächsten stündlichen Blick. Ohne laufenden Preisabruf (PC, Tests) geschieht nichts."""
+    if _aktiv is not None:
+        _aktiv.anstossen()
+
+
 class Preisabruf(threading.Thread):
     def __init__(self, datenbank: Path, ordner: Path, katalog: Path | None):
         super().__init__(daemon=True, name="preisabruf")
         self.datenbank, self.ordner, self.katalog = Path(datenbank), Path(ordner), katalog
         self.halt = threading.Event()
+        self.stoss = threading.Event()
+
+    def anstossen(self) -> None:
+        self.stoss.set()
+
+    def anhalten(self) -> None:
+        self.halt.set()
+        self.stoss.set()
 
     def run(self) -> None:
+        global _aktiv
+        _aktiv = self
         while not self.halt.is_set():
             try:
                 einmal(self.datenbank, self.ordner, self.katalog)
             except Exception as fehler:   # nie den Server stören; nächster Versuch beim nächsten Blick
                 log.warning("Preisabruf fehlgeschlagen: %s", fehler)
-            self.halt.wait(TAKT)
+            if self.stoss.wait(TAKT) and not self.halt.is_set():
+                self.halt.wait(BUENDELN)   # weitere neue Karten abwarten, dann einmal nachtragen
+            self.stoss.clear()

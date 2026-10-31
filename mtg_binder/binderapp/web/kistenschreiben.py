@@ -29,6 +29,7 @@ from starlette.routing import Route
 from binderapp.db import datenbank, listen_import, schritte
 from binderapp.db.manabox_import import ImportFehler
 from binderapp.katalog import kartendaten
+from binderapp.preise import zeitplan
 from binderapp.web.helfer import Fehler
 from binderapp.web.kisten import GROSSE_ID, _ab_version_3, _kiste_holen, _kiste_id, anfrage_lesen, sql_ids
 from binderapp.web.pruefen import KEIN_KATALOG, SPRACHEN, _kennung
@@ -200,7 +201,9 @@ def routen(h) -> list[Route]:
             kartendaten.schreiben(con, daten, art="behalten")
             return {"id": karte_id, "neu": neu, "schritt": schritt, "name": daten["name"],
                     "anzahl": anzahl, "kiste_id": kiste_id}
-        return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit), status_code=201)
+        antwort = await run_in_threadpool(h.schreibvorgang, arbeit)
+        zeitplan.anstossen()   # Add-on: Preis des neuen Drucks bald nachtragen
+        return JSONResponse(antwort, status_code=201)
 
     @h.schreibend
     async def karten_verschieben(request):

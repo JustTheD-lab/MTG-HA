@@ -54,6 +54,7 @@ from starlette.routing import Route
 from binderapp import katalog as katalog_paket
 from binderapp.db.datenbank import aendern, einfuegen, loeschen, version
 from binderapp.katalog import kartendaten, suche
+from binderapp.preise import zeitplan
 from binderapp.web.helfer import Fehler, fehler
 
 QUELLE = "nutzer"
@@ -513,7 +514,9 @@ def routen(h, bilder: Path | None = None) -> list[Route]:
             # Kartendaten sind abgeleitet (Katalog) und haben keine Historie.
             kartendaten.schreiben(con, daten)
             return _mit_schritt(con, fall(con, karte_id=karte_id), schritt)
-        return await schreiben(arbeit)
+        antwort = await schreiben(arbeit)
+        zeitplan.anstossen()   # Add-on: Preis des neuen Drucks bald nachtragen
+        return antwort
 
     async def karte_aendern(request):
         karte_id = _id(request, "Karte")

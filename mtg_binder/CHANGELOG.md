@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.5.2
+- Preise neuer Karten (Erkennung, Bulk-Scan, Druck ändern, Karte hinzufügen) erscheinen nach etwa einer halben
+  Minute statt erst beim nächsten stündlichen Blick.
+
 ## 0.5.1
 - Bulk-Scan: Eine gleichnamige Kiste aus einem ManaBox-Import wird nicht mehr zum Scan-Eingang (dann
   „Scan-Eingang 2“). Link im Scan-Eingang auch für Karten, die inzwischen nicht mehr in einer Kiste liegen.
