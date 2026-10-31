@@ -228,6 +228,10 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
             with closing(verbinden(datenbank, nur_lesen=True)) as con:
                 warte = con.execute("SELECT COUNT(*) FROM foto WHERE nutzer_id = ? AND status IN ('neu', 'in_verarbeitung')",
                                     (NUTZER,)).fetchone()[0]
+                if version(con) >= 5:
+                    warte += con.execute("SELECT COUNT(*) FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id"
+                                         " WHERE d.nutzer_id = ? AND f.status IN ('neu', 'in_verarbeitung')",
+                                         (NUTZER,)).fetchone()[0]
                 return {"version": os.environ.get("BINDER_VERSION", "?"), "schema": version(con), "warteschlange": warte,
                         "katalog": katalog_stand(katalog), "speicher": speicher.stand()}
         return JSONResponse(await run_in_threadpool(lesen))
@@ -385,6 +389,44 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
         pfad, sha = await run_in_threadpool(lesen)
         return FileResponse(pfad, media_type="application/octet-stream", headers={"X-Sha256": sha})
 
+    async def scan_holen(request):
+        kennung = _kennung({"kennung": request.query_params.get("kennung")})
+        wert = request.query_params.get("hoechstens", "8")
+        n = max(1, min(int(wert) if wert.isdigit() else 8, HOLEN_HOECHSTENS))
+
+        def arbeit(con):
+            _angemeldet(con, kennung)
+            return erkennung.scan_holen(con, NUTZER, n)
+        return JSONResponse({"auftraege": await run_in_threadpool(schreibvorgang, arbeit)})
+
+    async def scan_fertig(request):
+        scan_id = _id(request)
+        d = await _json(request)
+        if "tasche" not in d:
+            raise Fehler("Ungültiges Ergebnis.")
+        tasche = erkennung.tasche_aus_dict(d["tasche"]) if d["tasche"] is not None else None
+
+        def arbeit(con):
+            ergebnis = erkennung.scan_ergebnis_schreiben(con, NUTZER, scan_id, tasche)
+            try:   # wie bei Binderseiten: Kartendaten sind abgeleitet und dürfen das Ergebnis nicht kosten
+                con.execute("SAVEPOINT kartendaten")
+                kartendaten_nachtragen(con, katalog)
+                con.execute("RELEASE kartendaten")
+            except sqlite3.Error as f:
+                con.execute("ROLLBACK TO kartendaten")
+                con.execute("RELEASE kartendaten")
+                log.warning("Kartendaten nicht nachgetragen (Katalog): %s", f)
+            return ergebnis
+        return JSONResponse(await run_in_threadpool(schreibvorgang, arbeit))
+
+    async def scan_fehler(request):
+        scan_id = _id(request)
+        grund = (await _json(request)).get("grund")
+        if not isinstance(grund, str) or not grund.strip():
+            raise Fehler("Grund fehlt.")
+        await run_in_threadpool(schreibvorgang, lambda con: erkennung.scan_fehlgeschlagen(con, NUTZER, scan_id, grund))
+        return JSONResponse({"ok": True})
+
     async def bilder_fehlend(request):
         def lesen():
             with closing(verbinden(datenbank, nur_lesen=True)) as con:
@@ -433,6 +475,9 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
         Route("/pc/katalog", geschuetzt(katalog_ersetzen), methods=["PUT"]),
         Route("/pc/scan/fotos", geschuetzt(scan_liste)),
         Route("/pc/scan/foto/{id:int}", geschuetzt(scan_foto, braucht_speicher="fotos")),
+        Route("/pc/scan/holen", geschuetzt(scan_holen, braucht_speicher="fotos"), methods=["POST"]),
+        Route("/pc/scan/fertig/{id:int}", geschuetzt(scan_fertig), methods=["POST"]),
+        Route("/pc/scan/fehler/{id:int}", geschuetzt(scan_fehler), methods=["POST"]),
     ]
 
     async def zu_gross(request, ausnahme):

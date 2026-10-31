@@ -315,6 +315,7 @@ function aufraeumen() {
   const a = ansicht;
   if (!a) return;
   a.laufend = false;
+  clearInterval(a.erkennUhr);
   try { a.bitmap?.close(); } catch { /* egal */ }
   a.strom?.getTracks().forEach((t) => t.stop());
   a.video.srcObject = null;
@@ -385,6 +386,24 @@ async function starten(a) {
   document.addEventListener('visibilitychange', a.sichtbar);
   anzeigen();
   schleife(a);
+  erkennungZeigen(a);
+  a.erkennUhr = setInterval(() => erkennungZeigen(a), 8000);
+}
+
+/** Läuft der PC, erkennt er die Fotos nach und nach: Zahl und zuletzt erkannte Karte dieses Durchgangs zeigen. */
+async function erkennungZeigen(a) {
+  if (document.hidden || !a.durchgang) return;
+  try {
+    const d = await holen(`/api/scan/durchgang/${a.durchgang}`);
+    if (ansicht !== a) return;
+    const erkannt = (d.fotos || []).filter((f) => f.karte);
+    const pruefen = erkannt.filter((f) => f.karte.status !== 'sicher' && !f.karte.geprueft).length;
+    const letzte = erkannt.sort((x, y) => y.nummer - x.nummer)[0];
+    a.el.erkannt.hidden = !erkannt.length;
+    a.el.erkannt.textContent = erkannt.length
+      ? `${erkannt.length} erkannt${pruefen ? ` (${pruefen} zu prüfen)` : ''} · zuletzt: ${letzte.karte.name}`
+      : '';
+  } catch { /* nur eine Anzeige */ }
 }
 
 async function fertig(a) {
@@ -429,6 +448,7 @@ export async function zeigen(wurzel) {
       <div class="scan-info">
         <p class="scan-status" role="status"></p>
         <p class="scan-nebenzeile"><span class="scan-warten"></span><span class="scan-fps"></span></p>
+        <p class="scan-erkannt" hidden></p>
         <p class="scan-messwerte" hidden></p>
         <p class="meldung scan-fehler" role="alert"></p>
         <div class="scan-regler"><label for="scan-groesse" class="etikett">Scanzone</label>
@@ -450,6 +470,7 @@ export async function zeigen(wurzel) {
     el: {
       buehne: q('.scan-buehne'), rahmen: q('.scan-rahmen'), letztes: q('.scan-letztes'), zaehler: q('.scan-zaehler'),
       warten: q('.scan-warten'), fps: q('.scan-fps'), status: q('.scan-status'), messwerte: q('.scan-messwerte'),
+      erkannt: q('.scan-erkannt'),
       fehler: q('.scan-fehler'), pause: q('.scan-pause'), verwerfen: q('.scan-verwerfen'), lampe: q('.scan-lampe'),
       fertig: q('.scan-fertig'), fort: q('.scan-neu-durchgang'), start: q('.scan-los'), start_: q('.scan-start'),
       lauf: q('.scan-lauf'), fehlerStart: q('.scan-fehler-start'),

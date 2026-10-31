@@ -39,6 +39,9 @@
 .scan-info { flex: none; padding: 8px var(--rand-sicher) 0; }
 .scan-status { margin: 0; font-weight: 600; }
 .scan-nebenzeile { margin: 2px 0 0; display: flex; gap: 14px; font-size: 0.84rem; color: var(--text-2); }
+.scan-erkannt { margin: 2px 0 0; font-size: 0.84rem; color: var(--messing-hell); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.scan-erkannt[hidden] { display: none; }
 .scan-warten.scan-aktiv { color: var(--messing-hell); }
 .scan-fps { color: var(--text-3); }
 .scan-messwerte { margin: 4px 0 0; font-size: 0.78rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
@@ -98,6 +101,12 @@
 .eingang-foto[data-status="fehler"] .eingang-status { color: #f1b9b0; }
 .eingang-foto[data-status="erkannt"] .eingang-status { color: var(--messing-hell); }
 .eingang-aktion { min-height: 44px; font-size: 0.84rem; padding: 0 0.6em; }
+.eingang-name { color: var(--text); font-size: 0.86rem; line-height: 1.3; text-decoration: none; overflow-wrap: anywhere;
+  min-height: 44px; display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
+.eingang-name:hover, .eingang-name:focus-visible { color: var(--messing-hell); }
+.eingang-pruefen { font-size: 0.72rem; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--messing);
+  color: var(--messing-hell); }
+.eingang-grund { font-size: 0.78rem; color: #f1b9b0; line-height: 1.3; }
 .eingang-foto--verworfen .eingang-bild { opacity: 0.35; filter: grayscale(1); }
 .eingang-foto--verworfen .eingang-status { color: var(--text-3); }
 .eingang-gross { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; object-fit: contain; }

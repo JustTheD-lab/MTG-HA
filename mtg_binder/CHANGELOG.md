@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.5.0
+- Bulk-Scan: Läuft die Erkennung am PC, holt sie auch die Scan-Fotos ab und erkennt je Foto eine Karte. Erkannte
+  Karten kommen in die Kiste „Scan-Eingang“ (gleiche sichere Drucke als ein Posten mit Anzahl, unsichere einzeln
+  zum Prüfen). Der Scan-Eingang und die Scan-Seite zeigen die erkannten Namen.
+
 ## 0.4.1
 - Der PC kann Scan-Fotos als Kopie laden (Entwicklungsset für die Erkennung der Einzelfotos), ohne ihren Stand
   im Add-on zu ändern.

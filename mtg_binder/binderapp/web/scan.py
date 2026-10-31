@@ -70,7 +70,10 @@ def _lesend(handler):
 def _foto_json(z) -> dict:
     return {"id": z["id"], "nummer": z["nummer"], "status": z["status"], "vorschau": z["vorschau"],
             "aufgenommen": z["aufgenommen"] + "Z", "fehler": z["fehler"],
-            "grund": (json.loads(z["ausloeser"]) or {}).get("grund") if z["ausloeser"] else None}
+            "grund": (json.loads(z["ausloeser"]) or {}).get("grund") if z["ausloeser"] else None,
+            # erkannte Karte (Teilrunde B): Name, Erkennungsstatus, Kiste für den Sprung in die Kartenansicht
+            "karte": {"id": z["karte_id"], "name": z["karte_name"], "status": z["karte_status"],
+                      "kiste_id": z["kiste_id"], "geprueft": bool(z["geprueft"])} if z["karte_name"] else None}
 
 
 SQL_DURCHGAENGE = """
@@ -135,7 +138,10 @@ def routen(h: Helfer) -> list[Route]:
         did = request.path_params["id"]
         with closing(h.db()) as con:
             d = durchgang_holen(con, did)
-            fotos = con.execute("SELECT * FROM scan_foto WHERE durchgang_id = ? ORDER BY nummer", (did,)).fetchall()
+            fotos = con.execute(
+                "SELECT f.*, k.name AS karte_name, k.status AS karte_status, k.kiste_id, k.geprueft"
+                " FROM scan_foto f LEFT JOIN karte k ON k.id = f.karte_id"
+                " WHERE f.durchgang_id = ? ORDER BY f.nummer", (did,)).fetchall()
         return JSONResponse({"id": d["id"], "begonnen": d["begonnen"] + "Z",
                              "beendet": d["beendet"] + "Z" if d["beendet"] else None,
                              "fotos": [_foto_json(f) for f in fotos]})

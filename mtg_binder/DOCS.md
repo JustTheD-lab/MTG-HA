@@ -54,6 +54,10 @@ schickt die Erkennung am PC beim nächsten Start automatisch.
 4. „Letztes verwerfen“ nimmt ein falsches Foto zurück, „Jetzt auslösen“ erzwingt eines. „Fertig“ beendet den
    Durchgang. Die Fotos liegen unverändert unter `fotos/scan/<Durchgang>/` und erscheinen im **Scan-Eingang**.
    Gelöscht wird dort nichts, verworfene Fotos lassen sich zurückholen.
+5. Läuft die Erkennung am PC, holt sie die Scan-Fotos ab (nach den Binderseiten) und legt die erkannten Karten in
+   die Kiste **„Scan-Eingang“**. Gleiche sichere Drucke werden zu einem Posten mit Anzahl zusammengefasst,
+   unsichere bleiben einzeln und stehen in der Prüfansicht. Ist der PC aus, warten die Fotos im Scan-Eingang.
+   Eine Erkennung dauert etwa 15 Sekunden je Foto (8 Fotos je Lauf).
 
 ## Wo liegt was?
 

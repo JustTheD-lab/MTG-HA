@@ -43,12 +43,22 @@ function fotoHtml(f) {
     ? `<img src="${esc(adresse(`bilder/${f.vorschau}`))}" alt="Foto ${f.nummer}" loading="lazy" decoding="async">`
     : '<span class="eingang-platzhalter">keine Vorschau</span>';
   const titel = f.fehler ? `${STATUS_TEXT[f.status] || f.status}: ${f.fehler}` : (STATUS_TEXT[f.status] || f.status);
+  // Erkannte Karte: Name mit Sprung in die Kartenansicht (Kiste „Scan-Eingang“); unsichere sichtbar markiert
+  const k = f.karte;
+  const name = k
+    ? `<a class="eingang-name${k.status !== 'sicher' && !k.geprueft ? ' eingang-name--pruefen' : ''}"`
+      + ` href="#/kiste/${Number(k.kiste_id)}/karte/${Number(k.id)}">${esc(k.name)}`
+      + `${k.status !== 'sicher' && !k.geprueft ? ' <span class="eingang-pruefen">prüfen</span>' : ''}</a>`
+    : (f.status === 'fehler' && f.fehler ? `<span class="eingang-grund">${esc(f.fehler)}</span>` : '');
+  const aktion = (f.status === 'neu' || f.status === 'fehler' || verworfen)
+    ? `<button type="button" class="knopf eingang-aktion" data-foto="${f.id}" data-aktion="${verworfen ? 'zurueckholen' : 'verwerfen'}">`
+      + `${verworfen ? 'Zurückholen' : 'Verwerfen'}</button>`
+    : '';
   return `<li class="eingang-foto${verworfen ? ' eingang-foto--verworfen' : ''}" data-status="${esc(f.status)}">`
     + `<button type="button" class="eingang-bild" data-original="${f.id}" aria-label="Foto ${f.nummer} groß ansehen">${bild}</button>`
     + `<span class="eingang-nummer">${f.nummer}</span>`
     + `<span class="eingang-status" title="${esc(titel)}">${esc(STATUS_TEXT[f.status] || f.status)}</span>`
-    + `<button type="button" class="knopf eingang-aktion" data-foto="${f.id}" data-aktion="${verworfen ? 'zurueckholen' : 'verwerfen'}">`
-    + `${verworfen ? 'Zurückholen' : 'Verwerfen'}</button></li>`;
+    + name + aktion + '</li>';
 }
 
 async function fotosLaden(z, id, platz) {
@@ -104,7 +114,7 @@ export async function zeigen(wurzel) {
     + ' stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg></button>'
     + '<h1 class="eingang-titel">Scan-Eingang</h1>'
     + '<button type="button" class="knopf knopf-haupt eingang-weiter">Weiter scannen</button></header>'
-    + '<p class="eingang-hinweis">Die Erkennung holt die Fotos ab, sobald der PC läuft.</p>'
+    + '<p class="eingang-hinweis">Die Erkennung holt die Fotos ab, sobald der PC läuft. Erkannte Karten liegen in der Kiste „Scan-Eingang“.</p>'
     + '<ul class="eingang-liste" role="list"></ul>';
   wurzel.replaceChildren(bereich);
   const z = { bereich, liste: bereich.querySelector('.eingang-liste'), offen: new Set(), uhr: 0 };
