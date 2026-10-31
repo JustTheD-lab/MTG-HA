@@ -354,6 +354,37 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
         await run_in_threadpool(os.replace, teil, ordner / datei)
         return JSONResponse({"ok": True, "groesse": groesse}, status_code=201)
 
+    # Bulk-Scan (Teilrunde B, Schritt 1): Scan-Fotos nur lesend auflisten und laden, z. B. für das Entwicklungsset.
+    # Der Status ändert sich dabei nicht; das Abholen zur Erkennung kommt später.
+    async def scan_liste(request):
+        def lesen():
+            with closing(verbinden(datenbank, nur_lesen=True)) as con:
+                if version(con) < 5:
+                    return []
+                return [dict(z) for z in con.execute(
+                    "SELECT f.id, f.durchgang_id, f.nummer, f.sha256, f.groesse, f.status, f.aufgenommen"
+                    " FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id"
+                    " WHERE d.nutzer_id = ? AND f.status != 'verworfen' ORDER BY f.durchgang_id, f.nummer",
+                    (NUTZER,))]
+        return JSONResponse({"fotos": await run_in_threadpool(lesen)})
+
+    async def scan_foto(request):
+        foto_id = _id(request)
+
+        def lesen():
+            with closing(verbinden(datenbank, nur_lesen=True)) as con:
+                f = con.execute("SELECT f.datei, f.sha256 FROM scan_foto f JOIN scan_durchgang d"
+                                " ON d.id = f.durchgang_id WHERE f.id = ? AND d.nutzer_id = ?",
+                                (foto_id, NUTZER)).fetchone()
+            if f is None:
+                raise Fehler("Scan-Foto nicht gefunden.", 404)
+            pfad = (fotos / f["datei"]).resolve()
+            if fotos.resolve() not in pfad.parents or not pfad.is_file():
+                raise Fehler("Das Originalfoto fehlt in der Ablage.", 404)
+            return pfad, f["sha256"]
+        pfad, sha = await run_in_threadpool(lesen)
+        return FileResponse(pfad, media_type="application/octet-stream", headers={"X-Sha256": sha})
+
     async def bilder_fehlend(request):
         def lesen():
             with closing(verbinden(datenbank, nur_lesen=True)) as con:
@@ -400,6 +431,8 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
         Route("/pc/bild/{art}/{datei}", geschuetzt(bild, braucht_speicher="bilder"), methods=["PUT"]),
         Route("/pc/bilder/fehlend", geschuetzt(bilder_fehlend)),
         Route("/pc/katalog", geschuetzt(katalog_ersetzen), methods=["PUT"]),
+        Route("/pc/scan/fotos", geschuetzt(scan_liste)),
+        Route("/pc/scan/foto/{id:int}", geschuetzt(scan_foto, braucht_speicher="fotos")),
     ]
 
     async def zu_gross(request, ausnahme):
