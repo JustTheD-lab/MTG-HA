@@ -39,7 +39,7 @@ FOTOS = DATEN / "photos"
 SCRYFALL = DATEN / "scryfall" / "all_cards.jsonl.gz"
 
 ERKENNUNG = "c804be1"
-NUTZER = "Daniel"
+NUTZER = "Sammler"   # neutraler Name (der Code liegt auch im öffentlichen Add-on-Repository)
 URTEILE = ("stimmt", "druck_falsch", "falsch", "keine_karte")
 KOPF = re.compile(r'\{"object":"card","id":"([0-9a-f-]{36})"')
 

@@ -137,7 +137,7 @@ def anlegen(pfad: str | Path) -> sqlite3.Connection:
     return con
 
 
-def leer_anlegen(pfad: str | Path, nutzer: str = "Daniel") -> None:
+def leer_anlegen(pfad: str | Path, nutzer: str = "Sammler") -> None:
     """Neue, leere Datenbank der aktuellen Version mit dem einen Nutzer (ID 1), z. B. beim ersten Start des
     Add-ons. Verweigert, wenn die Datei schon existiert."""
     pfad = Path(pfad)
