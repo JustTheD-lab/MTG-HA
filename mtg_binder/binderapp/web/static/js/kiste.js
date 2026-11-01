@@ -1030,7 +1030,8 @@ function adminZeichnen() {
   });
   neu('kiste-faecherknopf', SYM.faecher, 'Fächer', 'Fächer dieser Kiste bearbeiten', faecherOeffnen);
   neu('kiste-umbenennen', SYM.stift, 'Umbenennen', 'Kiste umbenennen', umbenennen);
-  if (s.kopf.posten === 0) neu('kiste-loeschen', SYM.muell, 'Löschen', 'Leere Kiste löschen', loeschen);
+  neu('kiste-loeschen', SYM.muell, 'Löschen', s.kopf.posten === 0 ? 'Leere Kiste löschen' : 'Kiste mit allen Karten löschen',
+    loeschen);
 }
 
 let katalogStand = null;   // Promise: true, false (kein Katalog) oder null (unbekannt)
@@ -1108,15 +1109,58 @@ async function umbenennen() {
 
 async function loeschen() {
   const s = S;
-  const ja = await bestaetigen({ titel: 'Kiste löschen', text: `Die leere Kiste „${s.kopf.name}“ wird gelöscht. Das lässt sich nicht rückgängig machen.`,
-    ja: 'Löschen', gefahr: true });
-  if (!ja || S !== s) return;
-  try {
-    await senden(`/api/kiste/${s.id}`, { methode: 'DELETE' });
-    gehe('#/', { ersetzen: true });
-  } catch (f) {
-    if (S === s) meldung(f.message);
+  if (s.kopf.posten === 0) {
+    const ja = await bestaetigen({ titel: 'Kiste löschen', text: `Die leere Kiste „${s.kopf.name}“ wird gelöscht. Das lässt sich nicht rückgängig machen.`,
+      ja: 'Löschen', gefahr: true });
+    if (!ja || S !== s) return;
+    try {
+      await senden(`/api/kiste/${s.id}`, { methode: 'DELETE' });
+      gehe('#/', { ersetzen: true });
+    } catch (f) {
+      if (S === s) meldung(f.message);
+    }
+    return;
   }
+  // Volle Kiste: erst den Namen eintippen, dann noch einmal bestätigen
+  const name = s.kopf.name;
+  const form = el('form');
+  form.id = 'kiste-loeschen-form';
+  form.noValidate = true;
+  form.innerHTML = `<p class="dialog-text">„${esc(name)}“ enthält ${esc(zahl(s.kopf.karten))} Karten in`
+    + ` ${esc(zahl(s.kopf.posten))} Posten. Sie werden mit der Kiste gelöscht. Das lässt sich nicht rückgängig machen.</p>`
+    + '<label class="etikett feld-etikett" for="kiste-loeschname">Zum Bestätigen den Namen der Kiste eintippen</label>'
+    + '<input id="kiste-loeschname" class="feld" type="text" maxlength="60" autocomplete="off" spellcheck="false">'
+    + '<p class="meldung" role="alert" aria-live="assertive"></p>';
+  const d = dialog({ titel: 'Kiste mit Karten löschen', klasse: 'dialog-klein', inhalt: form });
+  const feld = form.querySelector('input');
+  const text = form.querySelector('.meldung');
+  const abbrechen = el('button', 'knopf', 'Abbrechen');
+  abbrechen.type = 'button';
+  abbrechen.addEventListener('click', () => d.schliessen(false));
+  const weiter = el('button', 'knopf knopf-gefahr', 'Löschen');
+  weiter.type = 'submit';
+  weiter.disabled = true;
+  weiter.setAttribute('form', form.id);
+  d.fuss.append(abbrechen, weiter);
+  feld.addEventListener('input', () => { weiter.disabled = feld.value.trim() !== name; });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (feld.value.trim() !== name) return;
+    const ja = await bestaetigen({ titel: 'Kiste wirklich löschen?',
+      text: `„${name}“ und ${zahl(s.kopf.karten)} Karten werden endgültig gelöscht.`, ja: 'Endgültig löschen', gefahr: true });
+    if (!ja || S !== s) return;
+    weiter.disabled = true;
+    try {
+      await senden(`/api/kiste/${s.id}/loeschen`, { daten: { name } });
+      d.schliessen(true);
+      gehe('#/', { ersetzen: true });
+    } catch (f) {
+      text.textContent = f.message;
+      weiter.disabled = false;
+    }
+  });
+  feld.focus();
+  await d.fertig;
 }
 
 // ---------- Meldung mit Rückgängig ----------

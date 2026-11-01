@@ -16,6 +16,7 @@ Schreiben (nur angemeldet, Quelle „nutzer“, mit Historie):
   POST   /api/kisten                    {"name", "etikettfarbe"?} → 201 {"id"}
   PATCH  /api/kiste/{id}                {"name"?, "etikettfarbe"?, "regalplatz"?}
   DELETE /api/kiste/{id}                nur eine leere Kiste
+  POST   /api/kiste/{id}/loeschen       Kiste mit allen Karten, {name: genauer Name der Kiste}
 
 Sicherheit: Sortier-, Gruppen- und Richtungswerte gelangen nur über feste Tabellen in den SQL-Text
 (Wert aus der Anfrage → Schlüssel einer Python-Tabelle → fertiger SQL-Ausdruck). Alle Filterwerte sind
@@ -581,6 +582,29 @@ def _ab_version_3(con, status: int) -> None:
                      status)
 
 
+def kiste_mit_karten_loeschen(con, nutzer: int, kiste_id: int) -> dict:
+    """Löscht die Kiste mit ihren Karten und Fächern, alles mit Historie (Wunsch des Nutzers, 01.11.2026). Scan-Fotos
+    verlieren den Verweis auf ihre Karte (sichtbar mit Historie), die Fotos selbst bleiben. Eine Kiste, in die eine
+    Sortierregel einsortiert, bleibt stehen. Der Scan-Eingang entsteht beim nächsten Scan neu."""
+    regeln = einsortieren.kiste_benutzt(con, nutzer, kiste_id)
+    if regeln:
+        raise Fehler("Diese Kiste ist Ziel der Sortierregel „" + "“, „".join(regeln[:3]) + "“. "
+                     "Erst die Regel ändern oder löschen.", 409)
+    zahl = {"posten": 0, "karten": 0}
+    hat_scan = version(con) >= 5
+    for k in con.execute("SELECT id, anzahl FROM karte WHERE nutzer_id = ? AND kiste_id = ? ORDER BY id",
+                         (nutzer, kiste_id)).fetchall():
+        if hat_scan:
+            for f in con.execute("SELECT id FROM scan_foto WHERE karte_id = ?", (k["id"],)).fetchall():
+                aendern(con, nutzer, QUELLE, "scan_foto", f["id"], {"karte_id": None})
+        loeschen(con, nutzer, QUELLE, "karte", k["id"])
+        zahl["posten"] += 1
+        zahl["karten"] += k["anzahl"]
+    einsortieren.faecher_entfernen(con, nutzer, kiste_id)
+    alt = loeschen(con, nutzer, QUELLE, "kiste", kiste_id)
+    return {"id": alt["id"], "name": alt["name"], **zahl}
+
+
 def _kiste_holen(con, nutzer: int, kiste_id: int):
     zeile = con.execute("SELECT * FROM kiste WHERE id = ? AND nutzer_id = ?", (kiste_id, nutzer)).fetchone()
     if zeile is None:
@@ -752,6 +776,7 @@ def routen(h) -> list[Route]:
 
     @h.schreibend
     async def kiste_loeschen(request):
+        """Leere Kiste löschen (ohne Rückfrage am Server)."""
         kiste_id = _kiste_id(request)
 
         def arbeit(con):
@@ -759,13 +784,23 @@ def routen(h) -> list[Route]:
             _kiste_holen(con, h.nutzer, kiste_id)
             if con.execute("SELECT 1 FROM karte WHERE kiste_id = ? LIMIT 1", (kiste_id,)).fetchone() is not None:
                 raise Fehler("Die Kiste ist nicht leer.", 409)
-            regeln = einsortieren.kiste_benutzt(con, h.nutzer, kiste_id)
-            if regeln:
-                raise Fehler("Diese Kiste ist Ziel der Sortierregel „" + "“, „".join(regeln[:3]) + "“. "
-                             "Erst die Regel ändern oder löschen.", 409)
-            einsortieren.faecher_entfernen(con, h.nutzer, kiste_id)
-            alt = loeschen(con, h.nutzer, QUELLE, "kiste", kiste_id)
-            return {"id": alt["id"], "name": alt["name"]}
+            weg = kiste_mit_karten_loeschen(con, h.nutzer, kiste_id)
+            return {"id": weg["id"], "name": weg["name"]}
+        weg = await run_in_threadpool(h.schreibvorgang, arbeit)
+        return JSONResponse({"entfernt": weg})
+
+    @h.schreibend
+    async def kiste_ganz_loeschen(request):
+        """Kiste mit allen Karten löschen; die Oberfläche fragt zweimal nach (Name eintippen)."""
+        kiste_id = _kiste_id(request)
+        d = await h.json_daten(request)
+
+        def arbeit(con):
+            _ab_version_3(con, 409)
+            k = _kiste_holen(con, h.nutzer, kiste_id)
+            if d.get("name") != k["name"]:
+                raise Fehler("Zum Löschen bitte den Namen der Kiste genau eintippen.")
+            return kiste_mit_karten_loeschen(con, h.nutzer, kiste_id)
         weg = await run_in_threadpool(h.schreibvorgang, arbeit)
         return JSONResponse({"entfernt": weg})
 
@@ -776,5 +811,6 @@ def routen(h) -> list[Route]:
         Route("/kiste/{id:int}", kiste),
         Route("/kiste/{id:int}", kiste_aendern, methods=["PATCH"]),
         Route("/kiste/{id:int}", kiste_loeschen, methods=["DELETE"]),
+        Route("/kiste/{id:int}/loeschen", kiste_ganz_loeschen, methods=["POST"]),
         Route("/kiste/{id:int}/karten", karten),
     ]

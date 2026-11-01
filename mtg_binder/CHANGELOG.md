@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.6.2
+- Kisten lassen sich jetzt auch mit Karten löschen („Löschen“ in der Kiste, Name eintippen und noch einmal
+  bestätigen). Karten und Fächer werden mit Historie gelöscht; eine Kiste, in die eine Sortierregel einsortiert,
+  bleibt stehen. Der Scan-Eingang entsteht beim nächsten Scan neu.
+
 ## 0.6.1
 - Fotos hochladen: Mehrere Fotos auf einmal kommen nach dem Dateinamen sortiert in die Liste (IMG_2 vor IMG_10);
   vorher bestimmten Windows-Dateidialog und Ziehen die Reihenfolge.
