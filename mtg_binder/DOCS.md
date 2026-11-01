@@ -75,7 +75,8 @@ gehört, zum Beispiel „Preis (Ø 7 Tage) ab 5 € → Spezial“ oder „Farbe
 - Beim Bulk-Scan räumt das Add-on jede **sicher** erkannte Karte sofort in ihre Kiste („Automatisch einsortieren“
   am Scan-Bildschirm, je Durchgang abschaltbar). Unsichere Karten warten, bis du sie in der Prüfansicht bestätigst.
   Fehlt ein Wert, den eine Regel braucht (meist der Preis einer neuen Karte), wartet die Karte, bis er da ist; sie
-  landet also nie geraten in einer Kiste. Jedes Einräumen lässt sich zurücknehmen.
+  landet also nie geraten in einer Kiste. Gibt es endgültig keinen Preis (kein Produkt bei Cardmarket oder kein
+  Eintrag in der Preisdatei des Tages), zählt die Karte als 0 €. Jedes Einräumen lässt sich zurücknehmen.
 - Für die Special-Print-Merkmale braucht das Add-on den Katalog Version 3. Die Erkennung am PC schickt ihn beim
   nächsten Start selbst (oder „Katalog senden“ im Symbol neben der Uhr).
 

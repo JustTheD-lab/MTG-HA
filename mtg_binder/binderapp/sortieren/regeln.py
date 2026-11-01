@@ -17,8 +17,8 @@ Alle Bedingungen einer Regel müssen zutreffen (UND). Die Auswertung kennt drei 
 und unbekannt (ein Wert fehlt, zum Beispiel der Preis oder die Kartendaten). SQL liefert dafür 1, 0 und NULL; eine
 Regel ist nicht zutreffend, sobald eine Bedingung 0 ist, sonst unbekannt, sobald eine NULL ist.
 
-Die Ausdrücke beziehen sich auf `k` (karte), `d` (kartendaten, LEFT JOIN) und `p` (preis des neuesten Tages,
-LEFT JOIN). Feldnamen und Operatoren stammen nur aus den festen Listen hier, Werte gehen als Parameter ein.
+Die Ausdrücke beziehen sich auf `k` (karte), `d` (kartendaten, LEFT JOIN), `p` (preis des neuesten Tages,
+LEFT JOIN) und `pa` (preisabruf des neuesten Tages, LEFT JOIN). Feldnamen und Operatoren stammen nur aus den festen Listen hier, Werte gehen als Parameter ein.
 """
 from __future__ import annotations
 
@@ -80,8 +80,15 @@ _SPALTE = {
     "set": "lower(k.set_code)", "set_art": "d.set_art", "promo": "d.promo", "foil": "k.foil",
     "sprache": "k.sprache", "name": "k.name",
 }
-_PREIS = {"avg7": "(CASE WHEN k.foil THEN p.avg7_foil ELSE p.avg7 END)",
-          "low": "(CASE WHEN k.foil THEN p.low_foil ELSE p.low END)"}
+_ROHPREIS = {"avg7": "(CASE WHEN k.foil THEN p.avg7_foil ELSE p.avg7 END)",
+             "low": "(CASE WHEN k.foil THEN p.low_foil ELSE p.low END)"}
+# Fehlt der Preis endgültig, zählt er als 0 € (Entscheidung des Nutzers, 01.11.2026): Die Karte hat kein Produkt bei
+# Cardmarket, oder der Preisabruf des neuesten Tages lief nach dem Eintragen ihrer Kartendaten und fand keinen
+# Preis. Fehlen die Kartendaten oder steht der Preisnachtrag noch aus, bleibt der Preis unbekannt (die Karte wartet).
+# `pa` ist der Preisabruf des neuesten Tages (LEFT JOIN).
+_PREIS = {wert: (f"(CASE WHEN {roh} IS NOT NULL THEN {roh} WHEN d.scryfall_id IS NULL THEN NULL"
+                 " WHEN d.cardmarket_id IS NULL THEN 0 WHEN pa.abgerufen > d.geaendert THEN 0 ELSE NULL END)")
+          for wert, roh in _ROHPREIS.items()}
 _SET = re.compile(r"^[a-z0-9]{2,8}$")
 
 # Fürs Grund-Feld: welcher Wert fehlt, wenn eine Bedingung unbekannt ist

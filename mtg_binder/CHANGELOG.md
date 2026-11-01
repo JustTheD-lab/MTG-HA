@@ -5,7 +5,8 @@
   Sets, Special Print, Promo, Foil, Sprache, Name und Preis; Reihenfolge = Vorrang. Probe für eine Karte.
 - Fächer je Kiste und Gruppierung „Fach“ in der Kistenansicht.
 - Bulk-Scan: sicher erkannte Karten wandern sofort in ihre Kiste (je Durchgang abschaltbar), unsichere nach dem
-  Prüfen; fehlt ein Wert (z. B. der Preis), wartet die Karte im Scan-Eingang. Ziel oder Wartegrund im Scan-Eingang.
+  Prüfen; fehlt ein Wert (z. B. der Preis), wartet die Karte im Scan-Eingang, ohne Preis bei Cardmarket zählt sie
+  als 0 €. Ziel oder Wartegrund im Scan-Eingang.
 - Datenbank Version 6 (vorher automatische Sicherung), Katalog Version 3 (Special-Print-Merkmale).
 
 ## 0.5.2

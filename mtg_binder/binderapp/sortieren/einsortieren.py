@@ -218,7 +218,8 @@ def faecher_entfernen(con, nutzer: int, kiste_id: int) -> None:
 # ---------------------------------------------------------------- Auswerten
 
 _VON = ("FROM karte k LEFT JOIN kartendaten d ON d.scryfall_id = k.scryfall_id "
-        "LEFT JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?")
+        "LEFT JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ? "
+        "LEFT JOIN preisabruf pa ON pa.tag = ?")
 
 
 def _werte(con, karten_ids: list[int], listen: list[list[dict]]) -> dict[int, list[list]]:
@@ -235,7 +236,7 @@ def _werte(con, karten_ids: list[int], listen: list[list[dict]]) -> dict[int, li
         teil = karten_ids[anfang:anfang + 400]
         spalten = ", ".join(["k.id"] + ausdruecke)
         sql = f"SELECT {spalten} {_VON} WHERE k.id IN ({', '.join('?' for _ in teil)})"
-        for z in con.execute(sql, (*p, tag, *teil)):
+        for z in con.execute(sql, (*p, tag, tag, *teil)):
             werte, i = [], 1
             for bedingungen in listen:
                 werte.append([None if z[i + j] is None else int(bool(z[i + j])) for j in range(len(bedingungen))])
@@ -282,20 +283,6 @@ def faecher_von(con, nutzer: int, kiste_id: int, karten_ids: list[int]) -> dict[
         i, _ = _erste(listen, werte)
         aus[kid] = faecher[i]["name"] if i is not None else None
     return aus
-
-
-def fach_case_sql(con, nutzer: int, kiste_id: int) -> tuple[str, list, list[str]] | None:
-    """CASE-Ausdruck mit dem Platz des Fachs (0, 1, …; ohne Fach: Anzahl der Fächer) für die Kistenansicht,
-    seine Parameter und die Fachnamen. Unbekannte Werte fallen dort einfach durch. None ohne Fächer."""
-    faecher = [f for f in faecher_lesen(con, nutzer, kiste_id) if f["gueltig"]]
-    if not faecher:
-        return None
-    teile, p = [], []
-    for i, f in enumerate(faecher):
-        s, q = r.ausdruck_sql(f["bedingungen"])
-        teile.append(f"WHEN {s} THEN {i}")
-        p += q
-    return f"(CASE {' '.join(teile)} ELSE {len(faecher)} END)", p, [f["name"] for f in faecher]
 
 
 # ---------------------------------------------------------------- Einsortieren
