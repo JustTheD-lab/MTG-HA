@@ -186,7 +186,7 @@ const wartet = () => z.binder.seiten.some((s) => WARTET.has(s.status));
 /** Holt den Binder neu und übernimmt ihn, sobald nichts mehr blättert oder gewischt wird. */
 async function laden(sofort = false) {
   const zustand = z;
-  if (!zustand) return false;
+  if (!zustand || zustand.geloescht) return false;
   const nr = ++zustand.ladeNr;
   let binder;
   try {
@@ -1185,6 +1185,16 @@ function verwaltungOeffnen() {
       <div class="tisch-v-zeile"><button type="button" class="knopf knopf-haupt" data-v="speichern">Speichern</button></div>
       <p class="meldung" role="alert"></p>
     </section>
+    <section class="tisch-v-teil" data-teil="loeschen">
+      <h3 class="etikett">Binder löschen</h3>
+      <p class="dialog-text">Löscht den Binder mit allen Seiten und erkannten Karten. Die Originalfotos bleiben auf dem
+        Netzlaufwerk und lassen sich danach neu hochladen. Das lässt sich nicht rückgängig machen.</p>
+      <label class="etikett feld-etikett" for="tisch-v-loeschname">Zum Bestätigen den Namen des Binders eintippen</label>
+      <input id="tisch-v-loeschname" class="feld" data-v="loeschname" type="text" maxlength="60" autocomplete="off"
+        spellcheck="false">
+      <div class="tisch-v-zeile"><button type="button" class="knopf knopf-gefahr" data-v="loeschen" disabled>Binder löschen</button></div>
+      <p class="meldung" role="alert"></p>
+    </section>
     <section class="tisch-v-teil" data-teil="verlauf">
       <h3 class="etikett">Verlauf</h3>
       <ol class="tisch-v-verlauf" aria-label="Verlauf der Änderungen"></ol>
@@ -1207,6 +1217,10 @@ function verwaltungOeffnen() {
   };
   feld('name').value = zustand.binder.name;
   feld('farbe').value = zustand.binder.farbe || 'schwarz';
+  // Erste Bestätigung: der genaue Name; zweite: die Rückfrage beim Klick
+  feld('loeschname').addEventListener('input', () => {
+    feld('loeschen').disabled = feld('loeschname').value.trim() !== zustand.binder.name;
+  });
 
   const verlaufLaden = async () => {
     try {
@@ -1314,6 +1328,26 @@ function verwaltungOeffnen() {
           await neuLaden();
         } catch (fehler) {
           sagenHier(fehler.message);
+          knopf.disabled = false;
+        }
+      });
+    } else if (was === 'loeschen') {
+      const name = zustand.binder.name;
+      bestaetigen({
+        titel: 'Binder wirklich löschen?',
+        text: `„${name}“ mit ${zustand.binder.seiten?.length ?? 0} Seiten und allen Karten darin wird gelöscht.`,
+        ja: 'Endgültig löschen', gefahr: true,
+      }).then(async (ja) => {
+        if (!ja || z !== zustand || zustand.dlg !== d) return;
+        knopf.disabled = true;
+        try {
+          await senden(`/api/binder/${id}/loeschen`, { daten: { name } });
+          zustand.geloescht = true;   // kein Nachladen mehr (der Binder ist weg)
+          d.schliessen();
+          gehe('#/');   // erst weg vom Lesetisch, sonst lädt er den gelöschten Binder nach
+          window.setTimeout(() => geaendert(id), 300);
+        } catch (fehler) {
+          sagen('loeschen', fehler.message);
           knopf.disabled = false;
         }
       });

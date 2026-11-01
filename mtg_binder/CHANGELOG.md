@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.6.1
+- Fotos hochladen: Mehrere Fotos auf einmal kommen nach dem Dateinamen sortiert in die Liste (IMG_2 vor IMG_10);
+  vorher bestimmten Windows-Dateidialog und Ziehen die Reihenfolge.
+- „Binder löschen“ unter „Seiten verwalten“ (Name eintippen und noch einmal bestätigen): löscht Binder, Seiten und
+  Karten mit Historie. Die Originalfotos bleiben liegen und lassen sich ohne Doppel-Hinweis neu hochladen.
+
 ## 0.6.0
 - Sortierregeln: frei einstellbare Regeln („Wenn … → Kiste“) mit Farbe, Manawert, Typ, Seltenheit, Set, Art des
   Sets, Special Print, Promo, Foil, Sprache, Name und Preis; Reihenfolge = Vorrang. Probe für eine Karte.

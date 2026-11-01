@@ -187,6 +187,36 @@ def foto_nachtragen(con, nutzer_id: int, seite_id: int, foto_id: int) -> dict:
     return {"id": seite_id, "nummer": s["nummer"], "binder_id": s["binder_id"]}
 
 
+BINDER_GELOESCHT = "Der Binder dieser Seite wurde gelöscht."
+
+
+def binder_loeschen(con, nutzer_id: int, binder_id: int) -> dict:
+    """Löscht einen Binder mit Seiten, Taschen und den Karten darin, alles mit Historie (Wunsch des Nutzers,
+    01.11.2026: falsch sortiert hochgeladen, neu hochladen). Die Originalfotos bleiben unverändert liegen; ihre
+    Einträge bleiben ebenfalls, noch nicht erkannte bekommen den Status „fehler“, damit die Erkennung sie überspringt."""
+    b = binder_holen(con, nutzer_id, binder_id)
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sortierregel'").fetchone() and \
+            con.execute("SELECT 1 FROM sortierregel WHERE binder_id = ? LIMIT 1", (binder_id,)).fetchone():
+        raise Fehler("Dieser Binder ist Ziel einer Sortierregel. Erst die Regel ändern oder löschen.", 409)
+    seiten = con.execute("SELECT id, foto_id FROM seite WHERE binder_id = ? ORDER BY nummer DESC", (binder_id,)).fetchall()
+    zahl = {"seiten": len(seiten), "karten": 0, "posten": 0, "fotos": 0}
+    for s in seiten:
+        for k in con.execute("SELECT k.id, k.anzahl FROM karte k JOIN tasche t ON t.id = k.tasche_id"
+                             " WHERE t.seite_id = ? ORDER BY k.id", (s["id"],)).fetchall():
+            loeschen(con, nutzer_id, QUELLE, "karte", k["id"])
+            zahl["posten"] += 1
+            zahl["karten"] += k["anzahl"]
+        _taschen_loeschen(con, nutzer_id, s["id"])
+        loeschen(con, nutzer_id, QUELLE, "seite", s["id"])
+        if s["foto_id"] is not None:
+            zahl["fotos"] += 1
+            f = con.execute("SELECT status FROM foto WHERE id = ?", (s["foto_id"],)).fetchone()
+            if f is not None and f["status"] in ("neu", "in_verarbeitung"):
+                aendern(con, nutzer_id, QUELLE, "foto", s["foto_id"], {"status": "fehler", "fehler": BINDER_GELOESCHT})
+    loeschen(con, nutzer_id, QUELLE, "binder", binder_id)
+    return {"id": binder_id, "name": b["name"], **zahl}
+
+
 def nummern_lueckenlos(con, binder_id: int) -> bool:
     nummern = [z[0] for z in con.execute("SELECT nummer FROM seite WHERE binder_id = ? ORDER BY nummer", (binder_id,))]
     return nummern == list(range(1, len(nummern) + 1))

@@ -426,8 +426,19 @@ export async function oeffnen(ziel = {}) {
   q('.hl-zwischen[data-zp="0"]').addEventListener('click', () => leerseiteEinfuegen(0));
 
   // ---------- Dateien aufnehmen ----------
+  // Dateidialog und Ziehen liefern die Dateien in beliebiger Reihenfolge (Windows: die zuletzt angeklickte zuerst).
+  // Deshalb kommt jede neue Auswahl nach dem Dateinamen sortiert dazu, Zahlen im Namen nach ihrem Wert
+  // (IMG_2 vor IMG_10). Tragen alle denselben Namen (iPhone-Mediathek: „image.jpg“), bleibt die gelieferte Folge.
+  const namenFolge = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+  function sortiert(dateien) {
+    if (new Set(dateien.map((f) => f.name)).size < 2) return dateien;
+    return dateien.map((f, i) => ({ f, i }))
+      .sort((a, b) => namenFolge.compare(a.f.name, b.f.name) || a.i - b.i)
+      .map(({ f }) => f);
+  }
+
   function hinzufuegen(dateien) {
-    let neu = [...dateien];
+    let neu = sortiert([...dateien]);
     if (!neu.length || z.phase !== 'auswahl') return;
     meldung('allgemein').textContent = '';
     if (nachtragen) {

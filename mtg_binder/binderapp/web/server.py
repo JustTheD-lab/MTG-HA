@@ -175,6 +175,7 @@ FROM foto f
 LEFT JOIN seite s ON s.foto_id = f.id
 LEFT JOIN binder b ON b.id = s.binder_id
 WHERE f.nutzer_id = ? AND f.sha256 = ?
+  AND (s.id IS NOT NULL OR f.quelle <> 'upload')   -- Fotos eines gelöschten Binders dürfen neu hochgeladen werden
 ORDER BY f.id
 LIMIT 1
 """
@@ -483,6 +484,19 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         return JSONResponse({"geaendert": geaendert})
 
     @schreibend
+    async def binder_loeschen(request):
+        """Binder mit Seiten und Karten löschen; die Oberfläche fragt zweimal nach (Name eintippen)."""
+        d = await json_daten(request)
+        bid = request.path_params["id"]
+
+        def arbeit(con):
+            b = seiten.binder_holen(con, NUTZER, bid)
+            if d.get("name") != b["name"]:
+                raise Fehler("Zum Löschen bitte den Namen des Binders genau eintippen.")
+            return seiten.binder_loeschen(con, NUTZER, bid)
+        return JSONResponse({"entfernt": await run_in_threadpool(schreibvorgang, arbeit)})
+
+    @schreibend
     async def leerseiten(request):
         d = await json_daten(request)
         nach, anzahl = d.get("nach"), d.get("anzahl", 1)
@@ -507,6 +521,8 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
                 raise Fehler("Foto nicht gefunden.", 404)
             if f["status"] != "fehler":
                 raise Fehler("Dieses Foto wartet schon auf die Erkennung oder ist erkannt.", 409)
+            if con.execute("SELECT 1 FROM seite WHERE foto_id = ?", (request.path_params["id"],)).fetchone() is None:
+                raise Fehler(seiten.BINDER_GELOESCHT, 409)
             aendern(con, NUTZER, "nutzer", "foto", request.path_params["id"], {"status": "neu", "fehler": None})
         await run_in_threadpool(schreibvorgang, arbeit)
         return JSONResponse({"status": "neu"})
@@ -612,6 +628,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         Route("/binder", binder_neu, methods=["POST"]),
         Route("/binder/{id:int}", binder),
         Route("/binder/{id:int}", binder_aendern, methods=["PATCH"]),
+        Route("/binder/{id:int}/loeschen", binder_loeschen, methods=["POST"]),
         Route("/binder/{id:int}/verlauf", verlauf),
         Route("/binder/{id:int}/leerseiten", leerseiten, methods=["POST"]),
         Route("/binder/{id:int}/fotos", foto_neu, methods=["POST"]),
