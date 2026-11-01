@@ -55,6 +55,7 @@ from binderapp import katalog as katalog_paket
 from binderapp.db.datenbank import aendern, einfuegen, loeschen, version
 from binderapp.katalog import kartendaten, suche
 from binderapp.preise import zeitplan
+from binderapp.sortieren import einsortieren
 from binderapp.web.helfer import Fehler, fehler
 
 QUELLE = "nutzer"
@@ -475,7 +476,8 @@ def routen(h, bilder: Path | None = None) -> list[Route]:
             _karte_holen(con, h.nutzer, karte_id)
             schritt = _neuer_schritt()
             aendern(con, h.nutzer, QUELLE, "karte", karte_id, {"geprueft": 1}, schritt=schritt)
-            return _mit_schritt(con, fall(con, karte_id=karte_id), schritt)
+            einsortiert = einsortieren.einsortieren(con, h.nutzer, [karte_id], schritt=schritt)  # Scan-Eingang
+            return _mit_schritt(con, {**fall(con, karte_id=karte_id), "einsortiert": einsortiert}, schritt)
         return await schreiben(arbeit)
 
     async def druck(request):
@@ -513,7 +515,8 @@ def routen(h, bilder: Path | None = None) -> list[Route]:
             aendern(con, h.nutzer, QUELLE, "karte", karte_id, felder, schritt=schritt)
             # Kartendaten sind abgeleitet (Katalog) und haben keine Historie.
             kartendaten.schreiben(con, daten)
-            return _mit_schritt(con, fall(con, karte_id=karte_id), schritt)
+            einsortiert = einsortieren.einsortieren(con, h.nutzer, [karte_id], schritt=schritt)  # Scan-Eingang
+            return _mit_schritt(con, {**fall(con, karte_id=karte_id), "einsortiert": einsortiert}, schritt)
         antwort = await schreiben(arbeit)
         zeitplan.anstossen()   # Add-on: Preis des neuen Drucks bald nachtragen
         return antwort

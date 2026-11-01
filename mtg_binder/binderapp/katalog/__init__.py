@@ -20,7 +20,8 @@ STANDARD_KATALOG = PROJEKT / "data" / "katalog.sqlite"
 STANDARD_BILDER = PROJEKT / "data" / "scryfall" / "bilder" / "normal"
 
 # Version des Katalogformats (steht in der Tabelle `meta`). 2: Spalte druck.cardmarket_id (Preise, 31.10.2026).
-VERSION = 2
+# 3: Spalten druck.besonderheiten, promo, set_art (Sortierregeln, 01.11.2026).
+VERSION = 3
 
 
 def bilddatei(scryfall_id: str, ordner: str | Path | None = None) -> Path | None:

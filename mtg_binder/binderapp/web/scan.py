@@ -26,7 +26,8 @@ from starlette.routing import Route
 
 from binderapp.db.datenbank import aendern, einfuegen
 from binderapp.scan.ausloeser import GROESSTE_SEITE, Ausloeser
-from binderapp.web import hochladen
+from binderapp.sortieren import einsortieren
+from binderapp.web import hochladen, regeln
 from binderapp.web.helfer import Fehler, Helfer, fehler
 from binderapp.web.speicher import MELDUNG as MELDUNG_SPEICHER
 
@@ -137,14 +138,27 @@ def routen(h: Helfer) -> list[Route]:
         version_pruefen()
         did = request.path_params["id"]
         with closing(h.db()) as con:
+            con.execute("BEGIN")   # ein Stand für alle Abfragen dieser Antwort
             d = durchgang_holen(con, did)
+            v6 = einsortieren.aktiv(con)
             fotos = con.execute(
                 "SELECT f.*, k.name AS karte_name, k.status AS karte_status, k.kiste_id, k.geprueft"
+                + (", k.sortieren" if v6 else "") +
                 " FROM scan_foto f LEFT JOIN karte k ON k.id = f.karte_id"
                 " WHERE f.durchgang_id = ? ORDER BY f.nummer", (did,)).fetchall()
+            # Sortierregeln: Zielkiste und Fach oder Wartegrund je Karte
+            karten = {f["karte_id"]: {"id": f["karte_id"], "kiste_id": f["kiste_id"], "sortieren": f["sortieren"],
+                                      "status": f["karte_status"], "geprueft": f["geprueft"]}
+                      for f in fotos if v6 and f["karte_name"]}
+            ziele = einsortieren.stand(con, h.nutzer, list(karten.values()))
+        antwort = [_foto_json(f) for f in fotos]
+        for f in antwort:
+            if f["karte"]:
+                f["karte"]["ziel"] = ziele.get(f["karte"]["id"])
         return JSONResponse({"id": d["id"], "begonnen": d["begonnen"] + "Z",
                              "beendet": d["beendet"] + "Z" if d["beendet"] else None,
-                             "fotos": [_foto_json(f) for f in fotos]})
+                             "einsortieren": bool(d["einsortieren"]) if v6 else None,
+                             "fotos": antwort})
 
     def original(request):
         with closing(h.db()) as con:
@@ -173,10 +187,33 @@ def routen(h: Helfer) -> list[Route]:
                 vergessen(z["id"])
             for alt in [k for k in ausloesungen if k not in {z["id"] for z in offen}]:
                 ausloesungen.pop(alt, None)   # Messwerte älterer Durchgänge: deren Fotos sind längst da
-            return einfuegen(con, h.nutzer, "nutzer", "scan_durchgang", {"nutzer_id": h.nutzer}), True
+            felder = {"nutzer_id": h.nutzer}
+            if einsortieren.aktiv(con) and d.get("einsortieren") is False:
+                felder["einsortieren"] = 0
+            return einfuegen(con, h.nutzer, "nutzer", "scan_durchgang", felder), True
 
         did, neu = await run_in_threadpool(h.schreibvorgang, arbeit)
         return JSONResponse({"id": did, "neu": neu}, status_code=201 if neu else 200)
+
+    @h.schreibend
+    async def einstellen(request):
+        """Einstellung des Durchgangs: {"einsortieren": true|false} (gilt für Karten, die danach erkannt werden)."""
+        did = request.path_params["id"]
+        d = await h.json_daten(request)
+        if not isinstance(d.get("einsortieren"), bool) or set(d) - {"einsortieren"}:
+            raise Fehler("Bitte „einsortieren“ mit true oder false angeben.")
+
+        def arbeit(con):
+            if not einsortieren.aktiv(con):
+                raise Fehler(regeln.NICHT_DA, 409)
+            durchgang_holen(con, did)
+            aendern(con, h.nutzer, "nutzer", "scan_durchgang", did, {"einsortieren": int(d["einsortieren"])})
+            if not d["einsortieren"]:   # aus: auch Karten dieses Durchgangs, die noch warten, bleiben im Scan-Eingang
+                for z in con.execute("SELECT DISTINCT k.id FROM karte k JOIN scan_foto f ON f.karte_id = k.id"
+                                     " WHERE f.durchgang_id = ? AND k.sortieren = 'offen'", (did,)).fetchall():
+                    aendern(con, h.nutzer, einsortieren.QUELLE, "karte", z[0], {"sortieren": None})
+        await run_in_threadpool(h.schreibvorgang, arbeit)
+        return JSONResponse({"einsortieren": d["einsortieren"]})
 
     @h.schreibend
     async def beenden(request):
@@ -335,6 +372,7 @@ def routen(h: Helfer) -> list[Route]:
         Route("/scan/durchgang", beginnen, methods=["POST"]),
         Route("/scan/durchgang/{id:int}", _lesend(durchgang)),
         Route("/scan/durchgang/{id:int}/beenden", beenden, methods=["POST"]),
+        Route("/scan/durchgang/{id:int}/einstellung", einstellen, methods=["POST"]),
         Route("/scan/durchgang/{id:int}/bild", bild, methods=["POST"]),
         Route("/scan/durchgang/{id:int}/foto", foto, methods=["POST"]),
         Route("/scan/foto/{id:int}/vorschau", vorschau, methods=["POST"]),

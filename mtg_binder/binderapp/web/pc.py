@@ -40,6 +40,7 @@ from starlette.routing import Route
 from binderapp.db import erkennung
 from binderapp.db.datenbank import schreiben, verbinden, version
 from binderapp.preise import zeitplan
+from binderapp.sortieren import einsortieren
 from binderapp.web.speicher import MELDUNG, Speicher
 
 NUTZER = 1
@@ -419,6 +420,8 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
                 con.execute("ROLLBACK TO kartendaten")
                 con.execute("RELEASE kartendaten")
                 log.warning("Kartendaten nicht nachgetragen (Katalog): %s", f)
+            # Sortierregeln: sofort in die Zielkiste (fängt eigene Fehler ab, die Karte wartet dann im Scan-Eingang)
+            ergebnis["einsortiert"] = einsortieren.nach_erkennung(con, NUTZER)
             return ergebnis
         antwort = await run_in_threadpool(schreibvorgang, arbeit)
         zeitplan.anstossen()   # Preise der neuen Karten bald nachtragen

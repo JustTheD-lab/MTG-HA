@@ -50,7 +50,18 @@ SPALTEN = (
     "scryfall_id", "oracle_id", "name", "set_code", "set_name", "set_erschienen", "nummer",
     "nummer_zahl", "sprache", "manakosten", "manawert", "farben", "farbidentitaet",
     "farbgruppe", "typzeile", "haupttyp", "seltenheit", "bild", "gefunden_ueber", "cardmarket_id",
+    "besonderheiten", "promo", "set_art",
 )
+
+# Ab Katalog-Version 3 (Sortierregeln, 01.11.2026): Merkmale eines Drucks für die Bedingung „Special Print“.
+# Gespeichert als Zeichenfolge mit Kommas in fester Reihenfolge, '' = keine. NULL heißt „unbekannt“ (älterer Katalog).
+BESONDERHEITEN = ("borderless", "showcase", "extendedart", "retro", "fullart",
+                  "etched", "textured", "galaxy", "surge", "serialized")
+FOIL_SONDERARTEN = ("etched", "textured", "galaxy", "surge", "serialized")
+# Scryfall promo_types → Merkmal
+_PROMO_MERKMALE = {"textured": "textured", "galaxyfoil": "galaxy", "surgefoil": "surge", "serialized": "serialized"}
+# Ab hier druckt Wizards den modernen Rahmen; ältere Rahmen danach gelten als Retro-Rahmen.
+_MODERNER_RAHMEN_AB = "2003-07-28"
 
 # Genau die Definition aus der Vorgabe (der Hauptagent legt sie im Schema Version 3 an).
 KARTENDATEN_SCHEMA = """
@@ -76,7 +87,10 @@ CREATE TABLE IF NOT EXISTS kartendaten (
     bild            TEXT,                       -- Scryfall-ID eines Drucks mit lokalem Bild (für Vorschaubilder)
     gefunden_ueber  TEXT NOT NULL CHECK (gefunden_ueber IN ('id','sprachdruck','set_nummer','oracle')),
     geaendert       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    cardmarket_id   INTEGER
+    cardmarket_id   INTEGER,
+    besonderheiten  TEXT,
+    promo           INTEGER,
+    set_art         TEXT
 );
 """
 
@@ -144,6 +158,30 @@ def _feld(objekt: dict, vorne: dict, schluessel: str):
     return wert if wert is not None else objekt.get(schluessel)
 
 
+def besonderheiten(objekt: dict) -> str:
+    """Merkmale eines Drucks (BESONDERHEITEN) aus dem Scryfall-Objekt, mit Kommas in fester Reihenfolge."""
+    effekte = set(objekt.get("frame_effects") or [])
+    promo = set(objekt.get("promo_types") or [])
+    gesetzt = set()
+    if objekt.get("border_color") == "borderless":
+        gesetzt.add("borderless")
+    for e in ("showcase", "extendedart", "etched"):
+        if e in effekte:
+            gesetzt.add(e)
+    if objekt.get("finishes") == ["etched"]:
+        gesetzt.add("etched")
+    if objekt.get("full_art"):
+        gesetzt.add("fullart")
+    if objekt.get("frame") in ("1993", "1997") and (objekt.get("released_at") or "") >= _MODERNER_RAHMEN_AB:
+        gesetzt.add("retro")
+    # Foil-Sonderarten nur, wenn es den Druck nicht auch normal gibt (sonst sagt das Merkmal nichts über die Karte)
+    nur_foil = "nonfoil" not in (objekt.get("finishes") or ["nonfoil"])
+    for typ, merkmal in _PROMO_MERKMALE.items():
+        if typ in promo and (nur_foil or merkmal == "serialized"):
+            gesetzt.add(merkmal)
+    return ",".join(m for m in BESONDERHEITEN if m in gesetzt)
+
+
 def zeile(objekt: dict, set_erschienen: str | None = None) -> dict:
     """Scryfall-Objekt → Kartendaten (ohne `bild`, `gefunden_ueber`, `geaendert`).
 
@@ -178,6 +216,9 @@ def zeile(objekt: dict, set_erschienen: str | None = None) -> dict:
         "typzeile": typzeile,
         "haupttyp": haupttyp(typzeile),
         "seltenheit": objekt.get("rarity"),
+        "besonderheiten": besonderheiten(objekt),
+        "promo": 1 if objekt.get("promo") else 0,
+        "set_art": objekt.get("set_type"),
     }
 
 
@@ -275,6 +316,10 @@ def _ergebnis(kat, druck: dict, weg: str, scryfall_id: str | None, set_code: str
         # Produkt bei Cardmarket (Preise): gleicher Druck oder Sprachdruck desselben Sets und derselben Nummer;
         # über die Oracle-ID gefunden wäre es ein anderer Druck, daher dort keins. Ältere Kataloge: None.
         "cardmarket_id": druck.get("cardmarket_id") if weg != "oracle" else None,
+        # Merkmale des Drucks (ab Katalog-Version 3); über die Oracle-ID wäre es ein anderer Druck: unbekannt.
+        "besonderheiten": druck.get("besonderheiten") if weg != "oracle" else None,
+        "promo": druck.get("promo") if weg != "oracle" else None,
+        "set_art": druck.get("set_art") if weg != "oracle" else None,
     }
 
 
@@ -376,8 +421,12 @@ def uebernehmen(app_con: sqlite3.Connection, kat: sqlite3.Connection, nur_fehlen
     ohne = app_con.execute(
         "SELECT COUNT(*) FROM karte WHERE scryfall_id IS NULL OR scryfall_id = ''"
     ).fetchone()[0]
+    spalten = spalten_in(app_con)
+    # Liefert der Katalog die Merkmale (Version 3), gelten Zeilen ohne Merkmale als fehlend (Nachtrag).
+    nachtrag = "besonderheiten" in spalten and "besonderheiten" in {z[1] for z in kat.execute("PRAGMA table_info(druck)")}
+    bedingung = " WHERE besonderheiten IS NOT NULL OR gefunden_ueber = 'oracle'" if nachtrag else ""
     bestand = (
-        {r[0] for r in app_con.execute("SELECT scryfall_id FROM kartendaten")} if nur_fehlende else set()
+        {r[0] for r in app_con.execute("SELECT scryfall_id FROM kartendaten" + bedingung)} if nur_fehlende else set()
     )
     # Bei MIN(id) liefert SQLite die übrigen Spalten derselben Zeile.
     posten = app_con.execute(
@@ -395,7 +444,6 @@ def uebernehmen(app_con: sqlite3.Connection, kat: sqlite3.Connection, nur_fehlen
         "geschrieben": 0,
     }
     zeilen = []
-    spalten = spalten_in(app_con)
     for sid, anzahl, _min_id, set_code, nummer, oracle in posten:
         if sid in bestand:
             ergebnis["vorhanden"]["ids"] += 1

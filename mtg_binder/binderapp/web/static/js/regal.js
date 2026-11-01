@@ -160,6 +160,8 @@ function scanPlatzHtml(s) {
 function kistenbodenHtml(kisten) {
   return '<section class="regal-kistenboden" aria-label="Kisten im Regal">'
     + '<h2 class="regal-boden-titel etikett">Kisten</h2>'
+    + '<p class="regal-regeln-zeile"><button type="button" class="knopf regal-regeln"'
+    + ' aria-label="Sortierregeln öffnen: wohin neue Karten einsortiert werden">Sortierregeln</button></p>'
     + (kisten.length
       ? `<ul class="regal-kisten" role="list">${kisten.map(kisteHtml).join('')}</ul>`
       : '<p class="regal-leer-hinweis">Noch keine Kisten im Regal.</p>')
@@ -644,6 +646,7 @@ export async function zeigen(wurzel, parameter, vorher) {
   // Binder oder Kiste herausnehmen: die Animation übernimmt `verlassen`, die Navigation geschieht hier
   moebel.addEventListener('click', (ereignis) => {
     if (ereignis.target.closest('.scan-platz')) { gehe('#/scan/eingang'); return; }
+    if (ereignis.target.closest('.regal-regeln')) { gehe('#/regeln'); return; }
     if (ereignis.target.closest('.regal-sammlung')) { gehe('#/sammlung'); return; }
     const knopf = ereignis.target.closest('.regal-ruecken');
     if (knopf) { gehe(`#/binder/${knopf.dataset.binder}`); return; }

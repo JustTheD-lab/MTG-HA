@@ -1,0 +1,176 @@
+/* Sortierregeln (#/regeln), Bedingungs-Editor, Fächer-Dialog und die kleinen Ziel-Hinweise in Scan-Eingang,
+   Scan-Bildschirm und Regal. Stil „Galerie“. Klassen mit Vorsatz regeln-, eingang-/scan-/regal- für die Einsprengsel. */
+
+/* ---------- Seite ---------- */
+.regeln { max-width: 760px; margin: 0 auto; padding: calc(12px + env(safe-area-inset-top)) var(--rand-sicher) 48px; }
+.regeln-titelzeile { display: flex; align-items: center; gap: 12px; }
+.regeln-titel { flex: 1; min-width: 0; font-size: 1.4rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 420px) { .regeln-titel { font-size: 1.2rem; } }
+.regeln-erklaerung { margin: 14px 0 6px; color: var(--text-2); font-size: 0.94rem; }
+.regeln-hinweis { margin: 6px 0; color: var(--text-3); font-size: 0.88rem; line-height: 1.45; }
+.regeln-leiste { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 10px; }
+
+/* ---------- Regelkarten ---------- */
+.regeln-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.regeln-regel {
+  padding: 12px 14px; background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius);
+  display: grid; gap: 8px;
+}
+.regeln-regel[data-aktiv="false"] { background: var(--flaeche-1); }
+.regeln-regel[data-aktiv="false"] .regeln-name, .regeln-regel[data-aktiv="false"] .regeln-ketten,
+.regeln-regel[data-aktiv="false"] .regeln-ziel { opacity: 0.55; }
+.regeln-regel[data-gueltig="false"] { border-color: var(--warnung); }
+.regeln-regel-kopf { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.regeln-nr {
+  flex: none; min-width: 26px; height: 26px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--messing-dunkel); border-radius: 999px; color: var(--messing-hell);
+  font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.regeln-name { flex: 1; min-width: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+.regeln-marke {
+  flex: none; padding: 1px 9px; border: 1px solid var(--linie-stark); border-radius: 999px; font-size: 0.72rem;
+  font-weight: 500; color: var(--text-2);
+}
+.regeln-marke-warn { border-color: var(--warnung); color: #f1b9b0; }
+.regeln-zeile { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.regeln-zeile .etikett { flex: none; width: 3.2em; }
+.regeln-ketten { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.regeln-chip {
+  padding: 2px 10px; background: var(--flaeche-3); border: 1px solid var(--linie); border-radius: 999px;
+  font-size: 0.86rem; color: var(--text); overflow-wrap: anywhere;
+}
+.regeln-chip-immer { color: var(--text-2); font-style: normal; }
+.regeln-ziel { min-width: 0; overflow-wrap: anywhere; }
+.regeln-zielname { font-weight: 600; color: var(--messing-hell); }
+.regeln-zielname.regeln-fehlt { color: #f1b9b0; }
+.regeln-warnung {
+  margin: 0; padding: 8px 12px; border: 1px solid var(--warnung); border-radius: var(--radius-klein);
+  background: rgba(196, 87, 74, 0.12); color: #f6d3cd; font-size: 0.88rem;
+}
+.regeln-aktionen { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px;
+  padding-top: 8px; border-top: 1px solid var(--linie); }
+.regeln-aktionen-rechts { display: flex; gap: 6px; }
+
+/* Schalter an/aus */
+.regeln-schalter {
+  appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px;
+  background: transparent; border: 0; color: var(--text-2); font-size: 0.9rem; font-weight: 500;
+}
+.regeln-schalter-spur {
+  position: relative; flex: none; width: 40px; height: 22px; border-radius: 999px; background: var(--flaeche-3);
+  border: 1px solid var(--linie-stark); transition: background-color var(--dauer-kurz) var(--kurve);
+}
+.regeln-schalter-spur::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--text-2); transition: transform var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve);
+}
+.regeln-schalter[aria-checked="true"] { color: var(--messing-hell); }
+.regeln-schalter[aria-checked="true"] .regeln-schalter-spur { background: var(--messing-schleier); border-color: var(--messing); }
+.regeln-schalter[aria-checked="true"] .regeln-schalter-spur::after { transform: translate3d(18px, 0, 0); background: var(--messing); }
+.regeln-schalter:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; border-radius: var(--radius-klein); }
+.regeln-schalter-text { min-width: 2.2em; }
+
+/* ---------- Dialog und Editor ---------- */
+@media (min-width: 700px) {
+  .dialog.regeln-dialog { width: min(680px, calc(100vw - 32px)); height: auto; }
+}
+.regeln-aktivzeile { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-top: 10px; cursor: pointer; }
+.regeln-aktivzeile input { width: 20px; height: 20px; accent-color: var(--messing); }
+.regeln-bed-liste { display: grid; gap: 10px; margin-top: 8px; }
+.regeln-bed {
+  padding: 10px; background: var(--flaeche-1); border: 1px solid var(--linie); border-radius: var(--radius);
+  display: grid; gap: 8px;
+}
+.regeln-bed-kopf { display: flex; align-items: center; gap: 8px; }
+.regeln-bed-feld { flex: 1; min-width: 0; }
+.regeln-bed-koerper { display: grid; gap: 8px; }
+.regeln-bed-neu { margin-top: 10px; }
+.regeln-bed-leer { margin-top: 8px; }
+.regeln-pillen { display: flex; flex-wrap: wrap; gap: 6px; }
+.regeln-pille { min-height: 40px; padding: 0 0.9em; font-size: 0.9rem; }
+@media (max-width: 699px) { .regeln-pille { min-height: 44px; } }
+.regeln-nicht { flex: none; }
+.regeln-sammel { justify-self: start; }
+.regeln-sammel-hinweis { margin: -2px 0 0; }
+.regeln-farbpunkt { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.35); }
+.regeln-farbe-W { background: #d9d2bd; }
+.regeln-farbe-U { background: #5b86c4; }
+.regeln-farbe-B { background: #8a7a99; }
+.regeln-farbe-R { background: #c4574a; }
+.regeln-farbe-G { background: #5f9a6b; }
+.regeln-pille[aria-pressed="true"] .regeln-farbpunkt { border-color: rgba(26, 20, 8, 0.6); }
+.regeln-zahlen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.regeln-zahl { display: grid; gap: 4px; min-width: 0; }
+.regeln-zahl-titel { font-size: 0.8rem; color: var(--text-3); }
+.regeln-dialogmeldung { margin-top: 12px; }
+
+/* Fächer */
+.regeln-faecher { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 12px; }
+.regeln-fach { padding: 10px; background: var(--flaeche-2); border: 1px solid var(--linie-stark); border-radius: var(--radius);
+  display: grid; gap: 8px; }
+.regeln-fach-kopf { display: flex; align-items: center; gap: 6px; }
+.regeln-fach-name { flex: 1; min-width: 0; }
+.regeln-fach-neu { margin-top: 4px; }
+.regeln-fach .regeln-bed { background: var(--flaeche-1); }
+
+/* ---------- Probe ---------- */
+.regeln-probe { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--linie); }
+.regeln-treffer { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.regeln-treffer-knopf {
+  appearance: none; width: 100%; min-height: 48px; padding: 6px 12px; cursor: pointer; text-align: left;
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius-klein); color: var(--text);
+}
+.regeln-treffer-knopf:hover { background: var(--flaeche-hover); }
+.regeln-treffer-name { font-weight: 500; }
+.regeln-treffer-info { font-size: 0.8rem; color: var(--text-3); }
+.regeln-ergebnis { margin-top: 16px; }
+.regeln-ptitel { font-size: 1.05rem; margin-bottom: 8px; }
+.regeln-pziel { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--linie-stark); border-radius: var(--radius);
+  background: var(--flaeche-2); }
+.regeln-pziel-ok { border-color: var(--messing-dunkel); background: var(--messing-schleier); }
+.regeln-pziel-ok strong { color: var(--messing-hell); }
+.regeln-pziel-wartet { border-color: var(--hinweis); }
+.regeln-pregeln { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.regeln-pregel { padding: 10px 12px; background: var(--flaeche-1); border: 1px solid var(--linie); border-radius: var(--radius); }
+.regeln-pregel[data-e="passt"] { border-left: 3px solid #6aa386; }
+.regeln-pregel[data-e="unbekannt"] { border-left: 3px solid var(--hinweis); }
+.regeln-pregel[data-e="passt nicht"] { border-left: 3px solid var(--linie-stark); }
+.regeln-pregel-kopf { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.regeln-pregel-kopf strong { min-width: 0; overflow-wrap: anywhere; }
+.regeln-pmarke {
+  display: inline-block; min-width: 3.1em; padding: 0 8px; border: 1px solid var(--linie-stark); border-radius: 999px;
+  font-size: 0.72rem; font-weight: 600; text-align: center; color: var(--text-2);
+}
+.regeln-pmarke-gross { margin-left: auto; font-size: 0.78rem; }
+.regeln-pregel[data-e="passt"] .regeln-pmarke-gross, li[data-e="ja"] > .regeln-pmarke { border-color: #6aa386; color: #a9d2bc; }
+.regeln-pregel[data-e="unbekannt"] .regeln-pmarke-gross, li[data-e="unbekannt"] > .regeln-pmarke { border-color: var(--hinweis); color: var(--hinweis); }
+.regeln-pbed { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 0.9rem; }
+.regeln-pbed li { display: flex; align-items: baseline; gap: 8px; }
+.regeln-pbed .regeln-pmarke { flex: none; }
+
+/* ---------- Scan-Eingang: Ziel je Karte und Schalter ---------- */
+.eingang-ziel { font-size: 0.78rem; color: var(--messing-hell); line-height: 1.3; overflow-wrap: anywhere; }
+.eingang-ziel--wartet { color: var(--text-3); }
+.eingang-sortieren { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px;
+  padding: 8px 0 2px; }
+.eingang-schalter { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer;
+  font-size: 0.9rem; color: var(--text-2); }
+.eingang-schalter input { width: 20px; height: 20px; accent-color: var(--messing); }
+.eingang-regeln-link, .scan-regeln-link { color: var(--messing-hell); font-size: 0.86rem; text-decoration: underline;
+  text-underline-offset: 3px; display: inline-flex; align-items: center; min-height: 44px; }
+.eingang-regeln-link:hover, .scan-regeln-link:hover { color: var(--text); }
+.eingang-hinweis .eingang-regeln-link { display: inline; min-height: 0; font-size: inherit; }
+.eingang-fotoplatz { min-height: 0; }
+
+/* ---------- Scan-Bildschirm: Schalter und Link ---------- */
+.scan-sortieren { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 18px; }
+.scan-lauf .scan-sortieren { justify-content: flex-start; margin-top: 2px; }
+.scan-sortieren .scan-umschalter { min-height: 44px; }
+.scan-sortieren .scan-umschalter input { width: 20px; height: 20px; accent-color: var(--messing); }
+.scan-sortieren-hinweis { margin: 0; flex-basis: 100%; font-size: 0.78rem; color: var(--text-3); }
+
+/* ---------- Regal: Einstieg am Kisten-Boden ---------- */
+.regal-regeln-zeile { display: flex; justify-content: center; margin: -8px 0 14px; }
+.regal-regeln { min-height: 44px; font-size: 0.84rem; color: var(--text-2); border-color: var(--linie); }
+.regal-regeln:hover { color: var(--text); }

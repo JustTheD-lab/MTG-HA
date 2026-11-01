@@ -1,4 +1,4 @@
--- Datenmodell der MTG-Binder-App (Stand 31.10.2026, Version 5)
+-- Datenmodell der MTG-Binder-App (Stand 01.11.2026, Version 6)
 --
 -- Binder → Seite → Tasche → Karte. Jede Sammlung gehört einem Nutzer.
 -- Fotos tragen den Verarbeitungsstatus (späterer Upload-Puffer, Phase 5).
@@ -115,7 +115,10 @@ CREATE TABLE IF NOT EXISTS karte (
     kiste_id     INTEGER REFERENCES kiste(id) CHECK (kiste_id IS NULL OR tasche_id IS NULL),
     quelle       TEXT NOT NULL DEFAULT 'scan' CHECK (quelle IN ('scan', 'manabox', 'manuell')),
     extern_id    TEXT,                     -- Schlüssel der Zeile in der Quelle (ManaBox: Binder, ID, Foil, Sprache, Zustand)
-    zustand      TEXT                      -- Erhaltung laut Quelle, z. B. near_mint
+    zustand      TEXT,                     -- Erhaltung laut Quelle, z. B. near_mint
+    -- ab Version 6 (Sortierregeln)
+    sortieren    TEXT CHECK (sortieren IS NULL OR sortieren = 'offen'),  -- offen: wartet aufs Einsortieren (Bulk-Scan)
+    vorgemerkt_binder_id INTEGER REFERENCES binder(id) ON DELETE SET NULL  -- schwebend: für diesen Binder vorgemerkt
 );
 
 -- Kartendaten je Druck (ab Version 3), abgeleitet aus dem Scryfall-Katalog (binderapp.katalog),
@@ -143,7 +146,11 @@ CREATE TABLE IF NOT EXISTS kartendaten (
     bild            TEXT,                       -- Scryfall-ID eines Drucks mit lokalem Bild (für Vorschaubilder)
     gefunden_ueber  TEXT NOT NULL CHECK (gefunden_ueber IN ('id','sprachdruck','set_nummer','oracle')),
     geaendert       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    cardmarket_id   INTEGER                     -- ab Version 4: Produkt bei Cardmarket (Preise)
+    cardmarket_id   INTEGER,                    -- ab Version 4: Produkt bei Cardmarket (Preise)
+    -- ab Version 6 (Sortierregeln, Katalog Version 3); NULL = unbekannt (älterer Katalog)
+    besonderheiten  TEXT,                       -- Merkmale mit Kommas, z. B. borderless,showcase ('' = keine)
+    promo           INTEGER,                    -- Scryfall promo (0/1)
+    set_art         TEXT                        -- Scryfall set_type (expansion, box, promo …)
 );
 
 -- Preise je Tag (ab Version 4) aus dem Price Guide von Cardmarket, nur für Produkte der Sammlung. Abgeleitete
@@ -174,7 +181,9 @@ CREATE TABLE IF NOT EXISTS scan_durchgang (
     nutzer_id  INTEGER NOT NULL REFERENCES nutzer(id),
     begonnen   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     beendet    TEXT,
-    geaendert  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+    geaendert  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    -- ab Version 6: erkannte Karten nach den Sortierregeln einsortieren (Einstellung je Durchgang)
+    einsortieren INTEGER NOT NULL DEFAULT 1 CHECK (einsortieren IN (0, 1))
 );
 
 CREATE TABLE IF NOT EXISTS scan_foto (
@@ -194,6 +203,37 @@ CREATE TABLE IF NOT EXISTS scan_foto (
     aufgenommen   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     geaendert     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     UNIQUE (durchgang_id, nummer)
+);
+
+-- Sortierregeln (ab Version 6): geordnete Liste je Nutzer, die erste passende aktive Regel bestimmt das Ziel
+-- (binderapp.sortieren). Bedingungen als JSON aus festen Feldern; Ziel ist eine Kiste oder ein Binder (Vormerkung).
+CREATE TABLE IF NOT EXISTS sortierregel (
+    id           INTEGER PRIMARY KEY,
+    nutzer_id    INTEGER NOT NULL REFERENCES nutzer(id),
+    platz        INTEGER NOT NULL DEFAULT 0,      -- Reihenfolge (aufsteigend)
+    name         TEXT NOT NULL,
+    aktiv        INTEGER NOT NULL DEFAULT 1 CHECK (aktiv IN (0, 1)),
+    bedingungen  TEXT NOT NULL DEFAULT '[]',
+    kiste_id     INTEGER REFERENCES kiste(id),
+    binder_id    INTEGER REFERENCES binder(id),
+    angelegt     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    geaendert    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    CHECK ((kiste_id IS NULL) <> (binder_id IS NULL))
+);
+
+-- Fächer einer Kiste oder eines Binders (ab Version 6): wie die Regeln, die erste passende gewinnt. Das Fach einer
+-- Karte wird berechnet, nicht gespeichert.
+CREATE TABLE IF NOT EXISTS sortierfach (
+    id           INTEGER PRIMARY KEY,
+    nutzer_id    INTEGER NOT NULL REFERENCES nutzer(id),
+    kiste_id     INTEGER REFERENCES kiste(id),
+    binder_id    INTEGER REFERENCES binder(id),
+    platz        INTEGER NOT NULL DEFAULT 0,
+    name         TEXT NOT NULL,
+    bedingungen  TEXT NOT NULL DEFAULT '[]',
+    angelegt     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    geaendert    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    CHECK ((kiste_id IS NULL) <> (binder_id IS NULL))
 );
 
 -- Änderungshistorie: eine Zeile je Änderung, mit Quelle und den geänderten Feldern als JSON.
@@ -244,5 +284,10 @@ CREATE INDEX IF NOT EXISTS i_preis_tag        ON preis(tag);
 -- ab Version 5: Bulk-Scan
 CREATE INDEX IF NOT EXISTS i_scan_foto_status ON scan_foto(status, id);
 CREATE INDEX IF NOT EXISTS i_scan_durchgang   ON scan_durchgang(nutzer_id, id);
+-- ab Version 6: Sortierregeln
+CREATE INDEX IF NOT EXISTS i_sortierregel     ON sortierregel(nutzer_id, platz, id);
+CREATE INDEX IF NOT EXISTS i_sortierfach      ON sortierfach(kiste_id, binder_id, platz, id);
+CREATE INDEX IF NOT EXISTS i_karte_sortieren  ON karte(sortieren) WHERE sortieren IS NOT NULL;
+CREATE INDEX IF NOT EXISTS i_karte_vorgemerkt ON karte(vorgemerkt_binder_id) WHERE vorgemerkt_binder_id IS NOT NULL;
 
-PRAGMA user_version = 5;
+PRAGMA user_version = 6;

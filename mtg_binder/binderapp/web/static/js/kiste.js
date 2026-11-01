@@ -69,6 +69,7 @@ const SYM = {
   wahl: sym('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.5l3 3 5-6"/>'),
   abzug: sym('<path d="M7 4h10v16H7zM10 9h4M10 13h4"/>'),
   weiter: sym('<path d="M4 12h14M13 7l5 5-5 5"/>'),
+  faecher: sym('<rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/>'),
 };
 const ANSICHT_TEXT = { kasten: 'Karteikasten', raster: 'Raster', liste: 'Liste' };
 
@@ -1027,6 +1028,7 @@ function adminZeichnen() {
     hinweis.textContent = 'Nur am PC mit Katalog';
     hinweis.hidden = false;
   });
+  neu('kiste-faecherknopf', SYM.faecher, 'Fächer', 'Fächer dieser Kiste bearbeiten', faecherOeffnen);
   neu('kiste-umbenennen', SYM.stift, 'Umbenennen', 'Kiste umbenennen', umbenennen);
   if (s.kopf.posten === 0) neu('kiste-loeschen', SYM.muell, 'Löschen', 'Leere Kiste löschen', loeschen);
 }
@@ -1042,6 +1044,25 @@ function katalogDa() {
       .catch(() => { katalogStand = null; return null; });
   }
   return katalogStand;
+}
+
+/** Fächer der Kiste bearbeiten (Dialog in regeln.js, erst bei Bedarf geladen); danach die Kiste neu aufbauen. */
+async function faecherOeffnen() {
+  const s = S;
+  let geaendert = false;
+  try {
+    const { faecherBearbeiten } = await import('./regeln.js');
+    geaendert = await faecherBearbeiten(s.id, s.kopf.name);
+  } catch (f) {
+    if (S === s) meldung(f.message);
+    return;
+  }
+  if (geaendert && S === s) {
+    meldung('');
+    await neuAufbauen();
+    hinweisZeigen(S?.kopf.faecher?.length
+      ? 'Fächer gespeichert. Unter „Gruppieren“ lässt sich die Kiste nach Fächern ansehen.' : 'Fächer gespeichert.');
+  }
 }
 
 async function umbenennen() {
@@ -1753,7 +1774,9 @@ async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, o
 
   const schluessel = sammlung ? 'sammlung' : String(id);
   const gespeichert = (name) => vorliebe(`kiste.${schluessel}.${name}`);
-  const gruppierungen = sammlung ? kopf.gruppierungen : optionen.gruppierungen;
+  // „Fach“ gibt es nur in einer Kiste mit Fächern (nie in der Gesamtsammlung)
+  const hatFaecher = !sammlung && Array.isArray(kopf.faecher) && kopf.faecher.length > 0;
+  const gruppierungen = (sammlung ? kopf.gruppierungen : optionen.gruppierungen).filter((x) => x.wert !== 'fach' || hatFaecher);
   const sortWert = optionen.sortierungen.some((x) => x.wert === gespeichert('sort')) ? gespeichert('sort') : 'name';
   const standardRichtung = optionen.sortierungen.find((x) => x.wert === sortWert).richtung;
   const s = {

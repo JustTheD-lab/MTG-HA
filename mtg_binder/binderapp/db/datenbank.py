@@ -15,8 +15,9 @@ from datetime import datetime
 from pathlib import Path
 
 SCHEMA = Path(__file__).with_name("schema.sql")
-TABELLEN = {"binder", "seite", "tasche", "kiste", "karte", "foto", "nutzer", "scan_durchgang", "scan_foto"}
-VERSION = 5          # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan (31.10.2026)
+TABELLEN = {"binder", "seite", "tasche", "kiste", "karte", "foto", "nutzer", "scan_durchgang", "scan_foto",
+            "sortierregel", "sortierfach"}
+VERSION = 6          # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026)
 MINDEST = 2          # ältester Stand, mit dem Server und Verarbeiter noch laufen (ohne Kisten)
 WARTEZEIT = 10       # Sekunden Wartezeit, wenn ein anderer Prozess gerade schreibt
 
@@ -48,7 +49,9 @@ SPALTEN_V3 = {
     ],
 }
 
-NEUE_TABELLEN = {"kartendaten"}   # gibt es erst ab Version 3; fehlt sie, legt schema.sql sie vollständig an
+# Tabellen, die erst später dazukamen (kartendaten ab 3, scan_durchgang ab 5); fehlt eine, legt schema.sql sie
+# vollständig an, statt Spalten anzuhängen
+NEUE_TABELLEN = {"kartendaten", "scan_durchgang"}
 
 # Spalten, die Version 4 anhängt (Preise); die Tabellen preis und preisabruf legt schema.sql an
 SPALTEN_V4 = {
@@ -56,6 +59,23 @@ SPALTEN_V4 = {
         ("cardmarket_id", "INTEGER"),
     ],
 }
+
+# Spalten, die Version 6 anhängt (Sortierregeln); die Tabellen sortierregel und sortierfach legt schema.sql an
+SPALTEN_V6 = {
+    "karte": [
+        ("sortieren", "TEXT CHECK (sortieren IS NULL OR sortieren = 'offen')"),
+        ("vorgemerkt_binder_id", "INTEGER REFERENCES binder(id) ON DELETE SET NULL"),
+    ],
+    "kartendaten": [
+        ("besonderheiten", "TEXT"),
+        ("promo", "INTEGER"),
+        ("set_art", "TEXT"),
+    ],
+    "scan_durchgang": [
+        ("einsortieren", "INTEGER NOT NULL DEFAULT 1 CHECK (einsortieren IN (0, 1))"),
+    ],
+}
+ALLE_SPALTEN = (SPALTEN_V2, SPALTEN_V3, SPALTEN_V4, SPALTEN_V6)
 
 
 def verbinden(pfad: str | Path, nur_lesen: bool = False) -> sqlite3.Connection:
@@ -83,7 +103,7 @@ def _spalten(con, tabelle: str) -> list[str]:
 def fehlende_spalten(con) -> list[str]:
     """Spalten, die `migrieren` anhängen würde (leer, wenn die Datenbank aktuell ist)."""
     fehlend = []
-    for spalten_je in (SPALTEN_V2, SPALTEN_V3, SPALTEN_V4):
+    for spalten_je in ALLE_SPALTEN:
         for tabelle, spalten in spalten_je.items():
             vorhanden = _spalten(con, tabelle)
             if not vorhanden and tabelle in NEUE_TABELLEN:
@@ -93,7 +113,7 @@ def fehlende_spalten(con) -> list[str]:
 
 
 def migrieren(con) -> list[str]:
-    """Bringt eine Datenbank der Version 1 bis 4 auf Version 5 (5 bringt nur neue Tabellen). Wiederholbar: Vorhandenes bleibt, wie es ist.
+    """Bringt eine Datenbank der Version 1 bis 5 auf Version 6. Wiederholbar: Vorhandenes bleibt, wie es ist.
 
     Gibt die ausgeführten Schritte zurück (leer, wenn nichts zu tun war). Daten werden nicht
     verändert; neue Spalten bekommen ihren Standardwert (Fotos: Quelle „import", Seiten: Art „foto",
@@ -101,7 +121,7 @@ def migrieren(con) -> list[str]:
     """
     schritte = []
     with schreiben(con):
-        for spalten_je in (SPALTEN_V2, SPALTEN_V3, SPALTEN_V4):
+        for spalten_je in ALLE_SPALTEN:
             for tabelle, spalten in spalten_je.items():
                 vorhanden = _spalten(con, tabelle)
                 if not vorhanden and tabelle in NEUE_TABELLEN:

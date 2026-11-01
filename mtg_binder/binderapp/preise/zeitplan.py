@@ -62,6 +62,22 @@ def einmal(datenbank: Path, ordner: Path, katalog: Path | None) -> dict | None:
     return ergebnis
 
 
+def offene_einsortieren(datenbank: Path) -> int:
+    """Nach dem Preisnachtrag: Karten, die im Scan-Eingang auf einen Preis warten, nach den Sortierregeln
+    einsortieren (binderapp.sortieren). Gibt die Zahl der verschobenen Karten zurück."""
+    from binderapp.db.datenbank import schreiben
+    from binderapp.sortieren import einsortieren
+    with closing(verbinden(datenbank)) as con:
+        nutzer = einsortieren.offene_nutzer(con)
+        if not nutzer:
+            return 0
+        with schreiben(con):
+            verschoben = sum(len(einsortieren.einsortieren(con, n)) for n in nutzer)
+    if verschoben:
+        log.info("Nach dem Preisnachtrag einsortiert: %s Karten", verschoben)
+    return verschoben
+
+
 BUENDELN = 30          # Sekunden: nach einem Anstoß noch so lange warten, damit ein ganzer Lauf zusammenkommt
 
 _aktiv: "Preisabruf | None" = None
@@ -96,6 +112,10 @@ class Preisabruf(threading.Thread):
                 einmal(self.datenbank, self.ordner, self.katalog)
             except Exception as fehler:   # nie den Server stören; nächster Versuch beim nächsten Blick
                 log.warning("Preisabruf fehlgeschlagen: %s", fehler)
+            try:
+                offene_einsortieren(self.datenbank)
+            except Exception as fehler:
+                log.warning("Einsortieren nach dem Preisabruf fehlgeschlagen: %s", fehler)
             if self.stoss.wait(TAKT) and not self.halt.is_set():
                 self.halt.wait(BUENDELN)   # weitere neue Karten abwarten, dann einmal nachtragen
             self.stoss.clear()

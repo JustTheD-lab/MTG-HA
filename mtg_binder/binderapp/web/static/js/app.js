@@ -11,6 +11,7 @@
 //   #/sammlung/karte/12        dazu Karte 12 groß
 //   #/scan                     Bulk-Scan mit der Handykamera (scan.js)
 //   #/scan/eingang             Scan-Eingang: Durchgänge und ihre Fotos (eingang.js)
+//   #/regeln                   Sortierregeln: wohin neue Karten einsortiert werden (regeln.js)
 //   #/pruefen                  Prüfansicht: unsichere Karten nacheinander
 //   #/pruefen/karte/12         dazu Karte 12 groß
 //
@@ -28,10 +29,11 @@ import * as pruefen from './pruefen.js';
 import * as karte from './karte.js';
 import * as scan from './scan.js';
 import * as eingang from './eingang.js';
+import * as regeln from './regeln.js';
 import { laden as sitzungLaden } from './anmeldung.js';
 import { holen } from './gemeinsam.js';
 
-const ANSICHTEN = { regal, lesetisch, kiste, pruefen, scan, eingang };
+const ANSICHTEN = { regal, lesetisch, kiste, pruefen, scan, eingang, regeln };
 const buehne = document.getElementById('buehne');
 let aktuell = null;  // { name, parameter }
 let laeuft = Promise.resolve();
@@ -60,6 +62,9 @@ export function lesen(hash) {
   if (teile[0] === 'scan') {   // #/scan Kamera, #/scan/eingang Scan-Eingang
     return { ansicht: teile[1] === 'eingang' ? 'eingang' : 'scan', binder: null, kiste: null, sammlung: false,
              seite: null, karte: null };
+  }
+  if (teile[0] === 'regeln') {
+    return { ansicht: 'regeln', binder: null, kiste: null, sammlung: false, seite: null, karte: null };
   }
   if (teile[0] === 'pruefen') {
     return { ansicht: 'pruefen', binder: null, kiste: null, sammlung: false, seite: null,

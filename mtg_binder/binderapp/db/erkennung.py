@@ -145,10 +145,14 @@ def scan_kiste(con, nutzer: int) -> int:
 def scan_ergebnis_schreiben(con, nutzer: int, scan_id: int, tasche: Tasche | None) -> dict:
     """Legt die Karte des Scan-Fotos in der Kiste „Scan-Eingang“ an (oder zählt einen gleichen Posten hoch) und
     setzt das Foto auf „erkannt“. Ohne Karte (keine gefunden, Rückseite): Foto „fehler“ mit Grund."""
-    f = con.execute("SELECT f.status FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id"
+    v6 = version(con) >= 6
+    f = con.execute("SELECT f.status" + (", d.einsortieren" if v6 else "") + " FROM scan_foto f"
+                    " JOIN scan_durchgang d ON d.id = f.durchgang_id"
                     " WHERE f.id = ? AND d.nutzer_id = ?", (scan_id, nutzer)).fetchone()
     if f is None or f["status"] != "in_verarbeitung":
         raise RuntimeError(f"Scan-Foto {scan_id} ist nicht in Arbeit.")
+    # ab Version 6: die Karte wartet aufs Einsortieren nach den Sortierregeln (binderapp.sortieren)
+    offen = {"sortieren": "offen"} if v6 and f["einsortieren"] else {}
     e = tasche.erk if tasche is not None else {}
     if tasche is None or e.get("status") == "rueckseite" or not e.get("name"):
         grund = ("Auf dem Foto liegt eine Kartenrückseite." if e.get("status") == "rueckseite"
@@ -163,12 +167,12 @@ def scan_ergebnis_schreiben(con, nutzer: int, scan_id: int, tasche: Tasche | Non
             " AND COALESCE(sprache, '') = ? AND foil = 0 AND status = 'sicher' AND geprueft = 0 ORDER BY id LIMIT 1",
             (nutzer, kiste, e["scryfall_id"], e.get("sprache") or "")).fetchone()
         if z is not None:
-            aendern(con, nutzer, QUELLE, "karte", z["id"], {"anzahl": z["anzahl"] + 1})
+            aendern(con, nutzer, QUELLE, "karte", z["id"], {"anzahl": z["anzahl"] + 1, **offen})
             kid, zusammen = z["id"], True
     if kid is None:
         felder = karte_felder(tasche, nutzer, None)
         felder.pop("tasche_id")
-        kid = einfuegen(con, nutzer, QUELLE, "karte", {**felder, "kiste_id": kiste, "quelle": "scan"})
+        kid = einfuegen(con, nutzer, QUELLE, "karte", {**felder, "kiste_id": kiste, "quelle": "scan", **offen})
     aendern(con, nutzer, QUELLE, "scan_foto", scan_id,
             {"status": "erkannt", "karte_id": kid, "fehler": None, "erkennung": ERKENNUNG})
     return {"karte_id": kid, "name": e["name"], "status": e["status"], "zusammengefasst": zusammen, "kiste_id": kiste}

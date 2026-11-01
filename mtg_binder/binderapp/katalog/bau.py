@@ -72,7 +72,10 @@ CREATE TABLE druck (
     seltenheit      TEXT,
     layout          TEXT,
     bild_vorhanden  INTEGER NOT NULL,           -- 1, wenn data/scryfall/bilder/normal/<id>.jpg da ist
-    cardmarket_id   INTEGER                     -- Produkt bei Cardmarket (Preise; ab Katalog-Version 2)
+    cardmarket_id   INTEGER,                    -- Produkt bei Cardmarket (Preise; ab Katalog-Version 2)
+    besonderheiten  TEXT NOT NULL DEFAULT '',   -- ab Version 3: Merkmale (kartendaten.BESONDERHEITEN)
+    promo           INTEGER NOT NULL DEFAULT 0, -- ab Version 3: Scryfall promo
+    set_art         TEXT                        -- ab Version 3: Scryfall set_type (expansion, box, promo …)
 );
 CREATE TABLE satz (
     set_code    TEXT PRIMARY KEY,
@@ -113,6 +116,7 @@ SPALTEN_DRUCK = (
     "scryfall_id", "oracle_id", "name", "set_code", "set_name", "set_erschienen", "erschienen", "nummer",
     "nummer_zahl", "sprache", "manakosten", "manawert", "farben", "farbidentitaet", "farbgruppe",
     "typzeile", "haupttyp", "seltenheit", "layout", "bild_vorhanden", "cardmarket_id",
+    "besonderheiten", "promo", "set_art",
 )
 
 
@@ -234,7 +238,7 @@ def bauen(
             z["nummer"] or "", z["nummer_zahl"], z["sprache"] or "", z["manakosten"], z["manawert"],
             z["farben"], z["farbidentitaet"], z["farbgruppe"], z["typzeile"], z["haupttyp"],
             z["seltenheit"], objekt.get("layout"), 1 if z["scryfall_id"] in mit_bild else 0,
-            objekt.get("cardmarket_id"),
+            objekt.get("cardmarket_id"), z["besonderheiten"], z["promo"], z["set_art"],
         ))
         oracle = z["oracle_id"]
         if oracle:

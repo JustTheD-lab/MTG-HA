@@ -58,7 +58,26 @@ schickt die Erkennung am PC beim nächsten Start automatisch.
 5. Läuft die Erkennung am PC, holt sie die Scan-Fotos ab (nach den Binderseiten) und legt die erkannten Karten in
    die Kiste **„Scan-Eingang“**. Gleiche sichere Drucke werden zu einem Posten mit Anzahl zusammengefasst,
    unsichere bleiben einzeln und stehen in der Prüfansicht. Ist der PC aus, warten die Fotos im Scan-Eingang.
-   Eine Erkennung dauert etwa 15 Sekunden je Foto (8 Fotos je Lauf).
+   Eine Erkennung dauert etwa 4 Sekunden je Foto (16 Fotos je Lauf).
+
+## Sortierregeln
+
+Unter **„Sortierregeln“** (Regal, Kisten-Boden oder Scan-Eingang) legst du fest, in welche Kiste eine Karte
+gehört, zum Beispiel „Preis (Ø 7 Tage) ab 5 € → Spezial“ oder „Farbe genau Rot → Rot“.
+
+- Die Regeln werden **von oben nach unten** geprüft, die erste passende bestimmt die Kiste. Alle Bedingungen einer
+  Regel müssen zutreffen. Passt keine, bleibt die Karte im Scan-Eingang.
+- Bedingungen: Farbe, Farbidentität, Manawert, Typ, Typzeile, Seltenheit, Set, Art des Sets (z. B. Secret Lair),
+  Special Print (Borderless, Showcase, Extended Art, Retro-Rahmen, Full Art, Foil-Sonderarten), Promo, Foil,
+  Sprache, Name und Preis. Jede Bedingung lässt sich verneinen.
+- **Fächer** einer Kiste (Knopf „Fächer“ in der Kiste), zum Beispiel „Länder“, „6+“ und „1–5“: Die Kistenansicht
+  gruppiert danach („Gruppieren: Fach“), der Scan-Eingang zeigt das Fach zu jeder Karte.
+- Beim Bulk-Scan räumt das Add-on jede **sicher** erkannte Karte sofort in ihre Kiste („Automatisch einsortieren“
+  am Scan-Bildschirm, je Durchgang abschaltbar). Unsichere Karten warten, bis du sie in der Prüfansicht bestätigst.
+  Fehlt ein Wert, den eine Regel braucht (meist der Preis einer neuen Karte), wartet die Karte, bis er da ist; sie
+  landet also nie geraten in einer Kiste. Jedes Einräumen lässt sich zurücknehmen.
+- Für die Special-Print-Merkmale braucht das Add-on den Katalog Version 3. Die Erkennung am PC schickt ihn beim
+  nächsten Start selbst (oder „Katalog senden“ im Symbol neben der Uhr).
 
 ## Wo liegt was?
 

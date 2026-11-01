@@ -24,6 +24,11 @@ const SYM = {
   zurueck: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg>',
 };
 
+/** Schalter „Automatisch einsortieren“ (Sortierregeln) und Link; erscheint zweimal (Start und laufender Scan). */
+const SORTIEREN_HTML = '<div class="scan-sortieren" hidden><label class="scan-umschalter">'
+  + '<input type="checkbox" class="scan-einsortieren" checked> <span>Automatisch einsortieren</span></label>'
+  + '<a class="scan-regeln-link" href="#/regeln">Sortierregeln</a></div>';
+
 const beforeunload = (e) => {
   if (warteschlange.length) { e.preventDefault(); e.returnValue = ''; }
 };
@@ -293,6 +298,43 @@ async function schleife(a) {
   }
 }
 
+/* ---------- Automatisch einsortieren (Sortierregeln) ---------- */
+
+function einsortierenSync(a) {
+  a.bereich.querySelectorAll('.scan-einsortieren').forEach((box) => { box.checked = a.einsortieren; });
+}
+
+/** Schalter einrichten: sichtbar nur, wenn die Datenbank Sortierregeln kennt. Die Wahl bleibt am Gerät gemerkt. */
+async function einsortierenEinrichten(a) {
+  a.einsortieren = vorliebe('scan.einsortieren') !== 'aus';
+  einsortierenSync(a);
+  a.bereich.querySelectorAll('.scan-regeln-link').forEach((link) => link.addEventListener('click', (e) => {
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    gehe('#/regeln');
+  }));
+  a.bereich.querySelectorAll('.scan-einsortieren').forEach((box) => box.addEventListener('change', async () => {
+    const gewollt = box.checked;
+    a.einsortieren = gewollt;
+    vorliebe('scan.einsortieren', gewollt ? 'an' : 'aus');
+    einsortierenSync(a);
+    if (!a.durchgang) return;                 // vor dem Start: gilt für den nächsten neuen Durchgang
+    try {
+      await senden(`/api/scan/durchgang/${a.durchgang}/einstellung`, { daten: { einsortieren: gewollt } });
+    } catch (f) {
+      a.einsortieren = !gewollt;
+      einsortierenSync(a);
+      a.meldung = f.message; a.meldungKurz = true;
+      anzeigen();
+    }
+  }));
+  try {
+    const stand = await holen('/api/regeln');
+    if (ansicht !== a || !stand.verfuegbar) return;
+    a.bereich.querySelectorAll('.scan-sortieren').forEach((zeile) => { zeile.hidden = false; });
+  } catch { /* ohne Sortierregeln bleibt der Schalter verborgen */ }
+}
+
 /* ---------- Kamera ---------- */
 
 async function kameraHolen() {
@@ -333,12 +375,18 @@ async function starten(a) {
   a.el.start.disabled = true;
   a.el.fehlerStart.textContent = '';
   try {
-    const r = await senden('/api/scan/durchgang', { daten: a.neuerDurchgang ? { neu: true } : {} });
+    // „einsortieren: false“ gilt nur für einen neu angelegten Durchgang; ein fortgesetzter behält seine Einstellung
+    const r = await senden('/api/scan/durchgang', { daten: {
+      ...(a.neuerDurchgang ? { neu: true } : {}), ...(a.einsortieren ? {} : { einsortieren: false }) } });
     a.durchgang = r.id;
     a.fortgesetzt = !r.neu;
     try {
       const d = await holen(`/api/scan/durchgang/${r.id}`);
       a.anzahl = (d.fotos || []).filter((f) => f.status !== 'verworfen').length;
+      if (typeof d.einsortieren === 'boolean' && d.einsortieren !== a.einsortieren) {
+        a.einsortieren = d.einsortieren;      // fortgesetzter Durchgang: seine Einstellung zeigen
+        einsortierenSync(a);
+      }
     } catch { a.anzahl = 0; }
   } catch (f) {
     a.el.fehlerStart.textContent = f.status === 503 ? (f.message || 'Das Netzlaufwerk fehlt. Scannen geht erst wieder, wenn es erreichbar ist.') : f.message;
@@ -436,6 +484,7 @@ export async function zeigen(wurzel) {
     </header>
     <div class="scan-start">
       <p class="scan-text">Lege das Handy so über den Card Slinger, dass die Scanzone auf der Karte liegt. Jede eingeworfene Karte wird erkannt und fotografiert, sobald sie ruhig liegt.</p>
+      ${SORTIEREN_HTML}
       <button type="button" class="knopf knopf-haupt scan-los">Scan starten</button>
       <p class="meldung scan-fehler-start" role="alert"></p>
     </div>
@@ -451,6 +500,7 @@ export async function zeigen(wurzel) {
         <p class="scan-erkannt" hidden></p>
         <p class="scan-messwerte" hidden></p>
         <p class="meldung scan-fehler" role="alert"></p>
+        ${SORTIEREN_HTML}
         <div class="scan-regler"><label for="scan-groesse" class="etikett">Scanzone</label>
           <input id="scan-groesse" type="range" min="50" max="100" step="1"><output class="scan-prozent"></output></div>
         <label class="scan-umschalter"><input type="checkbox" class="scan-messwerte-an"> <span>Messwerte</span></label>
@@ -478,7 +528,7 @@ export async function zeigen(wurzel) {
     video: q('.scan-video'), laufend: false, pausiert: false, neu: true, jetzt: false, zustand: null, letzte: null,
     letzterGrund: '', messwerteAn: false, anzahl: 0, aufnahmen: [], meldung: '', meldungKurz: false, fps: 0,
     prozent: Math.min(100, Math.max(50, Number(vorliebe('scan.zone')) || 85)), durchgang: null, fortgesetzt: false,
-    neuerDurchgang: false, beendet: false, lauf: 0, imFlug: false,
+    neuerDurchgang: false, beendet: false, lauf: 0, imFlug: false, bereich, einsortieren: true,
   };
   ansicht = a;
 
@@ -490,6 +540,7 @@ export async function zeigen(wurzel) {
   }
   q('.scan-zurueck').addEventListener('click', () => gehe('#/'));
   a.el.start.addEventListener('click', () => starten(a));
+  einsortierenEinrichten(a);   // nicht abwarten: der Schalter erscheint, sobald die Datenbank Auskunft gibt
 
   const regler = q('#scan-groesse'), prozent = q('.scan-prozent');
   regler.value = String(a.prozent); prozent.textContent = `${a.prozent} %`;
@@ -514,7 +565,7 @@ export async function zeigen(wurzel) {
   });
   a.el.fort.addEventListener('click', async () => {
     try {
-      const r = await senden('/api/scan/durchgang', { daten: { neu: true } });
+      const r = await senden('/api/scan/durchgang', { daten: { neu: true, ...(a.einsortieren ? {} : { einsortieren: false }) } });
       a.durchgang = r.id; a.anzahl = 0; a.aufnahmen = []; a.neu = true; a.fortgesetzt = false; a.beendet = false;
       a.el.fort.hidden = true; a.meldung = 'Neuer Durchgang gestartet.'; a.el.letztes.hidden = true;
       anzeigen();

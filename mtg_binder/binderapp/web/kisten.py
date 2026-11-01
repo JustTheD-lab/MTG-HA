@@ -35,6 +35,7 @@ from starlette.routing import Route
 
 from binderapp.db.datenbank import einfuegen, aendern, loeschen, version
 from binderapp.preise import werte
+from binderapp.sortieren import einsortieren
 from binderapp.web.helfer import Fehler, fehler
 
 __all__ = ["routen"]
@@ -160,7 +161,11 @@ GRUPPIERUNGEN = {
     "typ": Gruppierung("Typ", (KD_FEHLT, TYP_RANG), _mit_kartendaten("kd.haupttyp"), "NULL"),
     "sprache": Gruppierung("Sprache", ("(k.sprache IS NULL)",), "COALESCE(k.sprache, '')", "NULL"),
     "buchstabe": Gruppierung("Anfangsbuchstabe", (f"({BUCHSTABE} = '#')",), BUCHSTABE, "NULL"),
+    # Fächer der Kiste (Sortierregeln, ab Version 6): das Fach je Karte berechnet `fach_vorbereiten` vorab in die
+    # temporäre Tabelle fachwahl; Karten ohne passendes Fach stehen zuletzt.
+    "fach": Gruppierung("Fach", (f"COALESCE(fw.platz, {10 ** 6})",), f"COALESCE(fw.platz, {10 ** 6})", "fw.name"),
 }
+FACH_JOIN = " LEFT JOIN temp.fachwahl fw ON fw.karte_id = k.id"
 
 # Gesamtsammlung (Paket L): Bereich „alles“ statt einer Kiste; dazu Ort und Quelle. Die Tabellen ki (Kiste),
 # t, se, b (Tasche, Seite, Binder) gibt es nur in dieser Abfrage (VON_SAMMLUNG).
@@ -191,6 +196,8 @@ def gruppentext(gruppe: str, schluessel: str, extra) -> str:
         return dict(QUELLEN).get(schluessel, schluessel)
     if gruppe == "sprache":
         return SPRACHEN.get(schluessel, schluessel.upper()) if schluessel else "Ohne Angabe"
+    if gruppe == "fach":
+        return extra or "Ohne Fach"
     if schluessel == "":
         return "Ohne Kartendaten"
     if gruppe == "set":
@@ -291,8 +298,9 @@ def anfrage_lesen(query_params, kiste_id: int | None, nutzer: int) -> Anfrage:
     if richtung not in RICHTUNGEN:
         raise Fehler("Unbekannte Richtung. Möglich: " + _auswahl(RICHTUNGEN) + ".")
     gruppe = _skalar(roh, "gruppe")
-    if gruppe is not None and gruppe not in gruppierungen:
-        raise Fehler("Unbekannte Gruppierung. Möglich: " + _auswahl(gruppierungen) + ".")
+    if gruppe is not None and (gruppe not in gruppierungen or (sammlung and gruppe == "fach")):
+        raise Fehler("Unbekannte Gruppierung. Möglich: " + _auswahl(g for g in gruppierungen
+                                                                    if not (sammlung and g == "fach")) + ".")
     ab = _zahl(roh, "ab", 0, 10 ** 9 - 1, 0)
     anzahl = _zahl(roh, "anzahl", 1, SEITE_MAX, SEITE_STANDARD)
 
@@ -399,7 +407,20 @@ def von(a: Anfrage) -> str:
     """Die Tabellen der Orte (ki, t, se, b) nur, wenn Gruppe oder Filter „Ort“ sie brauchen (schneller)."""
     if a.kiste is None and (a.gruppe == "ort" or any("b.id IN" in w for w in a.where)):
         return VON_SAMMLUNG
-    return VON
+    return VON + FACH_JOIN if a.gruppe == "fach" else VON
+
+
+def fach_vorbereiten(con, nutzer: int, kiste_id: int) -> None:
+    """Fach je Karte der Kiste in die temporäre Tabelle fachwahl (nur diese Verbindung; geht auch nur lesend)."""
+    con.execute("CREATE TEMP TABLE IF NOT EXISTS fachwahl (karte_id INTEGER PRIMARY KEY, platz INTEGER, name TEXT)")
+    con.execute("DELETE FROM temp.fachwahl")
+    faecher = [f["name"] for f in einsortieren.faecher_lesen(con, nutzer, kiste_id) if f["gueltig"]]
+    if not faecher:
+        return
+    ids = [z[0] for z in con.execute("SELECT id FROM karte WHERE nutzer_id = ? AND kiste_id = ?", (nutzer, kiste_id))]
+    zeilen = [(kid, faecher.index(name), name)
+              for kid, name in einsortieren.faecher_von(con, nutzer, kiste_id, ids).items() if name is not None]
+    con.executemany("INSERT INTO temp.fachwahl VALUES (?, ?, ?)", zeilen)
 
 
 def _wo(a: Anfrage, nach_index: bool = False) -> str:
@@ -415,7 +436,9 @@ def _wo(a: Anfrage, nach_index: bool = False) -> str:
 
 
 def sql_ids(a: Anfrage) -> str:
-    """Alle Karten-IDs der gefilterten Auswahl (Mehrfachauswahl „alle gefilterten“), ohne Seiten."""
+    """Alle Karten-IDs der gefilterten Auswahl (Mehrfachauswahl „alle gefilterten“), ohne Seiten. Die Gruppe ändert
+    die Auswahl nicht (und „fach“ hätte hier keine Tabelle fachwahl)."""
+    a = a._replace(gruppe=None)
     return f"SELECT k.id {von(a)} WHERE {_wo(a)} ORDER BY k.id"
 
 
@@ -649,8 +672,10 @@ def routen(h) -> list[Route]:
             saetze = con.execute(SQL_SAETZE, (h.nutzer, kiste_id)).fetchall()
             sprachen = con.execute(SQL_SPRACHEN, (h.nutzer, kiste_id)).fetchall()
             wert = werte.werte(con, h.nutzer, "kiste").get(kiste_id)
+            faecher = einsortieren.faecher_lesen(con, h.nutzer, kiste_id)
         maximum = kopf["manawert_max"]
         return JSONResponse({
+            "faecher": faecher,   # ab Version 6: Fächer der Kiste (Sortierregeln), sonst leer
             "id": k["id"], "name": k["name"], "etikettfarbe": k["etikettfarbe"], "regalplatz": k["regalplatz"],
             "posten": kopf["posten"], "karten": kopf["karten"],
             "wert": wert,   # {"wert": Euro (Durchschnitt 7 Tage), "ohne_preis": Karten} oder None
@@ -671,6 +696,8 @@ def routen(h) -> list[Route]:
             con.execute("BEGIN")  # ein Stand für alle Abfragen dieser Antwort
             _ab_version_3(con, 404)
             _kiste_holen(con, h.nutzer, kiste_id)
+            if a.gruppe == "fach":
+                fach_vorbereiten(con, h.nutzer, kiste_id)
             return JSONResponse(seite_lesen(con, a))
 
     # ------------------------------------------------------------------ Schreiben
@@ -732,6 +759,11 @@ def routen(h) -> list[Route]:
             _kiste_holen(con, h.nutzer, kiste_id)
             if con.execute("SELECT 1 FROM karte WHERE kiste_id = ? LIMIT 1", (kiste_id,)).fetchone() is not None:
                 raise Fehler("Die Kiste ist nicht leer.", 409)
+            regeln = einsortieren.kiste_benutzt(con, h.nutzer, kiste_id)
+            if regeln:
+                raise Fehler("Diese Kiste ist Ziel der Sortierregel „" + "“, „".join(regeln[:3]) + "“. "
+                             "Erst die Regel ändern oder löschen.", 409)
+            einsortieren.faecher_entfernen(con, h.nutzer, kiste_id)
             alt = loeschen(con, h.nutzer, QUELLE, "kiste", kiste_id)
             return {"id": alt["id"], "name": alt["name"]}
         weg = await run_in_threadpool(h.schreibvorgang, arbeit)

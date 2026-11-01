@@ -50,6 +50,7 @@ function fotoHtml(f) {
       + ` href="${k.kiste_id ? `#/kiste/${Number(k.kiste_id)}` : '#/sammlung'}/karte/${Number(k.id)}">${esc(k.name)}`
       + `${k.status !== 'sicher' && !k.geprueft ? ' <span class="eingang-pruefen">prüfen</span>' : ''}</a>`
     : (f.status === 'fehler' && f.fehler ? `<span class="eingang-grund">${esc(f.fehler)}</span>` : '');
+  const ziel = k ? zielHtml(k.ziel) : '';
   const aktion = (f.status === 'neu' || f.status === 'fehler' || verworfen)
     ? `<button type="button" class="knopf eingang-aktion" data-foto="${f.id}" data-aktion="${verworfen ? 'zurueckholen' : 'verwerfen'}">`
       + `${verworfen ? 'Zurückholen' : 'Verwerfen'}</button>`
@@ -58,7 +59,30 @@ function fotoHtml(f) {
     + `<button type="button" class="eingang-bild" data-original="${f.id}" aria-label="Foto ${f.nummer} groß ansehen">${bild}</button>`
     + `<span class="eingang-nummer">${f.nummer}</span>`
     + `<span class="eingang-status" title="${esc(titel)}">${esc(STATUS_TEXT[f.status] || f.status)}</span>`
-    + name + aktion + '</li>';
+    + name + ziel + aktion + '</li>';
+}
+
+/** Ziel der Sortierregeln: „→ Rot · 6+“ (eingeräumt) oder dezent „wartet: Preis fehlt“. */
+function zielHtml(z) {
+  if (!z) return '';
+  if (z.wartet) {
+    const gleich = /^Gleich: (.+)$/.exec(z.wartet);
+    const text = gleich ? `gleich → ${gleich[1]}` : `wartet: ${z.wartet}`;
+    return `<span class="eingang-ziel eingang-ziel--wartet" title="Sortierregeln">${esc(text)}</span>`;
+  }
+  if (z.kiste) {
+    return `<span class="eingang-ziel" title="Einsortiert nach den Sortierregeln">→ ${esc(z.kiste)}${z.fach ? ` · ${esc(z.fach)}` : ''}</span>`;
+  }
+  return '';
+}
+
+/** Schalter „Automatisch einsortieren“ im Kopf eines Durchgangs (nur wenn die Datenbank Sortierregeln kennt). */
+function sortierenHtml(d) {
+  if (typeof d.einsortieren !== 'boolean') return '';
+  return '<div class="eingang-sortieren"><label class="eingang-schalter">'
+    + `<input type="checkbox" class="eingang-einsortieren" data-durchgang="${d.id}"${d.einsortieren ? ' checked' : ''}>`
+    + '<span>Automatisch einsortieren</span></label>'
+    + '<a class="eingang-regeln-link" href="#/regeln">Sortierregeln</a></div>';
 }
 
 async function fotosLaden(z, id, platz) {
@@ -66,9 +90,9 @@ async function fotosLaden(z, id, platz) {
     const d = await holen(`/api/scan/durchgang/${id}`);
     if (zustand !== z) return;
     const liste = [...(d.fotos || [])].sort((x, y) => x.nummer - y.nummer);
-    platz.innerHTML = liste.length
+    platz.innerHTML = sortierenHtml(d) + (liste.length
       ? `<ul class="eingang-raster" role="list">${liste.map(fotoHtml).join('')}</ul>`
-      : '<p class="eingang-leer">In diesem Durchgang gibt es noch keine Fotos.</p>';
+      : '<p class="eingang-leer">In diesem Durchgang gibt es noch keine Fotos.</p>');
   } catch (f) {
     platz.innerHTML = `<p class="meldung">${esc(f.message)}</p>`;
   }
@@ -114,7 +138,8 @@ export async function zeigen(wurzel) {
     + ' stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg></button>'
     + '<h1 class="eingang-titel">Scan-Eingang</h1>'
     + '<button type="button" class="knopf knopf-haupt eingang-weiter">Weiter scannen</button></header>'
-    + '<p class="eingang-hinweis">Die Erkennung holt die Fotos ab, sobald der PC läuft. Erkannte Karten liegen in der Kiste „Scan-Eingang“.</p>'
+    + '<p class="eingang-hinweis">Die Erkennung holt die Fotos ab, sobald der PC läuft. Erkannte Karten liegen in der Kiste „Scan-Eingang“, '
+    + 'bis eine Regel sie einsortiert (<a class="eingang-regeln-link" href="#/regeln">Sortierregeln</a>).</p>'
     + '<ul class="eingang-liste" role="list"></ul>';
   wurzel.replaceChildren(bereich);
   const z = { bereich, liste: bereich.querySelector('.eingang-liste'), offen: new Set(), uhr: 0 };
@@ -122,6 +147,29 @@ export async function zeigen(wurzel) {
 
   bereich.querySelector('.eingang-zurueck').addEventListener('click', () => gehe('#/'));
   bereich.querySelector('.eingang-weiter').addEventListener('click', () => gehe('#/scan'));
+
+  // Links zu den Sortierregeln über die App (neuer Verlaufseintrag, „Zurück“ kommt hierher zurück)
+  bereich.addEventListener('click', (e) => {
+    const link = e.target.closest('a.eingang-regeln-link');
+    if (!link || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    gehe('#/regeln');
+  });
+
+  // Schalter „Automatisch einsortieren“ eines Durchgangs
+  z.liste.addEventListener('change', async (e) => {
+    const schalter = e.target.closest('.eingang-einsortieren');
+    if (!schalter) return;
+    const gewollt = schalter.checked;
+    schalter.disabled = true;
+    try {
+      await senden(`/api/scan/durchgang/${schalter.dataset.durchgang}/einstellung`, { daten: { einsortieren: gewollt } });
+    } catch (f) {
+      schalter.checked = !gewollt;
+      schalter.closest('.eingang-sortieren').insertAdjacentHTML('afterend', `<p class="meldung">${esc(f.message)}</p>`);
+    }
+    schalter.disabled = false;
+  });
 
   z.liste.addEventListener('click', async (e) => {
     const kopf = e.target.closest('.eingang-kopf');

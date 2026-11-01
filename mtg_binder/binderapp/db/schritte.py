@@ -17,7 +17,10 @@ from binderapp.db.datenbank import _protokoll
 from binderapp.db.seiten import Fehler
 
 QUELLE = "nutzer"
-TABELLEN = ("karte", "tasche", "kiste")
+# Schritte, die die Sortierregeln von selbst ausführen (binderapp.sortieren), lassen sich genauso zurücknehmen.
+QUELLE_REGEL = "sortierregel"
+QUELLEN = (QUELLE, QUELLE_REGEL)
+TABELLEN = ("karte", "tasche", "kiste", "scan_foto")
 KONFLIKT = "Das lässt sich nicht mehr zurücknehmen: Die Karten wurden inzwischen geändert."
 MUSTER = re.compile(r"^[0-9a-f]{32}$")
 JETZT = "SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now')"
@@ -46,7 +49,8 @@ def _zeile(con, tabelle: str, datensatz: int):
     return con.execute(f"SELECT * FROM {tabelle} WHERE id = ?", (datensatz,)).fetchone()
 
 
-def aendern_genau(con, nutzer: int, tabelle: str, datensatz: int, felder: dict, *, schritt: str) -> dict:
+def aendern_genau(con, nutzer: int, tabelle: str, datensatz: int, felder: dict, *, schritt: str,
+                  quelle: str = QUELLE) -> dict:
     """Wie `datenbank.aendern`, aber mit altem `geaendert` in der Historie (für exaktes Rückgängig)."""
     zeile = _zeile(con, tabelle, datensatz)
     if zeile is None:
@@ -59,7 +63,7 @@ def aendern_genau(con, nutzer: int, tabelle: str, datensatz: int, felder: dict, 
         alt["geaendert"] = zeile["geaendert"]
         neu["geaendert"] = con.execute(JETZT).fetchone()[0]
     con.execute(f"UPDATE {tabelle} SET {', '.join(f'{k} = ?' for k in neu)} WHERE id = ?", (*neu.values(), datensatz))
-    _protokoll(con, nutzer, QUELLE, tabelle, datensatz, "geaendert", alt, neu, schritt)
+    _protokoll(con, nutzer, quelle, tabelle, datensatz, "geaendert", alt, neu, schritt)
     return neu
 
 
@@ -72,19 +76,19 @@ def einfuegen(con, nutzer: int, tabelle: str, felder: dict, *, schritt: str, rue
 
 
 def loeschen(con, nutzer: int, tabelle: str, datensatz: int, *, schritt: str,
-             rueckgaengig_von: str | None = None) -> dict:
+             rueckgaengig_von: str | None = None, quelle: str = QUELLE) -> dict:
     zeile = _zeile(con, tabelle, datensatz)
     if zeile is None:
         raise KeyError(f"{tabelle} {datensatz} fehlt")
     alt = dict(zeile)
     con.execute(f"DELETE FROM {tabelle} WHERE id = ?", (datensatz,))
-    _protokoll(con, nutzer, QUELLE, tabelle, datensatz, "geloescht", alt, None, schritt, rueckgaengig_von)
+    _protokoll(con, nutzer, quelle, tabelle, datensatz, "geloescht", alt, None, schritt, rueckgaengig_von)
     return alt
 
 
 def zeilen(con, nutzer: int, schritt: str) -> list:
-    return con.execute("SELECT * FROM historie WHERE schritt = ? AND nutzer_id = ? AND quelle = ? ORDER BY id",
-                       (schritt, nutzer, QUELLE)).fetchall()
+    return con.execute("SELECT * FROM historie WHERE schritt = ? AND nutzer_id = ? AND quelle IN (?, ?) ORDER BY id",
+                       (schritt, nutzer, *QUELLEN)).fetchall()
 
 
 def zurueckgenommen(con, schritt: str) -> bool:
