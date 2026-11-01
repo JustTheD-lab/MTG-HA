@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.6.3
+- Sortierung „Preis (Ø 7 Tage)“ in der Gesamtsammlung und in jeder Kiste (Foil-Karten mit Foil-Preis, ohne Preis
+  zuletzt).
+- Neue Ansicht „Sets“ (Regal unter „Sammlung“ oder Kopf der Gesamtsammlung): je Set die Vollständigkeit nach
+  Drucken (jede Sammlernummer, auch Borderless und Showcase) und nach Namen, mit Karten und Wert. Im Set alle
+  Drucke oder Namen, gefiltert nach vorhanden oder fehlend. Braucht den Katalog im Add-on.
+
 ## 0.6.2
 - Kisten lassen sich jetzt auch mit Karten löschen („Löschen“ in der Kiste, Name eintippen und noch einmal
   bestätigen). Karten und Fächer werden mit Historie gelöscht; eine Kiste, in die eine Sortierregel einsortiert,

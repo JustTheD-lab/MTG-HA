@@ -60,7 +60,7 @@ from binderapp.db import seiten
 from binderapp.db.datenbank import MINDEST, aendern, einfuegen, schreiben, verbinden, version
 from binderapp.db.seiten import Fehler
 from binderapp.preise import werte
-from binderapp.web import abzug, hochladen, kisten, kistenschreiben, pc, pruefen, regeln, sammlung, scan
+from binderapp.web import abzug, hochladen, kisten, kistenschreiben, pc, pruefen, regeln, sammlung, scan, sets
 from binderapp.web.anmeldung import COOKIE, DAUER, Anmeldung
 from binderapp.web.helfer import Helfer
 from binderapp.web.speicher import MELDUNG as MELDUNG_SPEICHER
@@ -651,6 +651,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         *abzug.routen(h),
         *scan.routen(h),
         *regeln.routen(h),
+        *sets.routen(h),
     ])
     async def zu_gross(request, ausnahme):
         """Riesige IDs in der Adresse (SQLite kennt nur 64 Bit) sind schlicht nicht vorhanden, kein Serverfehler."""

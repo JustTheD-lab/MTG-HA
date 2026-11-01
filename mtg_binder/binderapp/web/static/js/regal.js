@@ -143,6 +143,13 @@ function sammlungHtml(s) {
     + '<path d="M9 5l7 7-7 7"/></svg></button>';
 }
 
+/** Unaufdringlicher Einstieg „Sets“ (Vollständigkeit je Set) unter dem Platz „Sammlung“; nur mit Sammlung. */
+function setsHtml(s) {
+  if (!s || typeof s.karten !== 'number') return '';
+  return '<p class="regal-sets-zeile"><button type="button" class="knopf regal-sets"'
+    + ' aria-label="Sets öffnen: wie vollständig die Sammlung je Set ist">Sets</button></p>';
+}
+
 /** Platz „Scan-Eingang“ im Stil der Sammlung (Bulk-Scan). Ohne Schnittstelle (alte Datenbank) gibt es ihn nicht. */
 function scanPlatzHtml(s) {
   const g = s?.gesamt;
@@ -558,7 +565,7 @@ export async function zeigen(wurzel, parameter, vorher) {
     + '</div></form>'
     + '<p class="nur-vorleser" role="status" aria-live="polite"></p>'
     + '<section class="regal-treffer" id="regal-treffer" aria-label="Treffer" hidden></section>'
-    + '<div class="regal-moebel">' + sammlungHtml(sammlung) + scanPlatzHtml(scanStand)
+    + '<div class="regal-moebel">' + sammlungHtml(sammlung) + setsHtml(sammlung) + scanPlatzHtml(scanStand)
     + '<div class="regal-korpus" role="group" aria-label="Binder im Regal"></div>'
     + (kistenDa ? kistenbodenHtml(kisten) : '')
     + '</div>';
@@ -647,6 +654,7 @@ export async function zeigen(wurzel, parameter, vorher) {
   moebel.addEventListener('click', (ereignis) => {
     if (ereignis.target.closest('.scan-platz')) { gehe('#/scan/eingang'); return; }
     if (ereignis.target.closest('.regal-regeln')) { gehe('#/regeln'); return; }
+    if (ereignis.target.closest('.regal-sets')) { gehe('#/sets'); return; }
     if (ereignis.target.closest('.regal-sammlung')) { gehe('#/sammlung'); return; }
     const knopf = ereignis.target.closest('.regal-ruecken');
     if (knopf) { gehe(`#/binder/${knopf.dataset.binder}`); return; }
@@ -731,7 +739,9 @@ export async function zeigen(wurzel, parameter, vorher) {
   // Zurück aus dem Lesetisch oder der Kistenansicht: Rücken bzw. Kiste gleiten an ihren Platz
   // (nicht bei wiederhergestellter Suche)
   const sucheDa = letzteSuche.trim().length >= 2;
-  if (vorher?.sammlung && !sucheDa) {
+  if ((vorher?.ansicht === 'sets' || vorher?.ansicht === 'set') && !sucheDa) {
+    zustand.szene.querySelector('.regal-sets')?.focus({ preventScroll: true });   // zurück aus den Sets
+  } else if (vorher?.sammlung && !sucheDa) {
     zustand.szene.querySelector('.regal-sammlung')?.focus({ preventScroll: true });   // zurück aus der Sammlung
   } else if ((vorher?.ansicht === 'lesetisch' || vorher?.ansicht === 'kiste') && !sucheDa) {
     const istKiste = vorher.ansicht === 'kiste';

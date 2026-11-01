@@ -88,6 +88,11 @@ FARB_RANG = _rang("kd.farbgruppe", FARBEN)
 SELTENHEIT_RANG = _rang("kd.seltenheit", SELTENHEITEN)
 TYP_RANG = _rang("kd.haupttyp", TYPEN, sonst=len(TYPEN) - 1)
 MANA_STUFE = "MIN(CAST(kd.manawert AS INTEGER), 7)"
+# Preis (Durchschnitt 7 Tage, Foil-Karten mit Foil-Preis) des neuesten Tages; `pr` gibt es nur bei dieser
+# Sortierung (PREIS_JOIN). Karten ohne Preis stehen in beiden Richtungen zuletzt.
+PREIS = "(CASE WHEN k.foil THEN pr.avg7_foil ELSE pr.avg7 END)"
+PREIS_JOIN = (" LEFT JOIN preis pr ON pr.cardmarket_id = kd.cardmarket_id"
+              " AND pr.tag = (SELECT MAX(tag) FROM preisabruf)")
 NAME_NOCASE = "k.name COLLATE NOCASE"
 
 
@@ -134,7 +139,9 @@ SORTIERUNGEN = {
     "anzahl": Sortierung("Anzahl", "ab", (), ("k.anzahl",)),
     "neu": Sortierung("Zuletzt hinzugefügt", "ab", (), ("k.angelegt", "k.id")),
     "foil": Sortierung("Foil", "ab", (), ("k.foil",)),
+    "preis": Sortierung("Preis (Ø 7 Tage)", "ab", (f"({PREIS} IS NULL)",), (PREIS,)),
 }
+PREIS_AB_VERSION = 4
 RICHTUNGEN = {"auf": "ASC", "ab": "DESC"}
 
 
@@ -406,9 +413,10 @@ SQL_ORT = ("SELECT k.id, k.kiste_id, ki.name AS kiste_name, b.id AS binder_id, b
 
 def von(a: Anfrage) -> str:
     """Die Tabellen der Orte (ki, t, se, b) nur, wenn Gruppe oder Filter „Ort“ sie brauchen (schneller)."""
+    preis = PREIS_JOIN if a.sort == "preis" else ""
     if a.kiste is None and (a.gruppe == "ort" or any("b.id IN" in w for w in a.where)):
-        return VON_SAMMLUNG
-    return VON + FACH_JOIN if a.gruppe == "fach" else VON
+        return VON_SAMMLUNG + preis
+    return VON + preis + (FACH_JOIN if a.gruppe == "fach" else "")
 
 
 def fach_vorbereiten(con, nutzer: int, kiste_id: int) -> None:
@@ -483,6 +491,8 @@ def sql_gruppen(a: Anfrage) -> str:
 
 def seite_lesen(con, a: Anfrage) -> dict:
     """Eine Seite Karten mit Gesamtzahl und Gruppen (Kistenansicht und Gesamtsammlung)."""
+    if a.sort == "preis" and version(con) < PREIS_AB_VERSION:
+        raise Fehler("Preise gibt es erst ab Datenbankversion 4.", 409)
     gesamt = con.execute(sql_gesamt(a), a.args).fetchone()
     zeilen = con.execute(sql_karten(a), (*a.args, a.anzahl, a.ab)).fetchall()
     gruppen = None

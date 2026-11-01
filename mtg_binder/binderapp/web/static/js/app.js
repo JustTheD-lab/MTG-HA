@@ -12,7 +12,9 @@
 //   #/scan                     Bulk-Scan mit der Handykamera (scan.js)
 //   #/scan/eingang             Scan-Eingang: Durchgänge und ihre Fotos (eingang.js)
 //   #/regeln                   Sortierregeln: wohin neue Karten einsortiert werden (regeln.js)
-//   #/pruefen                  Prüfansicht: unsichere Karten nacheinander
+//   #/sets                     Sets: Übersicht mit Vollständigkeit der Sammlung (sets.js)
+//   #/set/ecl                  ein Set: Drucke und Namen, vorhanden oder fehlend (sets.js; Code nur [a-z0-9]{2,8})
+//   #/pruefen                 Prüfansicht: unsichere Karten nacheinander
 //   #/pruefen/karte/12         dazu Karte 12 groß
 //
 // Jede Ansicht (regal.js, lesetisch.js, kiste.js, pruefen.js) exportiert:
@@ -30,10 +32,12 @@ import * as karte from './karte.js';
 import * as scan from './scan.js';
 import * as eingang from './eingang.js';
 import * as regeln from './regeln.js';
+import * as sets from './sets.js';
 import { laden as sitzungLaden } from './anmeldung.js';
 import { holen } from './gemeinsam.js';
 
-const ANSICHTEN = { regal, lesetisch, kiste, pruefen, scan, eingang, regeln };
+// `sets` (Übersicht) und `set` (ein Set) sind dasselbe Modul; es unterscheidet sie am Parameter `set`.
+const ANSICHTEN = { regal, lesetisch, kiste, pruefen, scan, eingang, regeln, sets, set: sets };
 const buehne = document.getElementById('buehne');
 let aktuell = null;  // { name, parameter }
 let laeuft = Promise.resolve();
@@ -65,6 +69,12 @@ export function lesen(hash) {
   }
   if (teile[0] === 'regeln') {
     return { ansicht: 'regeln', binder: null, kiste: null, sammlung: false, seite: null, karte: null };
+  }
+  if (teile[0] === 'sets') {
+    return { ansicht: 'sets', binder: null, kiste: null, sammlung: false, seite: null, karte: null, set: null };
+  }
+  if (teile[0] === 'set' && /^[a-z0-9]{2,8}$/.test(teile[1] ?? '')) {
+    return { ansicht: 'set', binder: null, kiste: null, sammlung: false, seite: null, karte: null, set: teile[1] };
   }
   if (teile[0] === 'pruefen') {
     return { ansicht: 'pruefen', binder: null, kiste: null, sammlung: false, seite: null,

@@ -1,0 +1,105 @@
+/* Sets (#/sets und #/set/CODE): Übersicht mit Vollständigkeit, Detail mit Drucken und Namen. Stil „Galerie“.
+   Klassen mit Vorsatz sets-; dazu der Einstieg im Regal (regal-sets) und in der Gesamtsammlung (kiste-sets). */
+
+:root {
+  --sets-drucke: var(--messing);
+  --sets-namen: #6aa386;
+}
+
+/* ---------- Seite ---------- */
+.sets { max-width: 1100px; margin: 0 auto; padding: calc(12px + env(safe-area-inset-top)) var(--rand-sicher) 56px; }
+.sets-kopfzeile { display: flex; align-items: flex-start; gap: 12px; }
+.sets-zurueck { margin-top: 2px; }
+.sets-titelblock { flex: 1; min-width: 0; }
+.sets-titel { font-size: 1.6rem; overflow-wrap: anywhere; }
+@media (max-width: 420px) { .sets-titel { font-size: 1.35rem; } }
+.sets-zahl { margin: 2px 0 0; }
+.sets-code-gross { margin: 4px 0 2px; color: var(--messing-hell); }
+.sets-datum { margin: 4px 0 0; color: var(--text-2); font-size: 0.92rem; }
+.sets-hinweis { margin: 28px 0; color: var(--text-2); font-size: 0.98rem; line-height: 1.5; text-align: center; }
+.sets-inhalt { margin-top: 14px; }
+
+/* ---------- Werkzeuge ---------- */
+.sets-werkzeug { display: grid; gap: 10px; margin: 6px 0 10px; }
+.sets-suchfeld { position: relative; color: var(--text-3); }
+.sets-suchfeld > svg { position: absolute; left: 12px; top: 13px; pointer-events: none; }
+.sets-suche { padding-left: 38px; }
+.sets-pillen { display: flex; flex-wrap: wrap; gap: 8px; }
+.sets-pille { min-height: 44px; padding: 0 1em; font-size: 0.9rem; }
+.sets-pille .sets-anzahl { font-variant-numeric: tabular-nums; opacity: 0.75; font-size: 0.82rem; }
+
+/* ---------- Balken ---------- */
+.sets-balken-zeile { display: grid; gap: 4px; min-width: 0; }
+.sets-balken-text { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 0.82rem; }
+.sets-balken-titel { color: var(--text-2); font-weight: 500; }
+.sets-balken-zahlen { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
+.sets-balken { display: block; height: 6px; border-radius: 999px; background: var(--flaeche-3); overflow: hidden; }
+.sets-balken-fuell { display: block; height: 100%; width: calc(var(--p) * 1%); border-radius: 999px; background: var(--sets-farbe); }
+.sets-art-drucke { --sets-farbe: var(--sets-drucke); }
+.sets-art-namen { --sets-farbe: var(--sets-namen); }
+.sets-balken-fuell.sets-voll { box-shadow: 0 0 0 1px var(--sets-farbe); }
+.sets-balken-gross { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 28px;
+  margin: 16px 0 14px; padding: 14px 16px; background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius); }
+.sets-balken-gross .sets-balken { height: 8px; }
+.sets-balken-gross .sets-balken-text { font-size: 0.92rem; }
+
+/* ---------- Übersicht ---------- */
+.sets-liste { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.sets-eintrag { min-width: 0; content-visibility: auto; contain-intrinsic-size: auto 150px; }
+.sets-set {
+  display: grid; gap: 8px; padding: 12px 14px; height: 100%;
+  background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius);
+  color: var(--text); text-decoration: none;
+  transition: border-color var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve);
+}
+.sets-set:hover { background: var(--flaeche-3); border-color: var(--messing-dunkel); }
+.sets-set-kopf { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.sets-code { flex: none; min-width: 3.2em; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.08em; color: var(--messing-hell);
+  font-variant-numeric: tabular-nums; }
+.sets-set-name { flex: 1; min-width: 0; font-weight: 600; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sets-jahr { flex: none; font-size: 0.82rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.sets-set-fuss { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 0.82rem; color: var(--text-3);
+  font-variant-numeric: tabular-nums; }
+.sets-nokat { font-size: 0.84rem; color: var(--text-3); }
+
+/* ---------- Detail: Drucke und Namen ---------- */
+.sets-zaehlzeile { margin: 6px 0 10px; color: var(--text-2); font-size: 0.94rem; font-variant-numeric: tabular-nums; }
+.sets-druckliste { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+.sets-zeile { min-width: 0; content-visibility: auto; contain-intrinsic-size: auto 62px; }
+.sets-zeile-innen {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  min-height: 54px; padding: 8px 12px; height: 100%;
+  background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius-klein);
+  color: var(--text); text-decoration: none;
+}
+.sets-zeile-innen.sets-namenzeile { grid-template-columns: minmax(0, 1fr) auto; }
+a.sets-link { transition: background-color var(--dauer-kurz) var(--kurve), border-color var(--dauer-kurz) var(--kurve); }
+a.sets-link:hover { background: var(--flaeche-3); border-color: var(--messing-dunkel); }
+.sets-fehlt .sets-zeile-innen { background: transparent; border-style: dashed; border-color: var(--linie); }
+.sets-fehlt .sets-nr, .sets-fehlt .sets-druck-name, .sets-fehlt .sets-selt { color: var(--text-3); }
+.sets-fehlt .sets-abz { opacity: 0.6; }
+.sets-nr { min-width: 2.6em; font-size: 0.88rem; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.sets-haupt { display: grid; gap: 3px; min-width: 0; }
+.sets-druck-name { font-weight: 500; overflow-wrap: anywhere; line-height: 1.3; }
+.sets-unter { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.sets-selt { font-size: 0.78rem; color: var(--text-2); }
+.sets-abz { padding: 0 8px; border: 1px solid var(--linie-stark); border-radius: 999px; font-size: 0.7rem; font-weight: 500;
+  line-height: 1.6; color: var(--text-2); white-space: nowrap; }
+.sets-abz-foil { border-color: var(--messing-dunkel); color: var(--messing-hell); }
+.sets-anz { display: inline-flex; align-items: center; gap: 5px; font-size: 0.9rem; font-weight: 600;
+  color: var(--messing-hell); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sets-anz-fehlt { font-weight: 400; font-size: 0.8rem; color: var(--text-3); }
+
+@media (max-width: 480px) {
+  .sets-liste, .sets-druckliste { grid-template-columns: minmax(0, 1fr); }
+  .sets-zeile-innen { gap: 10px; padding: 8px 10px; }
+}
+
+/* ---------- Einstieg im Regal und in der Sammlung ---------- */
+.regal-sets-zeile { display: flex; justify-content: center; margin: -10px 0 20px; }
+.regal-sets { min-height: 44px; font-size: 0.84rem; color: var(--text-2); border-color: var(--linie); }
+.regal-sets:hover { color: var(--text); }
+a.kiste-sets { text-decoration: none; font-size: 0.9rem; color: var(--text-2); border-color: var(--linie-stark); }
+a.kiste-sets:hover { color: var(--text); }

@@ -1851,6 +1851,17 @@ async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, o
   s.wurzel.classList.toggle('kiste-sammlung', sammlung);
   katalogDa();   // nicht abwarten: für „Karte hinzufügen“ und Bilder neuer Karten
   if (still) { s.wurzel.classList.add('kiste-still'); s.wurzel.hidden = true; }
+  if (sammlung) {   // Einstieg in die Set-Ansicht (sets.js)
+    const sets = Object.assign(document.createElement('a'), { className: 'knopf kiste-sets', href: '#/sets' });
+    sets.setAttribute('aria-label', 'Sets öffnen: wie vollständig die Sammlung je Set ist');
+    sets.textContent = 'Sets';
+    sets.addEventListener('click', (e) => {
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      e.preventDefault();
+      gehe('#/sets');
+    });
+    s.wurzel.querySelector('.kiste-aktionen').append(sets);
+  }
   s.wurzel.querySelector('.kiste-aktionen').append(anmeldeKnopf());
   wurzel.append(s.wurzel);
   titelSetzen();
