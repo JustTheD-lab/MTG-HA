@@ -163,7 +163,7 @@ class Sender(threading.Thread):
         self.verbindung: Verbindung | None = None
         self.halt = threading.Event()
         self.letzter_fehler: str | None = None
-        self.letzte_werte = 0.0
+        self.letzte_werte = float("-inf")   # monotonic() kann klein sein (frisch gestarteter Rechner)
         self.preistag: str | None = None
 
     # ------------------------------------------------------------ Verbindung
@@ -175,7 +175,7 @@ class Sender(threading.Thread):
         self.verbindung.verbinden()
         self._discovery_fest()
         self.verbindung.senden(VERFUEGBAR, "online")
-        self.letzte_werte = 0.0   # gleich alles senden
+        self.letzte_werte = float("-inf")   # gleich alles senden
         log.info("Home Assistant: mit MQTT-Broker %s:%s verbunden", d["host"], d.get("port") or 1883)
 
     def _senden_json(self, thema: str, inhalt) -> None:
@@ -190,6 +190,7 @@ class Sender(threading.Thread):
     def runde(self, jetzt: float) -> None:
         """Eine Runde: Status immer, Werte nach Takt oder neuem Preistag."""
         if not self.db.exists():
+            self.verbindung.ping()   # Verbindung halten, sonst trennt der Broker nach dem Keepalive
             return
         with closing(verbinden(self.db, nur_lesen=True)) as con:
             status = daten.status(con)
@@ -224,9 +225,13 @@ class Sender(threading.Thread):
 
     def _stand_lesen(self) -> dict[str, str]:
         try:
-            return json.loads(self.stand_datei.read_text(encoding="utf-8"))
+            stand = json.loads(self.stand_datei.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return {}
+        if not isinstance(stand, dict):
+            return {}
+        return {o: a for o, a in stand.items() if isinstance(a, str) and o.count("_") >= 2
+                and o.split("_", 1)[0] in ("binder", "kiste")}
 
     def _stand_schreiben(self, stand: dict[str, str]) -> None:
         teil = self.stand_datei.with_name(self.stand_datei.name + ".neu")
