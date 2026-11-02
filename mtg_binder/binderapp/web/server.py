@@ -60,7 +60,8 @@ from binderapp.db import seiten
 from binderapp.db.datenbank import MINDEST, aendern, einfuegen, schreiben, verbinden, version
 from binderapp.db.seiten import Fehler
 from binderapp.preise import werte
-from binderapp.web import abzug, hochladen, kisten, kistenschreiben, pc, pruefen, regeln, sammlung, scan, sets
+from binderapp.web import (abzug, bearbeiten, hochladen, kisten, kistenschreiben, pc, pruefen, regeln, sammlung, scan,
+                           sets)
 from binderapp.web.anmeldung import COOKIE, DAUER, Anmeldung
 from binderapp.web.helfer import Helfer
 from binderapp.web.speicher import MELDUNG as MELDUNG_SPEICHER
@@ -329,7 +330,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
                 continue
             tasche = taschen.get(z["tasche_id"])
             if tasche is None:
-                tasche = {"zeile": z["zeile"], "spalte": z["spalte"], "inhalt": z["inhalt"],
+                tasche = {"id": z["tasche_id"], "zeile": z["zeile"], "spalte": z["spalte"], "inhalt": z["inhalt"],
                           "ausschnitt": z["ausschnitt"], "karten": []}
                 taschen[z["tasche_id"]] = tasche
                 seite["taschen"].append(tasche)
@@ -647,6 +648,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         *pruefen.routen(h),
         *kisten.routen(h),
         *kistenschreiben.routen(h),
+        *bearbeiten.routen(h),
         *sammlung.routen(h),
         *abzug.routen(h),
         *scan.routen(h),

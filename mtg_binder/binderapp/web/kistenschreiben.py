@@ -46,6 +46,18 @@ ZUSTAENDE = ("mint", "near_mint", "excellent", "good", "light_played", "played",
 summe = schritte.summe
 
 
+def druck_nachschlagen(h, scryfall_id: str) -> dict:
+    """Kartendaten eines Drucks aus dem Katalog (Karte hinzufügen in Kiste und Binder); ohne Katalog 409."""
+    kat = h.katalog()
+    if kat is None:
+        raise Fehler(KEIN_KATALOG.replace("Druck ändern", "Karte hinzufügen"), 409)
+    with closing(kat):
+        gefunden = kartendaten.nachschlagen(kat, scryfall_id)
+    if gefunden is None:
+        raise Fehler("Diesen Druck gibt es im Katalog nicht.", 404)
+    return gefunden
+
+
 def _ganzzahl(wert, name: str, von: int, bis: int) -> int:
     if isinstance(wert, bool) or not isinstance(wert, int) or not von <= wert <= bis:
         raise Fehler(f"„{name}“ muss eine ganze Zahl von {von} bis {bis} sein.")
@@ -163,16 +175,7 @@ def routen(h) -> list[Route]:
         if zustand is not None and zustand not in ZUSTAENDE:
             raise Fehler("Unbekannter Zustand. Möglich: " + ", ".join(ZUSTAENDE) + ".")
 
-        def katalog_lesen():
-            kat = h.katalog()
-            if kat is None:
-                raise Fehler(KEIN_KATALOG.replace("Druck ändern", "Karte hinzufügen"), 409)
-            with closing(kat):
-                gefunden = kartendaten.nachschlagen(kat, scryfall_id)
-            if gefunden is None:
-                raise Fehler("Diesen Druck gibt es im Katalog nicht.", 404)
-            return gefunden
-        daten = await run_in_threadpool(katalog_lesen)
+        daten = await run_in_threadpool(druck_nachschlagen, h, scryfall_id)
 
         def arbeit(con):
             _ab_version_3(con, 409)

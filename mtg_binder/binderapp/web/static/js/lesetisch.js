@@ -46,6 +46,11 @@ const SYM_HAKEN = SYM('M5 12.5l4.5 4.5L19 7.5', 2.6);
 const SYM_SEITEN = SYM('M8 3h9a2 2 0 0 1 2 2v11M5 7h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z');
 const SYM_MINUS = SYM('M6 12h12');
 const SYM_PLUS = SYM('M12 6v12M6 12h12');
+const SYM_STERN = SYM('M12 4l2.4 5 5.4.7-4 3.8 1 5.4L12 16.2 7.2 18.9l1-5.4-4-3.8 5.4-.7z');
+const SYM_STIFT = SYM('M5 19l1-4L16.5 4.5a2 2 0 0 1 3 3L9 18z');
+const SYM_WEITER_PFEIL = SYM('M4 12h16M15 7l5 5-5 5');
+const SYM_MUELL = SYM('M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12');
+const SYM_KREUZ = SYM('M6 6l12 12M18 6L6 18');
 
 /** Zustand des gerade angezeigten Lesetisches, sonst null. */
 let z = null;
@@ -85,6 +90,7 @@ export async function zeigen(wurzel, p, vorher) {
     art: vorliebe('bildart') === 'foto' ? 'foto' : 'scryfall',
     info: new Map(), sigs: new Map(), ladeNr: 0, angewandt: 0, wartend: null, abfrage: 0,
     beruehrt: 0, folgeId: null, dlg: null, binder: null, anmeldeKnopf: anmeldeKnopf(), seitenKnopf: null,
+    bearb: null, bearbKnopf: null, wz: null, toast: null, toastUhr: 0, toastRueck: null,
   };
   zustand.leiste.append(zurueckKnopf());
   const einblenden = vorher?.ansicht === 'regal' && !bewegungReduziert();
@@ -172,13 +178,12 @@ function datenSetzen(binder) {
 }
 
 /** Je Seite ein Fingerabdruck ihrer Daten: nur Seiten, deren Daten sich ändern, werden neu gezeichnet. */
+const sigDaten = (s, aktiv) => JSON.stringify([s.nummer, s.id, s.art, s.status, s.fehler, s.dateiname,
+  WARTET.has(s.status) ? aktiv : null, s.status === 'fehler' ? angemeldet() : null, s.taschen]);
 function sigsBerechnen() {
   const aktiv = z.binder.verarbeiter?.aktiv ?? null;
   z.sigs = new Map();
-  for (const s of z.binder.seiten) {
-    z.sigs.set(s.nummer, JSON.stringify([s.nummer, s.id, s.art, s.status, s.fehler, s.dateiname,
-      WARTET.has(s.status) ? aktiv : null, s.status === 'fehler' ? angemeldet() : null, s.taschen]));
-  }
+  for (const s of z.binder.seiten) z.sigs.set(s.nummer, sigDaten(s, aktiv));
 }
 const sigVon = (n) => (n < 1 || n > z.N ? 'vorsatz' : z.sigs.get(n));
 const wartet = () => z.binder.seiten.some((s) => WARTET.has(s.status));
@@ -228,6 +233,10 @@ function anwenden(binder) {
   const verfolgt = z.folgeId ?? z.info.get(z.seite)?.id ?? null;
   z.folgeId = null;
   datenSetzen(binder);
+  if (z.bearb?.wahl && !tascheMitId(z.bearb.wahl.tascheId)?.karte) {  // die gewählte Karte liegt nicht mehr dort
+    z.bearb.wahl = null;
+    werkzeugZeichnen();
+  }
   z.tisch.dataset.farbe = binder.farbe || 'schwarz';
   const titel = z.leiste.querySelector('.tisch-titel');
   if (titel) titelSetzen(titel, binder);
@@ -288,7 +297,8 @@ async function abfrageTakt() {
 function sitzungGeaendert() {
   if (!z) return;
   if (z.seitenKnopf) z.seitenKnopf.hidden = !angemeldet();
-  if (!angemeldet()) z.dlg?.schliessen();
+  if (z.bearbKnopf) z.bearbKnopf.hidden = !angemeldet() || !z.N;
+  if (!angemeldet()) { bearbeitenUmschalten(false); z.dlg?.schliessen(); }
   if (!z.N) return leereAnsicht();
   sigsBerechnen();
   if (!z.lauf && !beruehrt()) erneuern();
@@ -310,6 +320,8 @@ function abbauen() {
   z.lauf?.beenden();
   clearTimeout(z.timer);
   clearTimeout(z.abfrage);
+  clearTimeout(z.toastUhr);
+  z.bearb = null;   // der Bearbeiten-Modus endet mit der Ansicht
   z.dlg?.schliessen();
   z.abbau.forEach((f) => f());
   z.vor.clear();
@@ -343,10 +355,13 @@ function leisteBauen() {
       <div class="tisch-bildart" role="group" aria-label="Bildart der Karten">
         ${art('scryfall', 'Scryfall')}${art('foto', 'Mein Foto')}
       </div>
+      <button type="button" class="knopf tisch-bearb" aria-label="Bearbeiten" title="Karten bearbeiten: Foil, Verschieben, Löschen"
+        aria-pressed="${Boolean(z.bearb)}" ${angemeldet() && z.N ? '' : 'hidden'}>${SYM_STIFT}<span class="tisch-bearb-text">Bearbeiten</span></button>
       <button type="button" class="knopf tisch-seiten" aria-label="Seiten verwalten" title="Seiten verwalten"
         ${angemeldet() ? '' : 'hidden'}>${SYM_SEITEN}<span class="tisch-seiten-text">Seiten</span></button>
     </div>`);
   z.seitenKnopf = rest.querySelector('.tisch-seiten');
+  z.bearbKnopf = rest.querySelector('.tisch-bearb');
   titelSetzen(rest.querySelector('.tisch-titel'), z.binder);
   rest.querySelector('.tisch-aktionen').append(z.anmeldeKnopf);
   const nav = el('nav', 'tisch-nav', `
@@ -368,7 +383,10 @@ function aufbauen() {
   z.tisch.classList.toggle('tisch-einzel', !z.breit);
   z.index = Math.min(Math.max(indexVon(z.seite), minIndex()), maxIndex());
   leisteBauen();
+  werkzeugBauen();
   if (!z.N) {
+    bearbeitenUmschalten(false);
+    if (z.bearbKnopf) z.bearbKnopf.hidden = true;
     z.binderEl = null;
     z.nav.hidden = true;
     z.leiste.querySelector('.tisch-bildart').hidden = true;
@@ -574,9 +592,19 @@ function tascheBauen(t, seite, zeile, spalte, eifrig) {
   const tasche = el('div', `tisch-tasche tisch-tasche-${typ}`);
   tasche.style.gridRow = zeile;
   tasche.style.gridColumn = spalte;
+  // Angaben für den Bearbeiten-Modus (Tipp auf eine Tasche, auch auf eine leere)
+  Object.assign(tasche.dataset, { seite, zeile, spalte, typ });
+  if (t?.id != null) tasche.dataset.tascheId = t.id;
+  if (z.bearb?.wahl && t?.id === z.bearb.wahl.tascheId) tasche.classList.add('tisch-gewaehlt');
   if (typ === 'leer') {
-    tasche.setAttribute('role', 'img');
-    tasche.setAttribute('aria-label', 'Leere Tasche');
+    // Leer: im Bearbeiten-Modus mit „+" zum Hinzufügen einer Karte (bzw. als Ziel beim Verschieben)
+    tasche.append(el('span', 'tisch-leerlabel'));
+    tasche.firstElementChild.setAttribute('role', 'img');
+    tasche.firstElementChild.setAttribute('aria-label', 'Leere Tasche');
+    const plus = el('button', 'tisch-leerknopf', SYM_PLUS);
+    plus.type = 'button';
+    plus.setAttribute('aria-label', 'Leere Tasche: Karte hinzufügen oder Ziel zum Verschieben');
+    tasche.append(plus);
     return tasche;
   }
   if (typ === 'karte') {
@@ -587,12 +615,18 @@ function tascheBauen(t, seite, zeile, spalte, eifrig) {
     const zeichen = zeichenText(k);
     const ort = [k.set ? String(k.set).toUpperCase() : '', k.nummer ?? ''].filter(Boolean).join(' ');
     const menge = k.anzahl > 1 ? `${k.anzahl} Stück` : '';
-    knopf.setAttribute('aria-label', [k.name, ort, menge, zeichen].filter(Boolean).join(', '));
+    knopf.setAttribute('aria-label', [k.name, ort, k.foil ? 'Foil' : '', menge, zeichen].filter(Boolean).join(', '));
     knopf.title = zeichen ? `${k.name} – ${zeichen}` : k.name;
     if (k.preis) knopf.setAttribute('aria-label', `${knopf.getAttribute('aria-label')}, ${preisText(k.preis)}`);
     knopf.append(bildBauen(t, k, eifrig));
+    if (k.foil) knopf.append(el('span', 'tisch-schimmer'));   // dezenter Regenbogen-Schimmer (nur Farbverlauf)
     knopf.insertAdjacentHTML('beforeend', preisStreifen(k.preis));   // unteres Sechzehntel der Karte
     tasche.append(knopf);
+    if (k.foil) {
+      const stern = el('span', 'tisch-fstern', SYM_STERN);
+      stern.setAttribute('aria-hidden', 'true');
+      tasche.append(stern);
+    }
     if (k.markierung === 'unsicher' || k.markierung === 'druck_offen') tasche.append(abzeichen(k.markierung, k.geprueft));
     if (k.anzahl > 1) tasche.append(el('span', 'tisch-anzahl', `×${k.anzahl}`));
     return tasche;
@@ -1007,6 +1041,16 @@ function ereignisse(zustand) {
     if (art) return artWaehlen(art.dataset.art);
     const blatt = e.target.closest('[data-blatt]');
     if (blatt) return void blaettern(z.index + Number(blatt.dataset.blatt));
+    if (e.target.closest('.tisch-bearb')) return bearbeitenUmschalten();
+    const wz = e.target.closest('[data-wz]');
+    if (wz) return void werkzeugKlick(wz.dataset.wz);
+    const toast = e.target.closest('[data-toast]');
+    if (toast) return void (toast.dataset.toast === 'zu' ? toastSchliessen() : rueckgaengig());
+    if (z.bearb) {   // Bearbeiten-Modus: Tipps gehören den Werkzeugen, nie der großen Kartenansicht
+      const tasche = e.target.closest('.tisch-tasche[data-zeile]');
+      if (tasche && !z.lauf && performance.now() - z.gewischt > 450) bearbTasche(tasche);
+      return;
+    }
     const karte = e.target.closest('[data-karte]');
     // Kein Antippen während des Blätterns oder direkt nach einer Wischgeste.
     if (karte && !z.lauf && performance.now() - z.gewischt > 450) {
@@ -1021,7 +1065,13 @@ function ereignisse(zustand) {
     if (dialogOffen()) return;  // Esc und Pfeiltasten gehören dem Dialog
     if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]')) return;
     if (karteOffen()) return;
-    if (e.key === 'Escape') { e.preventDefault(); zurRegal(); return; }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (!z.bearb) zurRegal();
+      else if (z.bearb.wahl) werkzeugKlick('abbrechen');
+      else bearbeitenUmschalten(false);
+      return;
+    }
     const schritt = { ArrowRight: 1, PageDown: 1, ArrowLeft: -1, PageUp: -1 }[e.key];
     const rand = { Home: minIndex(), End: maxIndex() }[e.key];
     if (schritt === undefined && rand === undefined) return;
@@ -1368,4 +1418,358 @@ function verwaltungOeffnen() {
     }
   });
   wurzel.querySelector('[data-v="weniger"]').disabled = true;
+}
+
+
+// ---------- Bearbeiten-Modus (nur angemeldet): Foil, Verschieben, Löschen, Karte hinzufügen ----------
+
+const WERKZEUGE = ['foil', 'verschieben', 'loeschen'];
+
+function tascheMitId(id) {
+  for (const felder of z.taschen.values()) {
+    for (const t of felder.values()) if (t.id === id) return t;
+  }
+  return null;
+}
+
+/** Markiert die gewählte Tasche (Verschieben) in allen gezeichneten Seiten. */
+function wahlMarkieren() {
+  const id = z?.bearb?.wahl?.tascheId ?? null;
+  z?.binderEl?.querySelectorAll('.tisch-tasche[data-tasche-id]').forEach((e) => {
+    e.classList.toggle('tisch-gewaehlt', id !== null && Number(e.dataset.tascheId) === id);
+  });
+}
+
+function bearbeitenUmschalten(an = !z?.bearb) {
+  if (!z || Boolean(an) === Boolean(z.bearb)) return;
+  if (an && (!angemeldet() || !z.N)) return;
+  z.bearb = an ? { werkzeug: 'foil', wahl: null, laeuft: false } : null;
+  z.tisch.classList.toggle('tisch-bearb-an', Boolean(z.bearb));
+  z.bearbKnopf?.setAttribute('aria-pressed', String(Boolean(z.bearb)));
+  if (!an) toastSchliessen();
+  wahlMarkieren();
+  werkzeugZeichnen();
+}
+
+/** Feste Werkzeugleiste unten (am Handy über der Blätterleiste). */
+function werkzeugBauen() {
+  z.wz?.remove();
+  const wz = el('div', 'tisch-werkzeug');
+  wz.setAttribute('role', 'region');
+  wz.setAttribute('aria-label', 'Bearbeiten');
+  z.wz = wz;
+  z.tisch.insertBefore(wz, z.breit ? null : z.nav);
+  werkzeugZeichnen();
+}
+
+function werkzeugZeichnen() {
+  const wz = z?.wz;
+  if (!wz) return;
+  const b = z.bearb;
+  wz.hidden = !b;
+  if (!b) { wz.replaceChildren(); return; }
+  const fokus = document.activeElement?.closest?.('.tisch-werkzeug') ? document.activeElement.dataset?.wz : null;
+  const werkzeug = (name, symbol, text) => `<button type="button" class="knopf" data-wz="${name}"`
+    + ` aria-pressed="${b.werkzeug === name}">${symbol}<span class="tisch-wz-text">${text}</span></button>`;
+  const knopf = (name, text, klasse = '') => `<button type="button" class="knopf ${klasse}" data-wz="${name}">${text}</button>`;
+  let hinweis = 'Karten antippen';
+  let extra = '';
+  if (b.werkzeug === 'foil') {
+    hinweis = 'Karten antippen: Foil an oder aus';
+    extra = knopf('seitefoil', `${SYM_STERN}<span>${z.breit ? 'Beide Seiten Foil' : 'Ganze Seite Foil'}</span>`);
+  } else if (b.werkzeug === 'loeschen') {
+    hinweis = 'Karten antippen: aus der Sammlung entfernen';
+  } else if (b.wahl) {
+    hinweis = `„${b.wahl.name}“ gewählt: Ziel-Tasche antippen`;
+    extra = knopf('binder', 'In anderen Binder …') + knopf('kiste', 'In eine Kiste …') + knopf('abbrechen', 'Abbrechen');
+  } else {
+    hinweis = 'Karten antippen, dann eine Tasche als Ziel';
+  }
+  wz.innerHTML = '<div class="tisch-wz-zeile"><div class="tisch-wz-werkzeuge" role="group" aria-label="Werkzeug">'
+    + werkzeug('foil', SYM_STERN, 'Foil') + werkzeug('verschieben', SYM_WEITER_PFEIL, 'Verschieben')
+    + werkzeug('loeschen', SYM_MUELL, 'Löschen') + '</div>'
+    + `${knopf('fertig', 'Fertig', 'knopf-haupt')}</div>`
+    + `<div class="tisch-wz-info"><p class="tisch-wz-hinweis" role="status"></p>${extra}</div>`;
+  wz.querySelector('.tisch-wz-hinweis').textContent = hinweis;
+  if (fokus) wz.querySelector(`[data-wz="${fokus}"]`)?.focus();
+}
+
+function werkzeugKlick(name) {
+  const b = z?.bearb;
+  if (!b || b.laeuft) return;
+  if (name === 'fertig') return bearbeitenUmschalten(false);
+  if (WERKZEUGE.includes(name)) {
+    b.werkzeug = name;
+    b.wahl = null;
+  } else if (name === 'abbrechen') {
+    b.wahl = null;
+  } else if (name === 'seitefoil') {
+    return void ganzeSeiteFoil();
+  } else if (name === 'binder') {
+    return void inAnderenBinder();
+  } else if (name === 'kiste') {
+    return void inEineKiste();
+  }
+  wahlMarkieren();
+  werkzeugZeichnen();
+}
+
+/** Ein Tipp auf eine Tasche im Bearbeiten-Modus. */
+function bearbTasche(tasche) {
+  const b = z.bearb;
+  if (b.laeuft) return;
+  const nr = Number(tasche.dataset.seite);
+  const zeile = Number(tasche.dataset.zeile);
+  const spalte = Number(tasche.dataset.spalte);
+  const t = z.taschen.get(nr)?.get(`${zeile}-${spalte}`) ?? null;
+  const k = t?.karte ?? null;
+  const ort = { seiteId: z.info.get(nr)?.id, nr, zeile, spalte };
+  if (!ort.seiteId) return;
+  if (b.werkzeug === 'verschieben' && b.wahl) {
+    if (k && t.id === b.wahl.tascheId) {   // dieselbe Karte noch einmal: Wahl aufheben
+      b.wahl = null;
+      wahlMarkieren();
+      werkzeugZeichnen();
+      return;
+    }
+    return void verschiebenNach(ort, k);
+  }
+  if (!k) {
+    if (tasche.dataset.typ === 'leer') hinzufuegen(ort);
+    return;
+  }
+  if (b.werkzeug === 'foil') return void foilUmschalten(ort, k);
+  if (b.werkzeug === 'loeschen') return void kartenLoeschen(k);
+  // Verschieben: Karte (mit allen Karten der Tasche) wählen
+  const ids = t.karten?.length ? t.karten.map((x) => x.id) : [k.id];
+  b.wahl = { tascheId: t.id, name: k.name, karten: ids };
+  wahlMarkieren();
+  werkzeugZeichnen();
+}
+
+/** Eine Aktion des Bearbeiten-Modus: sperrt weitere Tipps und zeigt Fehler immer als Meldung. */
+async function bearbAktion(arbeit) {
+  const zustand = z;
+  const b = z?.bearb;
+  if (!b || b.laeuft) return;
+  b.laeuft = true;
+  z.tisch.classList.add('tisch-bearb-laeuft');
+  try {
+    await arbeit();
+  } catch (fehler) {
+    if (z === zustand) meldung(fehler.message || 'Das hat nicht geklappt.', { art: 'fehler' });
+  } finally {
+    if (z === zustand) {
+      b.laeuft = false;
+      z.tisch.classList.remove('tisch-bearb-laeuft');
+      if (z.bearb === b) { wahlMarkieren(); werkzeugZeichnen(); }
+    }
+  }
+}
+
+/** Zeichnet eine einzelne Tasche neu (Foil ohne Neuladen des ganzen Binders). */
+function taschenNeu(nr, zeile, spalte) {
+  const seite = z.binderEl?.querySelector(`.tisch-seite[data-seite="${nr}"]`);
+  const alt = seite?.querySelector(`.tisch-tasche[data-zeile="${zeile}"][data-spalte="${spalte}"]`);
+  if (!alt) return;
+  alt.replaceWith(tascheBauen(z.taschen.get(nr)?.get(`${zeile}-${spalte}`), nr, zeile, spalte, true));
+  const s = z.info.get(nr);
+  if (s) { z.sigs.set(nr, sigDaten(s, z.binder.verarbeiter?.aktiv ?? null)); seite._sig = z.sigs.get(nr); }
+}
+
+async function foilUmschalten(ort, k) {
+  const zustand = z;
+  await bearbAktion(async () => {
+    const r = await senden(`/api/karte/${k.id}/foil`, { daten: { foil: !k.foil } });
+    if (z !== zustand) return;
+    if (r.neu_laden) {
+      await laden(true);
+    } else {
+      k.foil = r.foil;
+      if (r.preis !== undefined) k.preis = r.preis;
+      taschenNeu(ort.nr, ort.zeile, ort.spalte);
+    }
+    meldung(r.schritt ? `„${k.name}“: ${r.foil ? 'Foil' : 'kein Foil'}.` : `„${k.name}“ war schon ${r.foil ? 'Foil' : 'kein Foil'}.`,
+      { schritte: r.schritt ? [r.schritt] : [] });
+  });
+}
+
+async function ganzeSeiteFoil() {
+  const zustand = z;
+  await bearbAktion(async () => {
+    const schritte = [];
+    let geaendert = 0;
+    for (const n of seitenVon(z.index)) {
+      const id = z.info.get(n)?.id;
+      if (!id || ohneBilder(n)) continue;
+      let r;
+      try {
+        r = await senden(`/api/seite/${id}/foil`, { daten: { foil: true } });
+      } catch (f) {   // erledigte Seiten trotzdem mit Rückgängig melden
+        if (schritte.length) { await laden(true); meldung(`${f.message} (die erste Seite ist schon Foil)`, { schritte }); return; }
+        throw f;
+      }
+      geaendert += r.geaendert ?? 0;
+      if (r.schritt) schritte.push(r.schritt);
+    }
+    if (z !== zustand) return;
+    await laden(true);
+    meldung(geaendert ? `${geaendert} ${geaendert === 1 ? 'Karte' : 'Karten'} auf Foil gesetzt.` : 'Alle Karten waren schon Foil.',
+      { schritte });
+  });
+}
+
+async function kartenLoeschen(k) {
+  const zustand = z;
+  await bearbAktion(async () => {
+    await senden(`/api/karte/${k.id}`, { methode: 'DELETE' });
+    if (z !== zustand) return;
+    if (z.bearb) z.bearb.wahl = null;
+    await laden(true);
+    meldung(`„${k.name}“ aus der Sammlung entfernt.`, { karte: k.id });
+  });
+}
+
+async function verschiebenNach(ort, kZiel) {
+  const zustand = z;
+  const w = z.bearb.wahl;
+  await bearbAktion(async () => {
+    const r = await senden(`/api/tasche/${w.tascheId}/verschieben`,
+      { daten: { ziel: { seite_id: ort.seiteId, zeile: ort.zeile, spalte: ort.spalte } } });
+    if (z !== zustand) return;
+    z.bearb.wahl = null;
+    await laden(true);
+    meldung(r.getauscht
+      ? `„${w.name}“ und „${kZiel?.name ?? 'die andere Karte'}“ getauscht.`
+      : `„${w.name}“ nach Seite ${ort.nr}, Reihe ${ort.zeile}, Platz ${ort.spalte} verschoben.`, { schritte: [r.schritt] });
+  });
+}
+
+/** Dialog mit einer Auswahlliste; gibt den gewählten Eintrag zurück oder undefined. */
+function listeWaehlen(titel, text, eintraege, leerText) {
+  const inhalt = el('div', 'tisch-ziele-wrap');
+  inhalt.innerHTML = eintraege.length
+    ? `<p class="dialog-text">${esc(text)}</p><ul class="tisch-ziele" role="list">`
+      + eintraege.map((e, i) => `<li><button type="button" class="knopf tisch-ziel" data-i="${i}">`
+        + `<span class="tisch-ziel-name">${esc(e.name)}</span><span class="etikett">${esc(e.info ?? '')}</span></button></li>`).join('')
+      + '</ul>'
+    : `<p class="dialog-text">${esc(leerText)}</p>`;
+  const d = dialog({ titel, klasse: 'dialog-klein tisch-dialog', inhalt });
+  inhalt.addEventListener('click', (e) => {
+    const knopf = e.target.closest('.tisch-ziel');
+    if (knopf) d.schliessen(eintraege[Number(knopf.dataset.i)]);
+  });
+  const abbrechen = el('button', 'knopf', 'Abbrechen');
+  abbrechen.type = 'button';
+  abbrechen.addEventListener('click', () => d.schliessen(undefined));
+  d.fuss.append(abbrechen);
+  inhalt.querySelector('.tisch-ziel')?.focus();
+  return d.fertig;
+}
+
+async function inAnderenBinder() {
+  const zustand = z;
+  const w = z.bearb?.wahl;
+  if (!w) return;
+  await bearbAktion(async () => {
+    const liste = ((await holen('/api/regal')).binder ?? []).filter((b) => b.id !== zustand.id);
+    const ziel = await listeWaehlen('In anderen Binder', `„${w.name}“ legen in:`,
+      liste.map((b) => ({ id: b.id, name: b.name, info: `${b.karten ?? 0} Karten` })), 'Es gibt keinen anderen Binder.');
+    if (!ziel || z !== zustand) return;
+    const r = await senden(`/api/tasche/${w.tascheId}/verschieben`, { daten: { ziel: { binder_id: ziel.id } } });
+    if (z !== zustand) return;
+    z.bearb.wahl = null;
+    await laden(true);
+    meldung(`„${w.name}“ in den Binder „${ziel.name}“ gelegt.`, { schritte: [r.schritt] });
+  });
+}
+
+async function inEineKiste() {
+  const zustand = z;
+  const w = z.bearb?.wahl;
+  if (!w) return;
+  await bearbAktion(async () => {
+    const liste = (await holen('/api/kisten')).kisten ?? [];
+    const ziel = await listeWaehlen('In eine Kiste', `„${w.name}“ verschieben nach:`,
+      liste.map((k) => ({ id: k.id, name: k.name, info: `${k.karten ?? 0} Karten` })),
+      'Es gibt noch keine Kiste. Lege im Regal zuerst eine an.');
+    if (!ziel || z !== zustand) return;
+    const r = await senden('/api/karten/verschieben', { daten: { ziel: ziel.id, karten: w.karten } });
+    if (z !== zustand) return;
+    z.bearb.wahl = null;
+    await laden(true);
+    meldung(`„${w.name}“ in die Kiste „${ziel.name}“ verschoben.`, { schritte: r.schritt ? [r.schritt] : [] });
+  });
+}
+
+/** Leere Tasche: Karte aus dem Katalog suchen, Druck wählen (Sprache = zuletzt gewählte) und einlegen. */
+async function hinzufuegen(ort) {
+  const zustand = z;
+  await bearbAktion(async () => {
+    const { druckWaehlen } = await import('./pruefen.js');   // erst bei Bedarf laden
+    const zuletzt = vorliebe('hinzufuegen.sprache');
+    let antwort = null;
+    const wahl = await druckWaehlen({
+      titel: 'Karte in diese Tasche legen', uebernehmen: 'Hinzufügen',
+      sprache: /^[a-z]{2,3}$/.test(zuletzt ?? '') ? zuletzt : 'de',
+      speichern: async (w) => {
+        antwort = await senden(`/api/seite/${ort.seiteId}/karte`,
+          { daten: { zeile: ort.zeile, spalte: ort.spalte, scryfall_id: w.scryfall_id, foil: w.foil, sprache: w.sprache } });
+        if (w.sprache) vorliebe('hinzufuegen.sprache', w.sprache);
+        return antwort;
+      },
+    });
+    if (!wahl || !antwort || z !== zustand) return;
+    await laden(true);
+    meldung(`„${antwort.name}“ in die Tasche gelegt (Seite ${ort.nr}, Reihe ${ort.zeile}, Platz ${ort.spalte}).`,
+      { schritte: [antwort.schritt] });
+  });
+}
+
+// ---------- Meldung mit Rückgängig ----------
+
+function meldung(text, { schritte = [], karte = null, art = 'ok' } = {}) {
+  if (!z) return;
+  clearTimeout(z.toastUhr);
+  const kannZurueck = art !== 'fehler' && (karte !== null || schritte.length);
+  if (!z.toast) {
+    z.toast = el('div', 'tisch-toast');
+    z.tisch.querySelector('.tisch-auflage').append(z.toast);
+  }
+  const box = z.toast;
+  box.hidden = false;
+  box.className = `tisch-toast${art === 'fehler' ? ' tisch-toast-fehler' : ''}`;
+  box.setAttribute('role', art === 'fehler' ? 'alert' : 'status');
+  box.innerHTML = '<span class="tisch-toast-text"></span>'
+    + (kannZurueck ? '<button type="button" class="knopf tisch-toast-rueck" data-toast="rueck">Rückgängig</button>' : '')
+    + `<button type="button" class="knopf knopf-sym" data-toast="zu" aria-label="Meldung schließen">${SYM_KREUZ}</button>`;
+  box.querySelector('.tisch-toast-text').textContent = text;
+  z.toastRueck = kannZurueck ? { schritte: schritte.filter(Boolean), karte } : null;
+  z.toastUhr = setTimeout(() => toastSchliessen(), art === 'fehler' ? 10000 : 16000);
+}
+
+function toastSchliessen() {
+  if (!z) return;
+  clearTimeout(z.toastUhr);
+  if (z.toast) z.toast.hidden = true;
+  z.toastRueck = null;
+}
+
+async function rueckgaengig() {
+  const zustand = z;
+  const r = z?.toastRueck;
+  if (!r) return;
+  const knopf = z.toast.querySelector('.tisch-toast-rueck');
+  if (knopf) knopf.disabled = true;
+  try {
+    if (r.karte !== null) await senden(`/api/karte/${r.karte}/rueckgaengig`);
+    for (const s of [...r.schritte].reverse()) await senden(`/api/schritt/${encodeURIComponent(s)}/rueckgaengig`);
+  } catch (fehler) {
+    if (z === zustand) meldung(fehler.message || 'Rückgängig ging nicht.', { art: 'fehler' });
+    return;
+  }
+  if (z !== zustand) return;
+  if (z.bearb) { z.bearb.wahl = null; werkzeugZeichnen(); }
+  await laden(true);
+  meldung('Rückgängig gemacht.');
 }

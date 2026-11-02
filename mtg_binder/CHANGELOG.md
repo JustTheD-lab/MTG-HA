@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.8.0
+- Binder bearbeiten: Knopf „Bearbeiten“ im Lesetisch mit den Werkzeugen Foil, Verschieben und Löschen.
+  - Verschieben geht in eine andere Tasche (auch auf einer anderen Seite), in einen anderen Binder (nächste freie
+    Tasche) oder in eine Kiste. Auf einer besetzten Tasche tauschen die Karten die Plätze.
+  - Löschen entfernt die Karte ganz aus der Sammlung.
+  - Ein Tipp auf eine leere Tasche fügt eine Karte aus dem Katalog hinzu.
+  - Jede Aktion lässt sich rückgängig machen.
+- Foil-Modus: Ein Tipp schaltet ein Exemplar um, ein Stapel teilt sich dabei. Dazu „Ganze Seite Foil“.
+  - Den Foil-Modus gibt es auch in Kiste und Gesamtsammlung.
+  - Foil-Karten zeigen einen Regenbogen-Schimmer und einen Stern.
+
 ## 0.7.0
 - Werte an Home Assistant per MQTT mit Discovery (Gerät „MTG“): Gesamtwert mit Veränderung zum Vortag, nach 3 und
   30 Tagen (Euro und Prozent), Kartenzahlen, je Binder und Kiste ein Wert- und ein Kartensensor, Top 5 teuerste

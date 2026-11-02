@@ -1,4 +1,4 @@
-﻿// Kistenansicht (Bulkkisten): Karteikasten, Raster und Liste mit serverseitigem Sortieren, Gruppieren,
+// Kistenansicht (Bulkkisten): Karteikasten, Raster und Liste mit serverseitigem Sortieren, Gruppieren,
 // Filtern und nachladendem Blättern.
 //
 //   #/kiste/5             Kiste 5
@@ -69,6 +69,7 @@ const SYM = {
   wahl: sym('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.5l3 3 5-6"/>'),
   abzug: sym('<path d="M7 4h10v16H7zM10 9h4M10 13h4"/>'),
   weiter: sym('<path d="M4 12h14M13 7l5 5-5 5"/>'),
+  stern: sym('<path d="M12 4l2.4 5 5.4.7-4 3.8 1 5.4L12 16.2 7.2 18.9l1-5.4-4-3.8 5.4-.7z"/>'),
   faecher: sym('<rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/>'),
 };
 const ANSICHT_TEXT = { kasten: 'Karteikasten', raster: 'Raster', liste: 'Liste' };
@@ -250,6 +251,9 @@ function beschriftung(k) {
   return teile.join(', ');
 }
 
+/** Foil-Markierung: kleiner Stern neben dem Namen (Liste, Karteikasten). */
+const fStern = (k) => (k.foil ? `<span class="kiste-fstern" role="img" aria-label="Foil" title="Foil">${SYM.stern}</span>` : '');
+
 const adresse = (k) => `${S.basis}/karte/${k.id}`;
 const gewaehlt = (k) => (S.gewaehlt.has(k.id) ? ' kiste-gewaehlt' : '');
 const ortZeile = (k) => (S.sammlung ? k.ort?.text ?? '' : '');
@@ -279,7 +283,7 @@ function listeHtml(k, i) {
   return `<li><a class="kiste-zeile${gewaehlt(k)}" href="${adresse(k)}" data-karte="${k.id}" data-i="${i}"`
     + ` aria-label="${esc(beschriftung(k))}">`
     + `<span class="z-anz${k.anzahl > 1 ? ' z-mehr' : ''}">×${k.anzahl}</span>`
-    + `<span class="z-name"><span class="z-text">${esc(k.name)}</span>${abzeichen(k)}${doppelHtml(k)}</span>`
+    + `<span class="z-name"><span class="z-text">${esc(k.name)}</span>${fStern(k)}${abzeichen(k)}${doppelHtml(k)}</span>`
     + `<span class="z-mw"${mana ? ` title="${esc(mana.lang)}"` : ''}>${k.manawert == null ? '–' : esc(zahlText(k.manawert))}</span>`
     + '<span class="z-meta">'
     + `<span class="z-set">${esc(setText(k)) || '–'}</span>`
@@ -303,7 +307,8 @@ function rasterHtml(k, i) {
     + ` data-name="${esc(k.name)}" data-set="${esc(setText(k))}" aria-label="${esc(beschriftung(k))}">`
     + bild + abzeichen(k)
     + (k.anzahl > 1 ? `<span class="kachel-anz">×${k.anzahl}</span>` : '')
-    + (k.foil ? '<span class="kachel-foil">Foil</span>' : '')
+    + (k.foil ? `<span class="kachel-foil" role="img" aria-label="Foil" title="Foil">${SYM.stern}</span>`
+      + '<span class="kiste-schimmer" aria-hidden="true"></span>' : '')
     + preisStreifen(k.preis)
     + '</a>'
     + (S.sammlung ? `<span class="kachel-unter" title="${esc(ort)}">${esc(ort) || '–'}${doppelHtml(k)}</span>` : '')
@@ -318,8 +323,8 @@ function kastenHtml(k, i) {
     + ` data-f="${esc(k.farbgruppe ?? '')}" data-b="${esc(k.bild ?? '')}" aria-label="${esc(beschriftung(k))}">`
     + (S.sammlung
       ? `<span class="ks-name"><span class="ks-text"><span class="z-text">${esc(k.name)}</span>`
-        + `<span class="ks-ort">${esc(ort) || '–'}</span></span>${abzeichen(k)}${doppelHtml(k)}</span>`
-      : `<span class="ks-name"><span class="z-text">${esc(k.name)}</span>${abzeichen(k)}</span>`)
+        + `<span class="ks-ort">${esc(ort) || '–'}</span></span>${fStern(k)}${abzeichen(k)}${doppelHtml(k)}</span>`
+      : `<span class="ks-name"><span class="z-text">${esc(k.name)}</span>${fStern(k)}${abzeichen(k)}</span>`)
     + (mana ? `<span class="ks-mana" title="${esc(mana.lang)}"><span class="ks-k">${esc(mana.kurz)}</span><span class="ks-l">${esc(mana.lang)}</span></span>` : '')
     + (k.anzahl > 1 ? `<span class="ks-anz">×${k.anzahl}</span>` : '')
     + (k.foil ? '<span class="ks-foil">Foil</span>' : '')
@@ -1000,7 +1005,11 @@ function adminZeichnen() {
   const box = s.wurzel.querySelector('.kiste-admin');
   box.replaceChildren();
   box.hidden = !angemeldet();
-  if (!angemeldet()) { if (s.wahlModus) wahlUmschalten(false); return; }
+  if (!angemeldet()) {
+    if (s.wahlModus) wahlUmschalten(false);
+    if (s.foilModus) foilModusUmschalten(false);
+    return;
+  }
   const neu = (klasse, symbol, text, label, fn) => {
     const b = el('button', `knopf ${klasse}`, `${symbol}<span class="kiste-aktion-text">${text}</span>`);
     b.type = 'button';
@@ -1011,6 +1020,9 @@ function adminZeichnen() {
   };
   const wahl = neu('kiste-wahlknopf', SYM.wahl, 'Auswählen', 'Karten auswählen und verschieben', () => wahlUmschalten());
   wahl.setAttribute('aria-pressed', String(s.wahlModus));
+  const foil = neu('kiste-foilknopf', SYM.stern, 'Foil', 'Foil-Modus: Karten antippen, um Foil umzuschalten',
+    () => foilModusUmschalten());
+  foil.setAttribute('aria-pressed', String(Boolean(s.foilModus)));
   if (s.sammlung) {
     neu('kiste-abzugknopf', SYM.abzug, 'Liste abziehen', 'Liste von der Sammlung abziehen', abziehenOeffnen);
     return;
@@ -1204,7 +1216,8 @@ async function neuAufbauen({ wahlBehalten = false } = {}) {
   const offen = { filter: !alt.wurzel.querySelector('.kiste-filterfeld').hidden, statistik: alt.statistikOffen };
   alt.wurzel.classList.add('kiste-umbau');
   alt.wurzel.inert = true;
-  const neu = await aufbauen(eltern, alt.parameter, { still: true, wahlModus: wahlBehalten && alt.wahlModus, offen });
+  const neu = await aufbauen(eltern, alt.parameter, {
+    still: true, wahlModus: wahlBehalten && alt.wahlModus, foilModus: wahlBehalten && alt.foilModus, offen });
   if (!neu) return;   // Fehler: aufbauen hat die Ansicht schon ersetzt
   await neu.erstes;
   if (S !== neu) return;
@@ -1242,6 +1255,7 @@ function wahlAnzeigen() {
 function wahlUmschalten(an = !S.wahlModus) {
   const s = S;
   if (Boolean(an) === s.wahlModus) return;
+  if (an && s.foilModus) foilModusUmschalten(false);   // immer nur ein Modus
   s.wahlModus = Boolean(an);
   senken();
   s.wurzel.classList.toggle('kiste-wahl', s.wahlModus);
@@ -1467,6 +1481,68 @@ async function importDialog(datei) {
   });
 }
 
+// ---------- Foil-Modus ----------
+
+/** Foil-Modus: Tippen auf eine Karte schaltet Foil um (öffnet nie die Kartenansicht). Endet mit der Ansicht. */
+function foilModusUmschalten(an = !S.foilModus) {
+  const s = S;
+  if (!s || Boolean(an) === s.foilModus) return;
+  if (an && s.wahlModus) wahlUmschalten(false);   // immer nur ein Modus
+  s.foilModus = Boolean(an);
+  senken();
+  s.wurzel.classList.toggle('kiste-foilmodus', s.foilModus);
+  s.wurzel.querySelector('.kiste-foilknopf')?.setAttribute('aria-pressed', String(s.foilModus));
+  let leiste = s.wurzel.querySelector('.kiste-foilleiste');
+  if (s.foilModus && !leiste) {
+    leiste = el('div', 'kiste-foilleiste', '<span class="foil-text" role="status">Foil-Modus: Karten antippen</span>'
+      + '<button type="button" class="knopf knopf-haupt foil-fertig">Fertig</button>');
+    leiste.setAttribute('role', 'region');
+    leiste.setAttribute('aria-label', 'Foil-Modus');
+    leiste.querySelector('.foil-fertig').addEventListener('click', () => foilModusUmschalten(false));
+    s.wurzel.append(leiste);
+  }
+  if (leiste) leiste.hidden = !s.foilModus;
+}
+
+/** Eine Karte im Foil-Modus antippen: Exemplar umschalten, Liste vor Ort oder (bei geteilten Stapeln) neu laden. */
+async function foilKlick(a) {
+  const s = S;
+  if (s.foilLaeuft) return;
+  const index = Number(a.dataset.i);
+  const k = s.karten[index - s.start];
+  if (!k) return;
+  s.foilLaeuft = true;
+  a.classList.add('kiste-foil-laedt');
+  const oben = a.getBoundingClientRect().top;
+  let r;
+  try {
+    r = await senden(`/api/karte/${k.id}/foil`, { daten: { foil: !k.foil } });
+  } catch (f) {
+    if (S === s) { s.foilLaeuft = false; a.classList.remove('kiste-foil-laedt'); hinweisZeigen(f.message, { art: 'fehler' }); }
+    return;
+  }
+  if (S !== s) return;
+  const text = r.schritt ? `„${k.name}“: ${r.foil ? 'Foil' : 'kein Foil'}.` : `„${k.name}“ war schon ${r.foil ? 'Foil' : 'kein Foil'}.`;
+  try {
+    if (r.neu_laden) {   // ein Stapel hat sich geteilt oder zusammengelegt: Liste neu laden, Lage auf dem Bildschirm halten
+      await neuLaden({ ab: Math.max(0, index - 30) });
+      if (S !== s) return;
+      const neu = s.wurzel.querySelector(`.kiste-liste [data-i="${index}"]`);
+      if (neu) window.scrollTo(0, Math.max(0, neu.getBoundingClientRect().top + window.scrollY - oben));
+    } else {
+      k.foil = r.foil;
+      if (r.preis !== undefined) k.preis = r.preis;
+      const li = a.closest('li');
+      const vorlage = document.createElement('template');
+      vorlage.innerHTML = HTML_JE_ANSICHT[s.ansicht](k, index);
+      li.replaceWith(vorlage.content);
+    }
+  } finally {
+    s.foilLaeuft = false;   // auch wenn das Neuladen scheitert, sonst hinge der Foil-Modus
+  }
+  hinweisZeigen(text, { schritt: r.schritt });
+}
+
 // ---------- Karte hinzufügen ----------
 
 async function karteHinzufuegen() {
@@ -1559,6 +1635,13 @@ function verdrahten(s) {
     }
     const alle = e.target.closest('[data-loeschen="alle"]');
     if (alle) { filterLoeschen('alle'); return; }
+    if (s.foilModus) {  // Foil-Modus: Tippen schaltet Foil um, öffnet nichts
+      const hubKarte = e.target.closest('.kiste-hub')?.dataset.hubKarte;
+      const karteA = e.target.closest('a[data-karte]') ?? (hubKarte ? liste.querySelector(`a[data-karte="${hubKarte}"]`) : null);
+      if (karteA) { e.preventDefault(); foilKlick(karteA); }
+      else if (e.target.closest('.kiste-hub')) e.preventDefault();
+      return;
+    }
     if (s.wahlModus) {  // Auswahlmodus: Tippen wählt, öffnet nichts
       const gewaehltA = e.target.closest('a[data-karte]');
       if (gewaehltA) { e.preventDefault(); wahlKlick(gewaehltA); }
@@ -1755,6 +1838,8 @@ function verdrahten(s) {
       filterknopf.focus();
     } else if (s.wahlModus) {
       wahlUmschalten(false);
+    } else if (s.foilModus) {
+      foilModusUmschalten(false);
     }
   };
   document.addEventListener('keydown', taste);
@@ -1798,7 +1883,7 @@ function fehlerAnzeigen(wurzel, text) {
 /** Baut die Ansicht auf: eine Kiste (`parameter.kiste`) oder die Gesamtsammlung (`parameter.sammlung`).
     `still`: ohne Einblendung und zunächst verborgen (Neuaufbau nach einer Änderung, siehe neuAufbauen);
     `wahlModus`: Auswahlmodus gleich wieder einschalten. Gibt den Zustand zurück (`erstes` = erste Seite geladen). */
-async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, offen = null } = {}) {
+async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, foilModus = false, offen = null } = {}) {
   abraeumen();
   const sammlung = Boolean(parameter.sammlung);
   const id = sammlung ? null : parameter.kiste;
@@ -1829,7 +1914,7 @@ async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, o
     kopf,
     optionen,
     gruppierungen,
-    wahlModus: false, gewaehlt: new Map(), alleGefiltert: false, erstes: null,
+    wahlModus: false, foilModus: false, foilLaeuft: false, gewaehlt: new Map(), alleGefiltert: false, erstes: null,
     optionenText: {
       typ: Object.fromEntries(optionen.typen.map((x) => [x.wert, x.text])),
       seltenheit: Object.fromEntries(optionen.seltenheiten.map((x) => [x.wert, x.text])),
@@ -1872,6 +1957,7 @@ async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, o
   adminZeichnen();
   verdrahten(s);
   if (wahlModus) wahlUmschalten(true);
+  if (foilModus) foilModusUmschalten(true);
   if (offen?.filter) {   // Filterfeld und Statistik bleiben nach einer Änderung so offen, wie sie waren
     s.wurzel.querySelector('.kiste-filterfeld').hidden = false;
     s.wurzel.querySelector('.kiste-filterknopf').setAttribute('aria-expanded', 'true');

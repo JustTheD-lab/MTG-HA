@@ -401,3 +401,103 @@
 @media (max-width: 699px) {
   .tisch-v-zeile .knopf { flex: 1 1 auto; }
 }
+
+/* ---------- Foil: Schimmer und Stern ---------- */
+
+/* Dezenter Regenbogenverlauf über dem Kartenbild; ohne Bewegung, nur ein leichter Versatz beim Darüberfahren. */
+.tisch-schimmer {
+  position: absolute; inset: 0 -40%; z-index: 1; pointer-events: none; opacity: 0.9;
+  background: linear-gradient(115deg, rgba(255, 90, 170, 0) 22%, rgba(255, 120, 190, 0.2) 34%, rgba(110, 190, 255, 0.2) 46%,
+    rgba(130, 255, 170, 0.17) 58%, rgba(255, 226, 120, 0.16) 68%, rgba(255, 190, 90, 0) 80%);
+  transform: translate3d(-4%, 0, 0);
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .tisch-schimmer { transition: transform var(--dauer-lang) var(--kurve); }
+  .tisch-karte:hover .tisch-schimmer { transform: translate3d(14%, 0, 0); }
+}
+/* Stern oben links an der Karte, auch in kleinen Rastern gut lesbar */
+.tisch-fstern {
+  --stern: max(17px, calc(var(--tasche-b) * 0.15));
+  position: absolute; z-index: 3; left: calc(var(--stern) * -0.34); top: calc(var(--stern) * -0.34); pointer-events: none;
+  width: var(--stern); aspect-ratio: 1; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(17, 17, 19, 0.78); color: var(--messing-hell);
+  box-shadow: 0 0 0 1px rgba(201, 164, 106, 0.55);
+}
+.tisch-fstern .tisch-sym { width: 74%; height: 74%; fill: currentColor; }
+
+/* ---------- Bearbeiten-Modus ---------- */
+
+.tisch-bearb[hidden] { display: none; }
+@media (max-width: 479px) {
+  .tisch-bearb-text { display: none; }
+  .tisch-bearb { width: 44px; padding: 0; }
+}
+
+/* deutlicher Modusrahmen um die Auflage */
+.tisch-bearb-an .tisch-auflage::after {
+  content: ""; position: absolute; inset: 3px; z-index: 4; pointer-events: none;
+  border: 2px solid var(--messing); border-radius: var(--radius-gross);
+}
+.tisch-bearb-an .tisch-karte { cursor: crosshair; }
+.tisch-bearb-laeuft .tisch-buehne { opacity: 0.7; pointer-events: none; }
+
+/* Leere Taschen: nur im Modus mit „+" antippbar */
+.tisch-leerlabel { position: absolute; inset: 0; }
+.tisch-leerknopf { display: none; }
+.tisch-bearb-an .tisch-leerknopf {
+  appearance: none; display: grid; place-items: center; position: absolute; inset: 3% 3.5%; z-index: 1;
+  margin: 0; padding: 0; border: 0; background: var(--messing-schleier); color: var(--messing-hell);
+  border-radius: var(--radius-karte) / 3.2%; cursor: pointer;
+}
+.tisch-bearb-an .tisch-leerknopf:hover { background: rgba(201, 164, 106, 0.26); }
+.tisch-bearb-an .tisch-leerknopf:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; }
+.tisch-leerknopf .tisch-sym { width: max(20px, calc(var(--tasche-b) * 0.24)); height: max(20px, calc(var(--tasche-b) * 0.24)); }
+
+/* gewählte Karte (Verschieben) */
+.tisch-gewaehlt { box-shadow: 0 0 0 3px var(--messing); }
+.tisch-gewaehlt .tisch-karte { transform: translateY(-1.5%) scale(1.03); z-index: 3; }
+
+/* Werkzeugleiste: fest unten, am Handy über der Blätterleiste */
+.tisch-werkzeug {
+  position: relative; z-index: 5; flex: none; display: flex; flex-direction: column; gap: 8px;
+  padding: 10px max(var(--rand-sicher), 24px) 10px;
+  background: var(--flaeche-1); border-top: 2px solid var(--messing);
+}
+.tisch-werkzeug[hidden] { display: none; }
+.tisch-wz-zeile { display: flex; align-items: center; gap: 10px; }
+.tisch-wz-werkzeuge { display: flex; flex: 1 1 auto; min-width: 0; }
+.tisch-wz-werkzeuge .knopf { flex: 1 1 0; min-width: 0; justify-content: center; border-radius: 0; font-size: 0.9rem; }
+.tisch-wz-werkzeuge .knopf:first-child { border-radius: 999px 0 0 999px; }
+.tisch-wz-werkzeuge .knopf:last-child { border-radius: 0 999px 999px 0; }
+.tisch-wz-werkzeuge .knopf + .knopf { border-left-width: 0; }
+.tisch-wz-info { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tisch-wz-hinweis { flex: 1 1 14em; margin: 0; min-width: 0; color: var(--text-2); font-size: 0.92rem; overflow-wrap: anywhere; }
+.tisch-wz-info .knopf { flex: none; font-size: 0.88rem; }
+@media (max-width: 479px) {
+  .tisch-wz-werkzeuge .tisch-sym { display: none; }
+  .tisch-werkzeug { padding: 8px var(--rand-sicher) 8px; gap: 6px; }
+  .tisch-wz-hinweis { flex-basis: 100%; font-size: 0.85rem; }
+}
+
+/* Auswahlliste (Binder, Kiste) */
+.tisch-ziele { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.tisch-ziel { width: 100%; justify-content: space-between; min-height: 52px; border-radius: var(--radius); text-align: left; }
+.tisch-ziel-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Meldung mit Rückgängig */
+.tisch-toast {
+  position: absolute; z-index: 6; left: 50%; bottom: 12px; display: flex; align-items: center; gap: 8px;
+  width: max-content; max-width: min(560px, calc(100% - 24px)); transform: translate3d(-50%, 0, 0);
+  padding: 6px 6px 6px 16px; background: var(--flaeche-3);
+  border: 1px solid var(--messing-dunkel); border-radius: var(--radius); box-shadow: var(--schatten-hoch);
+}
+.tisch-toast[hidden] { display: none; }
+.tisch-toast-text { flex: 1 1 auto; min-width: 0; font-size: 0.92rem; overflow-wrap: anywhere; }
+.tisch-toast-rueck { flex: none; border-color: var(--messing); color: var(--messing-hell); }
+.tisch-toast-fehler { border-color: var(--warnung); }
+.tisch-toast-fehler .tisch-toast-text { color: #f1b9b0; }
+@media (prefers-reduced-motion: no-preference) {
+  .tisch-toast:not([hidden]) { animation: tisch-toast-ein var(--dauer) var(--kurve) both; }
+}
+@keyframes tisch-toast-ein { from { opacity: 0; } to { opacity: 1; } }

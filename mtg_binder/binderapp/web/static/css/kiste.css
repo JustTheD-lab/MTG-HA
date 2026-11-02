@@ -291,9 +291,7 @@
 .kachel-anz { left: 6px; }
 .kiste-kachel:has(.preis-streifen) :is(.kachel-anz, .kachel-foil) { bottom: calc(6.25% + 5px); }
 .kachel-foil { right: 6px; color: var(--messing-hell); font-weight: 500; letter-spacing: 0.04em; }
-.kiste-kachel:has(.kachel-foil)::after {  /* dezent: dünne Messinglinie unten */
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--messing);
-}
+/* Foil: Stern unten rechts, dazu ein dezenter Regenbogen-Schimmer über dem Bild (siehe Ende der Datei) */
 
 /* ---------- Karteikasten ---------- */
 .kiste-huelle[data-ansicht="kasten"] { max-width: 500px; margin-left: auto; margin-right: auto; }
@@ -452,3 +450,46 @@
 .bericht-liste ul { margin: 6px 0 0; padding: 0 0 0 20px; max-height: 260px; overflow: auto; font-size: 0.86rem; }
 .bericht-liste li { padding: 2px 0; overflow-wrap: anywhere; }
 .bericht-mehr { color: var(--text-3); list-style: none; }
+
+
+/* ---------- Foil: Schimmer, Stern, Modus ---------- */
+
+/* Kleiner Stern als Markierung neben dem Namen (Liste, Karteikasten) */
+.kiste-fstern { flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--messing-hell); }
+.kiste-fstern svg { width: 100%; height: 100%; fill: currentColor; }
+.kachel-foil { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; line-height: 1; }
+.kachel-foil svg { width: 14px; height: 14px; fill: currentColor; }
+
+/* Regenbogen-Schimmer: nur ein Farbverlauf, in Ruhe ohne Bewegung (auch mit „Bewegung reduzieren") */
+.kiste-schimmer {
+  position: absolute; inset: 0 -40%; z-index: 1; pointer-events: none; opacity: 0.9;
+  background: linear-gradient(115deg, rgba(255, 90, 170, 0) 22%, rgba(255, 120, 190, 0.2) 34%, rgba(110, 190, 255, 0.2) 46%,
+    rgba(130, 255, 170, 0.17) 58%, rgba(255, 226, 120, 0.16) 68%, rgba(255, 190, 90, 0) 80%);
+  transform: translate3d(-4%, 0, 0);
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .kiste-schimmer { transition: transform var(--dauer-lang) var(--kurve); }
+  .kiste-kachel:hover .kiste-schimmer { transform: translate3d(14%, 0, 0); }
+}
+
+/* Foil-Modus: Rahmen, Leiste unten, Hinweis */
+.kiste-foilmodus { animation: none !important; padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+.kiste-foilmodus::after {
+  content: ""; position: fixed; inset: 3px; z-index: 7; pointer-events: none;
+  border: 2px solid var(--messing); border-radius: var(--radius-gross);
+}
+.kiste-foilmodus .kiste-liste a[data-karte] { cursor: pointer; }
+.kiste-foil-laedt { opacity: 0.55; }
+.kiste-foilleiste {
+  position: fixed; z-index: 8; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px var(--rand-sicher) max(12px, env(safe-area-inset-bottom));
+  background: rgba(24, 24, 27, 0.97); border-top: 1px solid var(--messing); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+}
+.kiste-foilleiste[hidden] { display: none; }
+.foil-text { min-width: 0; font-weight: 500; color: var(--messing-hell); }
+@media (min-width: 700px) {
+  .kiste-foilleiste {
+    left: 50%; right: auto; bottom: 16px; width: min(560px, calc(100vw - 32px)); transform: translate3d(-50%, 0, 0);
+    padding: 12px 16px; border: 1px solid var(--messing); border-radius: var(--radius-gross);
+  }
+}
