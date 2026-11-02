@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.9.0
+- Decks: neuer Regalboden „Decks“.
+  - Import per Archidekt-Link (öffentliche oder ungelistete Decks) oder als eingefügter Export-Text (Moxfield,
+    Archidekt). Nur das Hauptdeck mit Commander.
+  - Abgleich mit der Sammlung: vorhanden, wo die Karte liegt (Binder, Seite, Platz oder Kiste), was fehlt. Der
+    Abgleich zählt wahlweise den Namen oder nur den genauen Druck.
+  - Schalter „Basic Lands auslassen“; einzelne Karten als Proxy markieren.
+  - Fehlt-Liste zum Kopieren für die Cardmarket-Wunschliste.
+  - „Neu laden“ holt Änderungen aus Archidekt, vorher mit Vorschau.
+- Die Datenbank wird beim Start auf Version 7 gebracht, vorher legt das Add-on eine Sicherung an.
+
 ## 0.8.0
 - Binder bearbeiten: Knopf „Bearbeiten“ im Lesetisch mit den Werkzeugen Foil, Verschieben und Löschen.
   - Verschieben geht in eine andere Tasche (auch auf einer anderen Seite), in einen anderen Binder (nächste freie

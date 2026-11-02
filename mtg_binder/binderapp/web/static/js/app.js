@@ -14,6 +14,7 @@
 //   #/regeln                   Sortierregeln: wohin neue Karten einsortiert werden (regeln.js)
 //   #/sets                     Sets: Übersicht mit Vollständigkeit der Sammlung (sets.js)
 //   #/set/ecl                  ein Set: Drucke und Namen, vorhanden oder fehlend (sets.js; Code nur [a-z0-9]{2,8})
+//   #/deck/7                   Deck 7: Abgleich mit der Sammlung, Fehlt-Liste (deck.js)
 //   #/pruefen                 Prüfansicht: unsichere Karten nacheinander
 //   #/pruefen/karte/12         dazu Karte 12 groß
 //
@@ -33,11 +34,12 @@ import * as scan from './scan.js';
 import * as eingang from './eingang.js';
 import * as regeln from './regeln.js';
 import * as sets from './sets.js';
+import * as deck from './deck.js';
 import { laden as sitzungLaden } from './anmeldung.js';
 import { holen } from './gemeinsam.js';
 
 // `sets` (Übersicht) und `set` (ein Set) sind dasselbe Modul; es unterscheidet sie am Parameter `set`.
-const ANSICHTEN = { regal, lesetisch, kiste, pruefen, scan, eingang, regeln, sets, set: sets };
+const ANSICHTEN = { regal, lesetisch, kiste, pruefen, scan, eingang, regeln, sets, set: sets, deck };
 const buehne = document.getElementById('buehne');
 let aktuell = null;  // { name, parameter }
 let laeuft = Promise.resolve();
@@ -75,6 +77,9 @@ export function lesen(hash) {
   }
   if (teile[0] === 'set' && /^[a-z0-9]{2,8}$/.test(teile[1] ?? '')) {
     return { ansicht: 'set', binder: null, kiste: null, sammlung: false, seite: null, karte: null, set: teile[1] };
+  }
+  if (teile[0] === 'deck' && zahl(teile[1]) !== null) {
+    return { ansicht: 'deck', binder: null, kiste: null, sammlung: false, seite: null, karte: null, deck: zahl(teile[1]) };
   }
   if (teile[0] === 'pruefen') {
     return { ansicht: 'pruefen', binder: null, kiste: null, sammlung: false, seite: null,

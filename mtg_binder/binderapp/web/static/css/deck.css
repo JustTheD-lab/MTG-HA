@@ -1,0 +1,110 @@
+/* Deckansicht (#/deck/ID) und Dialog „Neues Deck“. Stil „Galerie“, Handy zuerst. Klassen mit Vorsatz deck-. */
+
+:root {
+  --deck-da: #6aa386;
+  --deck-fehlt: var(--warnung);
+}
+
+.deck { max-width: 1200px; margin: 0 auto; padding: calc(12px + env(safe-area-inset-top)) var(--rand-sicher) 56px; }
+.deck-kopfzeile { display: flex; align-items: flex-start; gap: 12px; }
+.deck-zurueck { margin-top: 2px; }
+.deck-titelblock { flex: 1; min-width: 0; }
+.deck-titel { font-size: 1.6rem; overflow-wrap: anywhere; }
+@media (max-width: 420px) { .deck-titel { font-size: 1.35rem; } }
+.deck-quelle-zeile { margin: 4px 0 0; }
+.deck-quelle { color: var(--messing-hell); text-decoration: underline; text-decoration-color: var(--messing-dunkel); text-underline-offset: 3px; }
+span.deck-quelle { text-decoration: none; color: var(--text-2); }
+
+.deck-hinweis { margin: 10px 0; color: var(--text-3); font-size: 0.92rem; line-height: 1.5; }
+.deck-meldung { color: #f1b9b0; min-height: 0; }
+.deck-meldung:empty { display: none; }
+
+/* ---------- Kopf: Fortschritt, Schalter, Knöpfe ---------- */
+.deck-karte-kopf { margin-top: 16px; padding: 14px 16px; background: var(--flaeche-2); border: 1px solid var(--linie);
+  border-radius: var(--radius); display: grid; gap: 14px; }
+.deck-balken { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--flaeche-3); }
+.deck-balken > span { display: block; height: 100%; }
+.deck-balken-da { background: var(--deck-da); }
+.deck-balken-proxy { background: var(--messing); }
+.deck-balken-fehlt { background: var(--deck-fehlt); opacity: 0.8; }
+.deck-zahlen { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 0; font-size: 0.9rem; color: var(--text-2);
+  font-variant-numeric: tabular-nums; }
+.deck-zahl-da { color: var(--text); font-weight: 600; }
+
+.deck-schalter-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.deck-schalter { position: relative; display: inline-flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
+.deck-schalter input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.deck-schalter-spur { position: relative; flex: none; width: 44px; height: 26px; border-radius: 999px;
+  background: var(--flaeche-3); border: 1px solid var(--linie-stark);
+  transition: background-color var(--dauer-kurz) var(--kurve), border-color var(--dauer-kurz) var(--kurve); }
+.deck-schalter-spur::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--text-2); transition: transform var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve); }
+.deck-schalter input:checked + .deck-schalter-spur { background: var(--messing-schleier, rgba(201, 163, 94, 0.2)); border-color: var(--messing); }
+.deck-schalter input:checked + .deck-schalter-spur::after { transform: translateX(18px); background: var(--messing); }
+.deck-schalter input:focus-visible + .deck-schalter-spur { outline: 2px solid var(--messing); outline-offset: 2px; }
+
+.deck-segmente { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.deck-segmente-titel { margin-right: 4px; }
+.deck-pille { min-height: 44px; padding: 0 1em; font-size: 0.9rem; }
+
+.deck-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+.deck-knoepfe .knopf { min-height: 44px; gap: 8px; }
+
+/* ---------- Liste ---------- */
+.deck-liste { margin-top: 18px; }
+.deck-gruppe { margin-top: 22px; }
+.deck-gruppe-titel { margin: 0 0 10px; display: flex; align-items: center; gap: 12px; }
+.deck-gruppe-titel::after { content: ""; flex: 1; height: 1px; background: var(--linie); }
+.deck-gruppe--fehlt .deck-gruppe-titel { color: #e0a39b; }
+.deck-zeilen { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .deck-zeilen { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; } }
+
+.deck-zeile { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; min-width: 0;
+  background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius); content-visibility: auto;
+  contain-intrinsic-size: auto 96px; }
+.deck-zeile--fehlt { border-left: 2px solid var(--deck-fehlt); }
+.deck-zeile--da { border-left: 2px solid var(--deck-da); }
+.deck-zeile--aus { opacity: 0.7; }
+
+.deck-bild { flex: none; display: block; width: 52px; aspect-ratio: 63 / 88; border-radius: var(--radius-karte, 4px);
+  overflow: hidden; background: var(--flaeche-3); box-shadow: var(--schatten-karte); }
+.deck-bild img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.deck-bild--leer { border: 1px dashed var(--linie-stark); box-shadow: none; }
+
+.deck-zeile-text { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.deck-zeile-kopf { display: flex; align-items: baseline; gap: 8px; margin: 0; min-width: 0; }
+.deck-anzahl { flex: none; color: var(--messing-hell); font-weight: 600; font-variant-numeric: tabular-nums; }
+.deck-name { font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.deck-foil { flex: none; padding: 1px 7px; border: 1px solid var(--messing-dunkel); border-radius: 999px; color: var(--messing-hell);
+  font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.deck-zeile-unter { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; font-size: 0.85rem; }
+.deck-druck { color: var(--text-3); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+.deck-status { font-weight: 500; }
+.deck-status--da { color: #8fc4a8; }
+.deck-status--fehlt { color: #e0a39b; }
+.deck-status--anders { color: var(--hinweis); }
+.deck-status--proxy { color: var(--messing-hell); }
+.deck-status--aus { color: var(--text-3); }
+
+.deck-orte { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 2px; font-size: 0.85rem; }
+.deck-ort { display: inline-block; padding: 3px 0; color: var(--text); text-decoration: underline;
+  text-decoration-color: var(--linie-stark); text-underline-offset: 3px; }
+.deck-ort:hover { text-decoration-color: var(--messing); }
+.deck-ort-zusatz { color: var(--text-3); }
+
+.deck-proxy { flex: none; align-self: center; min-height: 44px; padding: 0 1em; font-size: 0.85rem; }
+
+/* ---------- Dialoge ---------- */
+.deck-wege { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.deck-weg { min-height: 44px; padding: 0 1.1em; }
+.deck-textfeld { width: 100%; min-height: 160px; resize: vertical; font-family: var(--schrift); line-height: 1.45; }
+.deck-vorschau:empty { display: none; }
+.deck-vorschau { margin-top: 14px; }
+.deck-bericht { padding: 12px 14px; background: var(--flaeche-3); border: 1px solid var(--linie); border-radius: var(--radius); }
+.deck-bericht-name { margin: 0 0 8px; font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; }
+.deck-bericht-zahlen { display: grid; gap: 8px; margin: 0 0 6px; }
+.deck-bericht-zahlen dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.deck-bericht-teil { margin-top: 12px; }
+.deck-bericht-teil .etikett { margin: 0 0 4px; }
+.deck-bericht-liste { margin: 0; padding-left: 1.1em; font-size: 0.9rem; color: var(--text-2); max-height: 180px; overflow: auto; }
+.deck-dialog .dialog-inhalt { overflow-x: hidden; }

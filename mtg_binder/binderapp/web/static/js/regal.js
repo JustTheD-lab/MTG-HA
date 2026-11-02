@@ -4,7 +4,7 @@
 // nach vorn, dann öffnet sich die Kistenansicht. Im Kopf stehen Binder und Kisten mit ihren Karten getrennt
 // (nie zusammengezählt), die Prüfen-Pille und der Zustand der Erkennung.
 // Darüber die Suche über alle Binder mit Treffern als Karteikarten.
-import { holen, senden, esc, gehe, bildUrl, bildSrcset, bewegungReduziert, euro } from './gemeinsam.js';
+import { holen, senden, esc, gehe, bildUrl, bildSrcset, bewegungReduziert, euro, scryfallBild } from './gemeinsam.js';
 import { knopf as anmeldeKnopf, angemeldet, laden, sitzung } from './anmeldung.js';
 import { dialog, dialogOffen } from './dialog.js';
 
@@ -128,6 +128,61 @@ function kisteHtml(k) {
     + (k.wert != null ? `<span class="regal-kiste-trenner" aria-hidden="true"> · </span><span class="regal-kiste-wert wert">`
       + `${esc(euro(k.wert, { rund: k.wert >= 100 }))}</span>` : '')
     + '</span></span></button></li>';
+}
+
+// ---------- Decks ----------
+
+function moebelBilderAbsichern(moebel) {
+  moebel.addEventListener('error', (ereignis) => {
+    const bild = ereignis.target;
+    if (bild.tagName !== 'IMG' || !bild.closest('.regal-deck-bild')) return;
+    const cdn = bild.dataset.sid ? scryfallBild(bild.dataset.sid) : null;
+    if (cdn && !bild.dataset.cdn) {
+      bild.dataset.cdn = '1';
+      bild.src = cdn;
+    } else {
+      bild.closest('.regal-deck-bild').classList.add('regal-deck-bild--leer');
+      bild.remove();
+    }
+  }, true);
+}
+
+function textDeck(d) {
+  const s = d.summe ?? {};
+  return `Deck ${d.name}, ${zahl(s.vorhanden)} von ${zahl(s.karten)} Karten vorhanden`
+    + (d.commander ? `, Commander ${d.commander}` : '');
+}
+
+/** Eine Deckbox: Ausschnitt aus dem Bild des Commanders oben, darunter Name und Anteil „34 / 65 vorhanden“. */
+function deckHtml(d) {
+  const s = d.summe ?? {};
+  const gesamt = s.karten ?? 0;
+  const anteil = gesamt > 0 ? Math.min(100, Math.round((s.vorhanden ?? 0) / gesamt * 100)) : 0;
+  const bild = d.bild
+    ? `<img alt="" width="63" height="88" loading="lazy" decoding="async" src="${esc(bildUrl('scryfall', d.bild, 400))}"`
+      + ` data-sid="${esc(d.bild)}">`
+    : '';
+  return `<li class="regal-deckplatz"><button type="button" class="regal-deck" data-deck="${Number(d.id)}"`
+    + ` aria-label="${esc(textDeck(d))}">`
+    + `<span class="regal-deck-bild${bild ? '' : ' regal-deck-bild--leer'}" aria-hidden="true">${bild}</span>`
+    + '<span class="regal-deck-front">'
+    + `<span class="regal-deck-name">${esc(d.name)}</span>`
+    + (d.commander ? `<span class="regal-deck-commander">${esc(d.commander)}</span>` : '')
+    + `<span class="regal-deck-zahlen etikett">${esc(zahl(s.vorhanden))} / ${esc(zahl(gesamt))} vorhanden</span>`
+    + `<span class="regal-deck-balken" aria-hidden="true"><span style="width:${anteil}%"></span></span>`
+    + '</span></button></li>';
+}
+
+/** Dritter Regalboden „Decks“. Ohne Deck-Schnittstelle (`verfuegbar: false`) gibt es ihn nicht. */
+function deckbodenHtml(decks) {
+  return '<section class="regal-deckboden" aria-label="Decks im Regal">'
+    + '<h2 class="regal-boden-titel etikett">Decks</h2>'
+    + '<p class="regal-regeln-zeile"><button type="button" class="knopf regal-neues-deck" hidden'
+    + ' aria-label="Neues Deck anlegen">' + PLUS + '<span>Neues Deck</span></button></p>'
+    + (decks.length
+      ? `<ul class="regal-decks" role="list">${decks.map(deckHtml).join('')}</ul>`
+      : '<p class="regal-leer-hinweis">Noch keine Decks im Regal.</p>')
+    + '</section>';
 }
 
 /** Etikett „Sammlung“ über den Böden: Gesamtzahl aus Bindern und Kisten, Tippen öffnet die Gesamtsammlung. */
@@ -533,9 +588,12 @@ export async function zeigen(wurzel, parameter, vorher) {
   // Version 2 der Datenbank (verfuegbar: false): kein Etikett „Sammlung“, die Route wird gar nicht erst gefragt
   const sammlungAnfrage = kistenAnfrage.then((k) => (k?.verfuegbar === true ? holen('/api/sammlung').catch(() => null) : null));
   const scanAnfrage = holen('/api/scan').catch(() => null);   // 409/Fehler: Scan-Funktionen ausblenden
-  const [{ binder }, , kistenAntwort, sammlung, scanStand] = await Promise.all([
-    holen('/api/regal'), laden(), kistenAnfrage, sammlungAnfrage, scanAnfrage,
+  const decksAnfrage = holen('/api/decks').catch(() => null);   // alte Datenbank: kein Deckboden
+  const [{ binder }, , kistenAntwort, sammlung, scanStand, decksAntwort] = await Promise.all([
+    holen('/api/regal'), laden(), kistenAnfrage, sammlungAnfrage, scanAnfrage, decksAnfrage,
   ]);
+  const decksDa = decksAntwort?.verfuegbar === true;
+  const decks = decksDa && Array.isArray(decksAntwort.decks) ? decksAntwort.decks : [];
   const scanDa = Boolean(scanStand?.gesamt);
   const karten = binder.reduce((summe, b) => summe + (b.karten ?? 0), 0);
   // Version 2 der Datenbank: verfuegbar ist false, dann gibt es weder Kistenboden noch Zahlen dazu
@@ -568,6 +626,7 @@ export async function zeigen(wurzel, parameter, vorher) {
     + '<div class="regal-moebel">' + sammlungHtml(sammlung) + setsHtml(sammlung) + scanPlatzHtml(scanStand)
     + '<div class="regal-korpus" role="group" aria-label="Binder im Regal"></div>'
     + (kistenDa ? kistenbodenHtml(kisten) : '')
+    + (decksDa ? deckbodenHtml(decks) : '')
     + '</div>';
   wurzel.replaceChildren(szene);
 
@@ -645,8 +704,27 @@ export async function zeigen(wurzel, parameter, vorher) {
     sitzung: () => {
       neu.hidden = !angemeldet(); neueKiste.hidden = !(kistenDa && angemeldet()); pcKnopf.hidden = !sitzung().ha;
       scannen.hidden = !(scanDa && angemeldet());
+      if (neuesDeck) neuesDeck.hidden = !angemeldet();
     },
   };
+  // „Neues Deck“ nur mit Schreibrecht; der Dialog (deck.js) wird erst bei Bedarf geladen
+  const neuesDeck = szene.querySelector('.regal-neues-deck');
+  if (neuesDeck) {
+    neuesDeck.hidden = !angemeldet();
+    neuesDeck.addEventListener('click', async () => {
+      if (neuesDeck.dataset.offen) return;
+      neuesDeck.dataset.offen = '1';
+      try {
+        const { neuesDeckFragen } = await import('./deck.js');
+        const id = await neuesDeckFragen();
+        if (id != null) gehe(`#/deck/${id}`); else neuLaden(wurzel, szene);
+      } finally {
+        delete neuesDeck.dataset.offen;
+      }
+    });
+  }
+  // Fehlendes Commander-Bild: direkt von Scryfall, sonst schlichte Fläche
+  moebelBilderAbsichern(zustand.moebel);
   const { moebel, treffer, eingabe, leerknopf } = zustand;
   window.addEventListener('binder:sitzung', zustand.sitzung);
 
@@ -659,7 +737,9 @@ export async function zeigen(wurzel, parameter, vorher) {
     const knopf = ereignis.target.closest('.regal-ruecken');
     if (knopf) { gehe(`#/binder/${knopf.dataset.binder}`); return; }
     const kiste = ereignis.target.closest('.regal-kiste');
-    if (kiste) gehe(`#/kiste/${kiste.dataset.kiste}`);
+    if (kiste) { gehe(`#/kiste/${kiste.dataset.kiste}`); return; }
+    const deck = ereignis.target.closest('.regal-deck');
+    if (deck) gehe(`#/deck/${deck.dataset.deck}`);
   });
 
   // Prüfen-Pille: zur Prüfansicht
@@ -739,7 +819,9 @@ export async function zeigen(wurzel, parameter, vorher) {
   // Zurück aus dem Lesetisch oder der Kistenansicht: Rücken bzw. Kiste gleiten an ihren Platz
   // (nicht bei wiederhergestellter Suche)
   const sucheDa = letzteSuche.trim().length >= 2;
-  if ((vorher?.ansicht === 'sets' || vorher?.ansicht === 'set') && !sucheDa) {
+  if (vorher?.ansicht === 'deck' && !sucheDa) {
+    zustand.szene.querySelector(`.regal-deck[data-deck="${Number(vorher.deck)}"]`)?.focus({ preventScroll: true });
+  } else if ((vorher?.ansicht === 'sets' || vorher?.ansicht === 'set') && !sucheDa) {
     zustand.szene.querySelector('.regal-sets')?.focus({ preventScroll: true });   // zurück aus den Sets
   } else if (vorher?.sammlung && !sucheDa) {
     zustand.szene.querySelector('.regal-sammlung')?.focus({ preventScroll: true });   // zurück aus der Sammlung

@@ -80,6 +80,14 @@ gehört, zum Beispiel „Preis (Ø 7 Tage) ab 5 € → Spezial“ oder „Farbe
 - Für die Special-Print-Merkmale braucht das Add-on den Katalog Version 3. Die Erkennung am PC schickt ihn beim
   nächsten Start selbst (oder „Katalog senden“ im Symbol neben der Uhr).
 
+## Decks
+
+- Im Regal unter „Decks“ → „Neues Deck“. Archidekt: den Link des Decks einfügen (das Deck muss öffentlich oder
+  ungelistet sein; das Add-on fragt Archidekt einmal ab). Moxfield und andere: „Export → Text“ kopieren und einfügen.
+- Die Deckansicht zeigt je Karte, ob sie da ist und wo sie liegt; fehlende Karten lassen sich als Text für die
+  Cardmarket-Wunschliste kopieren. Basic Lands auslassen und Proxys markieren geht jederzeit.
+- Braucht den Kartenkatalog im Add-on (schickt die Erkennung am PC).
+
 ## Werte in Home Assistant (MQTT)
 
 - Mit laufendem **Mosquitto-Broker** und eingerichteter MQTT-Integration erscheinen die Sensoren von selbst unter

@@ -1,4 +1,4 @@
--- Datenmodell der MTG-Binder-App (Stand 01.11.2026, Version 6)
+-- Datenmodell der MTG-Binder-App (Stand 02.11.2026, Version 7)
 --
 -- Binder → Seite → Tasche → Karte. Jede Sammlung gehört einem Nutzer.
 -- Fotos tragen den Verarbeitungsstatus (späterer Upload-Puffer, Phase 5).
@@ -236,6 +236,41 @@ CREATE TABLE IF NOT EXISTS sortierfach (
     CHECK ((kiste_id IS NULL) <> (binder_id IS NULL))
 );
 
+-- Decks (ab Version 7): Deckliste aus Archidekt (verknüpft, „Neu laden“) oder aus eingefügtem Text, nur das Hauptdeck
+-- mit Commander. Der Abgleich mit der Sammlung wird berechnet (binderapp.decks), nicht gespeichert.
+CREATE TABLE IF NOT EXISTS deck (
+    id           INTEGER PRIMARY KEY,
+    nutzer_id    INTEGER NOT NULL REFERENCES nutzer(id),
+    name         TEXT NOT NULL,
+    quelle       TEXT NOT NULL CHECK (quelle IN ('archidekt', 'text')),
+    extern_id    TEXT,                       -- Archidekt: Deck-ID (Ziffern)
+    extern_stand TEXT,                       -- Archidekt: updatedAt beim letzten Laden
+    abgleich     TEXT NOT NULL DEFAULT 'name' CHECK (abgleich IN ('name', 'druck')),
+    basics_auslassen INTEGER NOT NULL DEFAULT 1 CHECK (basics_auslassen IN (0, 1)),
+    regalplatz   INTEGER NOT NULL DEFAULT 0,
+    geladen      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    angelegt     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    geaendert    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
+-- Zeilen einer Deckliste. `druck_angegeben` = 0: nur der Name stand in der Liste (scryfall_id ist dann ein Druck zum
+-- Anzeigen, set_code und nummer sind leer). Ohne Katalog-Treffer bleibt oracle_id leer, abgeglichen wird dann nach Name.
+CREATE TABLE IF NOT EXISTS deck_karte (
+    id           INTEGER PRIMARY KEY,
+    deck_id      INTEGER NOT NULL REFERENCES deck(id) ON DELETE CASCADE,
+    scryfall_id  TEXT,
+    oracle_id    TEXT,
+    name         TEXT NOT NULL,
+    set_code     TEXT,
+    nummer       TEXT,
+    druck_angegeben INTEGER NOT NULL DEFAULT 1 CHECK (druck_angegeben IN (0, 1)),
+    anzahl       INTEGER NOT NULL CHECK (anzahl >= 1),
+    foil         INTEGER NOT NULL DEFAULT 0 CHECK (foil IN (0, 1)),
+    commander    INTEGER NOT NULL DEFAULT 0 CHECK (commander IN (0, 1)),
+    basic        INTEGER NOT NULL DEFAULT 0 CHECK (basic IN (0, 1)),
+    proxy        INTEGER NOT NULL DEFAULT 0 CHECK (proxy IN (0, 1))   -- zählt als vorhanden, nicht in der Fehlt-Liste
+);
+
 -- Änderungshistorie: eine Zeile je Änderung, mit Quelle und den geänderten Feldern als JSON.
 CREATE TABLE IF NOT EXISTS historie (
     id         INTEGER PRIMARY KEY,
@@ -289,5 +324,9 @@ CREATE INDEX IF NOT EXISTS i_sortierregel     ON sortierregel(nutzer_id, platz, 
 CREATE INDEX IF NOT EXISTS i_sortierfach      ON sortierfach(kiste_id, binder_id, platz, id);
 CREATE INDEX IF NOT EXISTS i_karte_sortieren  ON karte(sortieren) WHERE sortieren IS NOT NULL;
 CREATE INDEX IF NOT EXISTS i_karte_vorgemerkt ON karte(vorgemerkt_binder_id) WHERE vorgemerkt_binder_id IS NOT NULL;
+-- ab Version 7: Decks
+CREATE INDEX IF NOT EXISTS i_deck_nutzer      ON deck(nutzer_id, regalplatz, id);
+CREATE INDEX IF NOT EXISTS i_deck_karte       ON deck_karte(deck_id);
+CREATE INDEX IF NOT EXISTS i_karte_oracle     ON karte(oracle_id);
 
-PRAGMA user_version = 6;
+PRAGMA user_version = 7;
