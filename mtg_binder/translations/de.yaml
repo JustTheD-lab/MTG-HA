@@ -5,3 +5,8 @@ configuration:
       Ordner auf dem Netzlaufwerk, das Home Assistant unter „Einstellungen → System → Speicher“ eingebunden hat,
       z. B. /share/netzlaufwerk/mtg-binder oder /media/netzlaufwerk/mtg-binder. Die Datenbank bleibt immer im
       Add-on. Leer lassen nur zum Ausprobieren (dann liegt alles auf dem Mini-PC).
+  mqtt:
+    name: Werte an Home Assistant (MQTT)
+    description: >-
+      Schickt Gesamtwert, Kartenzahlen, Scan-Eingang und Status der Erkennung als Sensoren „MTG …“ über das
+      Mosquitto-Add-on (MQTT-Integration mit Discovery). Der Zugang kommt automatisch vom Supervisor.

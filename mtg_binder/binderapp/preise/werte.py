@@ -13,6 +13,17 @@ from binderapp.db.datenbank import version
 
 ABSTAENDE = {"vortag": (1, 1), "tage3": (3, 1), "tage30": (30, 3)}   # Ziel in Tagen, Toleranz in Tagen
 
+# Preisart der Werte: Spalten der Tabelle `preis` (normal, Foil). Heute gilt überall Ø 7 Tage; die spätere Wahl
+# der Preisart (Nächste Runden, Punkt 4) ergänzt hier nur Einträge. Nur Werte aus dieser Tabelle kommen ins SQL.
+PREISARTEN = {"avg7": ("avg7", "avg7_foil"), "low": ("low", "low_foil")}
+PREISART = "avg7"
+
+
+def preis_ausdruck(preisart: str = PREISART, tabelle: str = "p") -> str:
+    """SQL-Ausdruck für den Preis einer Karte `k` in der Preisart (Foil-Karten mit Foil-Preis)."""
+    normal, foil = PREISARTEN[preisart]
+    return f"(CASE WHEN k.foil THEN {tabelle}.{foil} ELSE {tabelle}.{normal} END)"
+
 SQL_PREIS_KARTE = """
 SELECT k.id,
        CASE WHEN k.foil THEN p.low_foil ELSE p.low END AS low,
@@ -23,11 +34,11 @@ JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?
 WHERE k.id IN ({platz})
 """
 
-# Wert = Summe aus Anzahl × Durchschnitt 7 Tage (Foil-Preis für Foil-Karten); Karten ohne Preis zählen nicht mit.
+# Wert = Summe aus Anzahl × Preis der Preisart (Foil-Preis für Foil-Karten); Karten ohne Preis zählen nicht mit.
 SQL_WERT = """
 SELECT {gruppe} AS gruppe,
-       SUM(k.anzahl * CASE WHEN k.foil THEN p.avg7_foil ELSE p.avg7 END) AS wert,
-       SUM(CASE WHEN (CASE WHEN k.foil THEN p.avg7_foil ELSE p.avg7 END) IS NULL THEN k.anzahl ELSE 0 END) AS ohne_preis
+       SUM(k.anzahl * {preis}) AS wert,
+       SUM(CASE WHEN {preis} IS NULL THEN k.anzahl ELSE 0 END) AS ohne_preis
 FROM karte k
 {verbindung}
 LEFT JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
@@ -117,26 +128,118 @@ def verlauf_karte(con, karte_id: int) -> dict | None:
     return ergebnis
 
 
-def werte(con, nutzer: int, art: str) -> dict[int, dict]:
-    """Wert (Durchschnitt 7 Tage) je Binder (`art="binder"`) oder je Kiste (`art="kiste"`):
+def werte(con, nutzer: int, art: str, preisart: str = PREISART) -> dict[int, dict]:
+    """Wert (Preisart, Standard Durchschnitt 7 Tage) je Binder (`art="binder"`) oder je Kiste (`art="kiste"`):
     {id: {"wert": Euro, "ohne_preis": Zahl der Karten ohne Preis}}."""
     tag = neuester_tag(con)
     if tag is None:
         return {}
+    preis = preis_ausdruck(preisart)
     if art == "binder":
-        sql = SQL_WERT.format(gruppe="s.binder_id", verbindung="JOIN tasche t ON t.id = k.tasche_id "
+        sql = SQL_WERT.format(gruppe="s.binder_id", preis=preis, verbindung="JOIN tasche t ON t.id = k.tasche_id "
                               "JOIN seite s ON s.id = t.seite_id", bedingung="")
     elif art == "kiste":
-        sql = SQL_WERT.format(gruppe="k.kiste_id", verbindung="", bedingung="AND k.kiste_id IS NOT NULL")
+        sql = SQL_WERT.format(gruppe="k.kiste_id", preis=preis, verbindung="", bedingung="AND k.kiste_id IS NOT NULL")
     else:
         raise ValueError(art)
     return {z[0]: {"wert": round(z[1] or 0, 2), "ohne_preis": z[2]} for z in con.execute(sql, (tag, nutzer))}
 
 
-def gesamtwert(con, nutzer: int) -> dict | None:
+def gesamtwert(con, nutzer: int, preisart: str = PREISART) -> dict | None:
     tag = neuester_tag(con)
     if tag is None:
         return None
-    sql = SQL_WERT.format(gruppe="1", verbindung="", bedingung="")
+    sql = SQL_WERT.format(gruppe="1", preis=preis_ausdruck(preisart), verbindung="", bedingung="")
     z = con.execute(sql, (tag, nutzer)).fetchone()
     return {"wert": round((z[1] if z else 0) or 0, 2), "ohne_preis": z[2] if z else 0, "tag": tag}
+
+
+# Veränderung am heutigen Bestand: dieselben Karten mit dem Preis des neuesten und des früheren Tages; nur Karten,
+# die an beiden Tagen einen Preis haben (neue Karten verfälschen die Steigerung nicht).
+SQL_VERAENDERUNG = """
+SELECT SUM(k.anzahl * {jetzt}) AS jetzt, SUM(k.anzahl * {frueher}) AS frueher
+FROM karte k
+JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
+JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?
+JOIN preis q ON q.cardmarket_id = d.cardmarket_id AND q.tag = ?
+WHERE k.nutzer_id = ? AND {jetzt} IS NOT NULL AND {frueher} IS NOT NULL
+"""
+
+
+def vergleichstage(con) -> dict[str, str | None]:
+    """{"vortag"|"tage3"|"tage30": Tag des Vergleichs oder None} zum neuesten Tag (Toleranzen wie ABSTAENDE)."""
+    tag = neuester_tag(con)
+    if tag is None:
+        return {name: None for name in ABSTAENDE}
+    tage = [z[0] for z in con.execute("SELECT tag FROM preisabruf WHERE tag < ? ORDER BY tag", (tag,))]
+    return {name: _naechster_tag(tage, date.fromisoformat(tag) - timedelta(days=abstand), toleranz)
+            for name, (abstand, toleranz) in ABSTAENDE.items()}
+
+
+def veraenderung_gesamt(con, nutzer: int, preisart: str = PREISART) -> dict[str, dict]:
+    """{"vortag"|"tage3"|"tage30": {"euro": …, "prozent": …, "tag": …}}; ohne passenden früheren Tag None-Werte."""
+    tag = neuester_tag(con)
+    ergebnis = {}
+    for name, frueher_tag in vergleichstage(con).items():
+        euro = prozent = None
+        if frueher_tag is not None:
+            sql = SQL_VERAENDERUNG.format(jetzt=preis_ausdruck(preisart, "p"), frueher=preis_ausdruck(preisart, "q"))
+            z = con.execute(sql, (tag, frueher_tag, nutzer)).fetchone()
+            if z is not None and z[0] is not None and z[1] is not None:
+                euro = round(z[0] - z[1], 2)
+                prozent = _prozent(z[0], z[1])
+        ergebnis[name] = {"euro": euro, "prozent": prozent, "tag": frueher_tag}
+    return ergebnis
+
+
+# Drucke zusammengefasst (gleicher Druck und Foil an mehreren Orten zählt einmal, mit Summe der Anzahl)
+SQL_TEUERSTE = """
+SELECT MIN(k.name) AS name, k.set_code, k.nummer, k.foil, SUM(k.anzahl) AS anzahl, {preis} AS preis
+FROM karte k
+JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
+JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?
+WHERE k.nutzer_id = ? AND {preis} IS NOT NULL
+GROUP BY k.scryfall_id, k.foil
+ORDER BY preis DESC, name LIMIT ?
+"""
+SQL_AENDERUNG_KARTEN = """
+SELECT MIN(k.name) AS name, k.set_code, k.nummer, k.foil, SUM(k.anzahl) AS anzahl,
+       {jetzt} AS preis, {frueher} AS preis_vorher, SUM(k.anzahl) * ({jetzt} - {frueher}) AS euro
+FROM karte k
+JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
+JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?
+JOIN preis q ON q.cardmarket_id = d.cardmarket_id AND q.tag = ?
+WHERE k.nutzer_id = ? AND {jetzt} IS NOT NULL AND {frueher} IS NOT NULL
+GROUP BY k.scryfall_id, k.foil
+HAVING euro {vergleich} 0
+ORDER BY euro {richtung}, name LIMIT ?
+"""
+
+
+def _karte_eintrag(z) -> dict:
+    return {"name": z["name"], "set": (z["set_code"] or "").upper(), "nummer": z["nummer"], "foil": bool(z["foil"]),
+            "anzahl": z["anzahl"], "preis": round(z["preis"], 2)}
+
+
+def teuerste(con, nutzer: int, anzahl: int = 5, preisart: str = PREISART) -> list[dict]:
+    """Die `anzahl` Drucke mit dem höchsten Einzelpreis (neuester Tag)."""
+    tag = neuester_tag(con)
+    if tag is None:
+        return []
+    sql = SQL_TEUERSTE.format(preis=preis_ausdruck(preisart))
+    return [_karte_eintrag(z) for z in con.execute(sql, (tag, nutzer, anzahl))]
+
+
+def groesste_aenderung(con, nutzer: int, anzahl: int = 5, preisart: str = PREISART) -> dict[str, list[dict]]:
+    """Gewinner und Verlierer in Euro zum Vortag (Anzahl × Preisänderung): {"gewinner": […], "verlierer": […]}."""
+    tag, vortag = neuester_tag(con), vergleichstage(con)["vortag"]
+    if tag is None or vortag is None:
+        return {"gewinner": [], "verlierer": []}
+    ergebnis = {}
+    for liste, vergleich, richtung in (("gewinner", ">", "DESC"), ("verlierer", "<", "ASC")):
+        sql = SQL_AENDERUNG_KARTEN.format(jetzt=preis_ausdruck(preisart, "p"), frueher=preis_ausdruck(preisart, "q"),
+                                          vergleich=vergleich, richtung=richtung)
+        ergebnis[liste] = [{**_karte_eintrag(z), "preis_vorher": round(z["preis_vorher"], 2),
+                            "euro": round(z["euro"], 2), "prozent": _prozent(z["preis"], z["preis_vorher"])}
+                           for z in con.execute(sql, (tag, vortag, nutzer, anzahl))]
+    return ergebnis

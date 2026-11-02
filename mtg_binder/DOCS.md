@@ -80,6 +80,19 @@ gehört, zum Beispiel „Preis (Ø 7 Tage) ab 5 € → Spezial“ oder „Farbe
 - Für die Special-Print-Merkmale braucht das Add-on den Katalog Version 3. Die Erkennung am PC schickt ihn beim
   nächsten Start selbst (oder „Katalog senden“ im Symbol neben der Uhr).
 
+## Werte in Home Assistant (MQTT)
+
+- Mit laufendem **Mosquitto-Broker** und eingerichteter MQTT-Integration erscheinen die Sensoren von selbst unter
+  dem Gerät **„MTG“**, z. B. `sensor.mtg_gesamtwert`, `sensor.mtg_karten_zur_prufung` oder
+  `binary_sensor.mtg_pc_verbunden`. Je Binder und Kiste gibt es einen Wert- und einen Kartensensor.
+- Den Zugang zum Broker holt das Add-on selbst beim Supervisor. Es liest die Datenbank nur und öffnet keinen Port.
+- Status, Warteschlange und Prüfung kommen jede Minute. Werte und die Top-5-Listen kommen stündlich und sofort
+  nach einem neuen Preistag.
+- Ist das Add-on aus, zeigen die Sensoren „nicht verfügbar“.
+- Abschalten: Konfiguration → „Werte an Home Assistant (MQTT)“.
+- Liste der Sensoren und Beispiele für Dashboard-Karte und Benachrichtigungen: `HOME-ASSISTANT.md` im Ordner
+  `mtg_binder` des Add-on-Repositorys.
+
 ## Wo liegt was?
 
 | Was | Wo |

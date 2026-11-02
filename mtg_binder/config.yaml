@@ -1,7 +1,7 @@
 # Lokales Home-Assistant-Add-on „MTG Binder“ (nur Server und Oberfläche; die Erkennung läuft am PC).
 # Gebaut wird der fertige Ordner mit: python -m binderapp.addon.paket  (PYTHONPATH=src)
 name: MTG Binder
-version: "0.6.3"
+version: "0.7.0"
 slug: mtg_binder
 description: Magic-Binder per Foto – Bücherregal, Lesetisch, Kisten und Prüfansicht
 arch:
@@ -23,7 +23,12 @@ map:
     read_only: false
   - type: media
     read_only: false
+# Werte an Home Assistant per MQTT mit Discovery; Zugang zum Mosquitto-Add-on liefert der Supervisor
+services:
+  - mqtt:want
 options:
   speicherort: ""
+  mqtt: true
 schema:
   speicherort: str?
+  mqtt: bool?

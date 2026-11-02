@@ -161,6 +161,12 @@ def main() -> int:
     app = Verteiler(server.app, pc.app, PC_PORT)
     # Preise täglich selbst holen (Entscheidung des Nutzers, 31.10.2026); die Datei bleibt lokal in /data/preise
     Preisabruf(DATEN / "binder.sqlite", DATEN / "preise", DATEN / "katalog.sqlite").start()
+    # Werte an Home Assistant per MQTT (Entscheidung des Nutzers, 02.11.2026); abschaltbar in den Einstellungen
+    sender = None
+    if optionen(DATEN / "options.json").get("mqtt", True) is not False:
+        from binderapp.ha.sender import Sender
+        sender = Sender(DATEN / "binder.sqlite", DATEN, os.environ.get("BINDER_VERSION", "?"))
+        sender.start()
     sockets = []
     for port in (PORT, PC_PORT):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -171,6 +177,8 @@ def main() -> int:
              os.environ.get("BINDER_VERSION", "?"), PORT, PC_PORT)
     konfig = uvicorn.Config(app, workers=1, log_level="warning", access_log=False, proxy_headers=False)
     uvicorn.Server(konfig).run(sockets=sockets)
+    if sender is not None:
+        sender.stoppen()   # „offline“ an Home Assistant, sonst bliebe der letzte Wert stehen
     return 0
 
 

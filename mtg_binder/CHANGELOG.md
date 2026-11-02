@@ -1,5 +1,14 @@
 # Änderungen
 
+## 0.7.0
+- Werte an Home Assistant per MQTT mit Discovery (Gerät „MTG“): Gesamtwert mit Veränderung zum Vortag, nach 3 und
+  30 Tagen (Euro und Prozent), Kartenzahlen, je Binder und Kiste ein Wert- und ein Kartensensor, Top 5 teuerste
+  Karten, Top 5 Gewinner und Verlierer, Warteschlange, Karten zur Prüfung, PC verbunden, letzter Scan und letzter
+  Preisabruf.
+- Braucht das Mosquitto-Add-on; den Zugang holt das Add-on selbst beim Supervisor. Abschaltbar in der Konfiguration
+  („Werte an Home Assistant (MQTT)“). Ist das Add-on aus, zeigen die Sensoren „nicht verfügbar“.
+- Nur lesend, kein neuer Port, keine neue Abhängigkeit.
+
 ## 0.6.3
 - Sortierung „Preis (Ø 7 Tage)“ in der Gesamtsammlung und in jeder Kiste (Foil-Karten mit Foil-Preis, ohne Preis
   zuletzt).
