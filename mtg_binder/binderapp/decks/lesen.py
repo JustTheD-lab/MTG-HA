@@ -25,7 +25,11 @@ ZEILE_LAENGE = 300      # längere Zeilen sind keine Kartenzeilen (und bremsen d
 ANZAHL_HOECHSTENS = 999
 GESAMTZEIT = 30.0       # Sekunden für den ganzen Abruf bei Archidekt
 RE_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+# Abschnitte eines Export-Texts, die nicht zum Hauptdeck gehören
 NICHT_IM_DECK = {"sideboard", "maybeboard", "considering", "tokens", "token", "about"}
+# Kategorien (Archidekt): Es zählt nur die erste Kategorie einer Karte, weitere sind Etiketten. Eigene Kategorien wie
+# „Tokens“ gehören zum Deck, solange Archidekt sie mitzählt (`includedInDeck`); Sideboard und Maybeboard nie.
+KATEGORIE_NICHT_IM_DECK = {"sideboard", "maybeboard", "considering"}
 RE_ARCHIDEKT = re.compile(r"^(?:https?://)?(?:www\.)?archidekt\.com/(?:api/)?decks/(\d{1,12})(?:[/?#].*)?$", re.I)
 RE_ABSCHNITT = re.compile(r"^(?://\s*)?(commanders?|companion|deck|mainboard|main|sideboard|maybeboard|considering|"
                           r"tokens?|about)\s*:?\s*(?:\(\d+\))?$", re.I)
@@ -118,7 +122,8 @@ def _archidekt_zeilen(daten: dict) -> tuple[dict, list[dict]]:
         if not isinstance(e, dict) or e.get("deletedAt"):
             continue
         namen = [c for c in e.get("categories") or [] if isinstance(c, str)]
-        if any(c.lower() in NICHT_IM_DECK or kategorien.get(c, {}).get("includedInDeck") is False for c in namen):
+        erste = namen[0] if namen else ""
+        if erste.lower() in KATEGORIE_NICHT_IM_DECK or kategorien.get(erste, {}).get("includedInDeck") is False:
             continue
         karte = e.get("card") or {}
         orakel = karte.get("oracleCard") or {}
@@ -133,7 +138,7 @@ def _archidekt_zeilen(daten: dict) -> tuple[dict, list[dict]]:
             "set_code": ((karte.get("edition") or {}).get("editioncode") or None),
             "nummer": karte.get("collectorNumber") or None,
             "foil": str(e.get("modifier") or "").lower() in ("foil", "etched"),
-            "commander": any(c == "Commander" or kategorien.get(c, {}).get("isPremier") for c in namen),
+            "commander": erste == "Commander" or bool(kategorien.get(erste, {}).get("isPremier")),
             "basic": "Basic" in (orakel.get("superTypes") or []),
         })
     kopf = {"name": str(daten.get("name") or "Archidekt-Deck")[:120], "extern_id": str(daten.get("id") or ""),
@@ -174,11 +179,11 @@ def text_zeilen(text: str) -> tuple[list[dict], list[str]]:
         anzahl, rest = (int(m.group(1)), m.group(2)) if m else (1, z)
         commander = abschnitt == "commander"
         kategorien = re.findall(r"\[([^\]]*)\]", rest)
-        if kategorien:
-            woerter = {w.strip().lower() for k in kategorien for w in re.split(r"[,{}]", k) if w.strip()}
-            if woerter & NICHT_IM_DECK:
+        if kategorien:   # Archidekt-Export: „[Draw,Maybeboard]“, „[Maybeboard{noDeck}{noPrice}]“; nur die erste zählt
+            erste = re.split(r"[,{]", kategorien[0])[0].strip().lower()
+            if erste in KATEGORIE_NICHT_IM_DECK or "{nodeck}" in kategorien[0].lower().replace(" ", ""):
                 continue
-            commander = commander or "commander" in woerter
+            commander = commander or erste == "commander"
         rest = re.sub(r"\[[^\]]*\]|\^[^^]*\^", " ", rest)
         foil = bool(re.search(r"\*[FE]\*|\(foil\)|\(etched\)", rest, re.I))
         rest = re.sub(r"\*[A-Z]\*|\((?:foil|etched)\)", " ", rest, flags=re.I).strip()

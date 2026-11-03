@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.9.1
+- Archidekt-Import korrigiert: Es zählt nur die erste Kategorie einer Karte (wie bei Archidekt). Karten mit einer
+  zusätzlichen Kategorie „Maybeboard“ und Karten in eigenen Kategorien wie „Tokens“ fehlten bisher. Schon
+  importierte Decks mit „Neu laden“ ergänzen.
+
 ## 0.9.0
 - Decks: neuer Regalboden „Decks“.
   - Import per Archidekt-Link (öffentliche oder ungelistete Decks) oder als eingefügter Export-Text (Moxfield,
