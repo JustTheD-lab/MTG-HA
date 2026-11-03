@@ -82,7 +82,7 @@ FEST = [
      {"device_class": "timestamp"}),
     ("sensor", "gesamtwert", "Gesamtwert", THEMA_WERTE, _wert("gesamtwert"),
      {**EURO, "json_attributes_topic": THEMA_WERTE,
-      "json_attributes_template": _liste("preisart", "preistag", "ohne_preis", "binder", "kisten")}),
+      "json_attributes_template": _liste("preisart", "preistag", "ohne_preis", "binder", "kisten", "decks")}),
     ("sensor", "karten", "Karten", THEMA_WERTE, _wert("karten"),
      {**ANZAHL, "unit_of_measurement": "Karten", "icon": "mdi:cards", "json_attributes_topic": THEMA_WERTE,
       "json_attributes_template": _liste("posten")}),
@@ -117,12 +117,20 @@ def konfiguration(art: str, objekt: str, name: str, thema: str, wert: str, weite
     return k
 
 
+ORT_TITEL = {"binder": "Binder", "kiste": "Kiste", "deck": "Deck"}
+
+
 def ort_entitaeten(art_ort: str, eintrag: dict) -> list[tuple]:
-    """Zwei Sensoren je Binder oder Kiste: Wert und Karten."""
+    """Zwei Sensoren je Binder, Kiste oder Deck: Wert und Karten (beim Deck: die Karten, die im Deck liegen; die
+    Kosten der Fehlt-Liste stehen als Attribut am Wert)."""
     thema = f"{PRAEFIX}/{art_ort}/{eintrag['id']}"
-    titel = f"{'Binder' if art_ort == 'binder' else 'Kiste'} {eintrag['name']}"
+    titel = f"{ORT_TITEL[art_ort]} {eintrag['name']}"
     basis = f"{art_ort}_{eintrag['id']}"
-    return [("sensor", f"{basis}_wert", f"{titel} Wert", thema, _wert("wert"), {**EURO}),
+    wert = {**EURO}
+    if art_ort == "deck":
+        wert.update(json_attributes_topic=thema,
+                    json_attributes_template="{{ {'fehlt_kosten': value_json.fehlt_kosten} | tojson }}")
+    return [("sensor", f"{basis}_wert", f"{titel} Wert", thema, _wert("wert"), wert),
             ("sensor", f"{basis}_karten", f"{titel} Karten", thema, _wert("karten"),
              {**ANZAHL, "unit_of_measurement": "Karten", "icon": "mdi:cards"})]
 
@@ -207,13 +215,14 @@ class Sender(threading.Thread):
     def _werte_senden(self, w: dict) -> None:
         self._senden_json(THEMA_WERTE, w)
         aktuell = {}
-        for art_ort, liste in (("binder", w["binder"]), ("kiste", w["kisten"])):
+        for art_ort, liste in (("binder", w["binder"]), ("kiste", w["kisten"]), ("deck", w.get("decks", []))):
             for eintrag in liste:
                 for e in ort_entitaeten(art_ort, eintrag):
                     aktuell[e[1]] = e[0]
                     self._senden_json(discovery_thema(e[0], e[1]), konfiguration(*e, version=self.version))
                 self._senden_json(f"{PRAEFIX}/{art_ort}/{eintrag['id']}",
-                                  {"wert": eintrag["wert"], "karten": eintrag["karten"]})
+                                  {"wert": eintrag["wert"], "karten": eintrag["karten"],
+                                   **({"fehlt_kosten": eintrag.get("fehlt_kosten")} if art_ort == "deck" else {})})
         # Gelöschte Binder und Kisten abmelden: leere Konfiguration entfernt die Entität in Home Assistant
         for objekt, art in self._stand_lesen().items():
             if objekt not in aktuell:
@@ -231,7 +240,7 @@ class Sender(threading.Thread):
         if not isinstance(stand, dict):
             return {}
         return {o: a for o, a in stand.items() if isinstance(a, str) and o.count("_") >= 2
-                and o.split("_", 1)[0] in ("binder", "kiste")}
+                and o.split("_", 1)[0] in ORT_TITEL}
 
     def _stand_schreiben(self, stand: dict[str, str]) -> None:
         teil = self.stand_datei.with_name(self.stand_datei.name + ".neu")

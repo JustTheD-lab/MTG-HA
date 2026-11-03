@@ -108,3 +108,65 @@ span.deck-quelle { text-decoration: none; color: var(--text-2); }
 .deck-bericht-teil .etikett { margin: 0 0 4px; }
 .deck-bericht-liste { margin: 0; padding-left: 1.1em; font-size: 0.9rem; color: var(--text-2); max-height: 180px; overflow: auto; }
 .deck-dialog .dialog-inhalt { overflow-x: hidden; }
+
+/* ---------- Deckbau: Werte, Sortierung, Meldung ---------- */
+.deck-balken-deck { background: var(--messing-hell); }
+.deck-werte { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; margin: 0 0 4px; }
+.deck-wert { min-width: 0; }
+.deck-wert dd { margin: 3px 0 0; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.deck-veraenderung { display: block; font-size: 0.78rem; font-weight: 500; }
+@media (min-width: 700px) { .deck-veraenderung { display: inline; margin-left: 6px; } .deck-wert dd { font-size: 1.25rem; } }
+.deck-ohne-preis { margin: 0 0 6px; font-size: 0.82rem; }
+.deck-aktionen:empty { display: none; }
+a.knopf { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.deck-preis { margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; font-weight: 500; }
+.deck-preis-summe { color: var(--text-3); font-weight: 400; }
+.deck-andere { margin: 0; font-size: 0.85rem; color: var(--hinweis); }
+.deck-andere a { color: inherit; text-decoration-color: var(--linie-stark); text-underline-offset: 3px; }
+.deck-gruppe--ueberzaehlig .deck-zuruecklegen { min-height: 44px; margin-top: 10px; }
+
+.deck-toast { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 8px 8px 14px; background: var(--flaeche-3);
+  border: 1px solid var(--messing-dunkel); border-radius: var(--radius); }
+.deck-toast[hidden] { display: none; }
+.deck-toast--fehler { border-color: var(--warnung); }
+.deck-toast-text { flex: 1; min-width: 0; line-height: 1.4; }
+.deck-toast-rueck { min-height: 44px; }
+
+/* ---------- Entnahme und Zerlegen ---------- */
+.bau { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+.bau-inhalt { margin-top: 16px; }
+.bau-stand { padding: 12px 14px; background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius); display: grid; gap: 10px; }
+.bau-zaehler { margin: 0; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.bau-zaehler strong { color: var(--text); font-size: 1.15rem; }
+.bau-stand .bau-zaehler { color: var(--text-2); }
+.bau-fach { margin: 14px 0 8px; color: var(--messing-hell); }
+.bau-zeilen { margin-bottom: 4px; }
+.bau-eintrag { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bau-karte, .bau-wahl-eintrag { position: relative; display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 76px; padding: 10px 52px 10px 12px;
+  text-align: left; color: var(--text); font: inherit; cursor: pointer; background: var(--flaeche-2); border: 1px solid var(--linie);
+  border-radius: var(--radius); -webkit-tap-highlight-color: transparent; transition: opacity var(--dauer-kurz) var(--kurve), border-color var(--dauer-kurz) var(--kurve); }
+.bau-karte:hover, .bau-wahl-eintrag:hover { border-color: var(--linie-stark); }
+.bau-karte:focus-visible, .bau-wahl-eintrag:focus-visible, .bau-anders:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; }
+.bau-text { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.bau-text .deck-zeile-kopf { flex-wrap: wrap; }
+.bau-platz { color: var(--messing-hell); font-size: 0.9rem; line-height: 1.35; overflow-wrap: anywhere; }
+.bau-haken { position: absolute; top: 50%; right: 12px; width: 30px; height: 30px; margin-top: -15px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--linie-stark); color: transparent; }
+.bau-eintrag--ab .bau-karte { opacity: 0.5; border-color: var(--deck-da); }
+.bau-eintrag--ab .bau-name, .bau-eintrag--ab .deck-name { text-decoration: line-through; text-decoration-color: var(--text-3); }
+.bau-eintrag--ab .bau-haken { color: var(--flaeche-1); background: var(--deck-da); border-color: var(--deck-da); }
+.bau-anders { align-self: flex-start; min-height: 44px; padding: 0 1em; font-size: 0.85rem; }
+.bau-fuss { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center;
+  padding: 12px var(--rand-sicher) calc(12px + env(safe-area-inset-bottom)); background: var(--flaeche-1); border-top: 1px solid var(--linie); }
+.bau-fertig { width: 100%; max-width: 520px; min-height: 52px; font-size: 1rem; }
+.bau-ersatz { margin: 14px 0 0; padding: 12px 14px; background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius); }
+.bau-ersatz .feld { width: 100%; }
+.bau-wahl-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bau-wahl-eintrag { padding-right: 12px; }
+@media (min-width: 900px) {
+  .bau-zeilen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bau-stand { grid-template-columns: auto 1fr; align-items: center; gap: 24px; }
+  .bau-wahl-liste { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.bau-text .deck-zeile-kopf { flex-wrap: nowrap; }
+.bau-text .deck-name { min-width: 0; }

@@ -29,6 +29,8 @@ SELECT COUNT(*) AS posten, COALESCE(SUM(k.anzahl), 0) AS karten,
        COALESCE(SUM(CASE WHEN k.tasche_id IS NOT NULL THEN k.anzahl ELSE 0 END), 0) AS binder_karten,
        COALESCE(SUM(k.kiste_id IS NOT NULL), 0) AS kisten_posten,
        COALESCE(SUM(CASE WHEN k.kiste_id IS NOT NULL THEN k.anzahl ELSE 0 END), 0) AS kisten_karten,
+       COALESCE(SUM(k.deck_id IS NOT NULL), 0) AS deck_posten,
+       COALESCE(SUM(CASE WHEN k.deck_id IS NOT NULL THEN k.anzahl ELSE 0 END), 0) AS deck_karten,
        MAX(kd.manawert) AS manawert_max, COALESCE(MAX(k.foil), 0) AS foils,
        COALESCE(SUM(kd.scryfall_id IS NULL), 0) AS ohne_kartendaten
 {k_.VON} WHERE k.nutzer_id = ? AND {k_.ORT_DA}
@@ -44,7 +46,7 @@ FROM karte k WHERE k.nutzer_id = ? AND {k_.ORT_DA} AND {k_.DOPPEL}
 """
 SQL_OHNE_ORT = """
 SELECT COUNT(*) AS posten, COALESCE(SUM(anzahl), 0) AS karten FROM karte
-WHERE nutzer_id = ? AND kiste_id IS NULL AND tasche_id IS NULL
+WHERE nutzer_id = ? AND kiste_id IS NULL AND tasche_id IS NULL AND deck_id IS NULL
 """
 SQL_SAETZE = f"""
 SELECT {k_.SATZ} AS code, MIN(kd.set_name) AS name, MIN(kd.set_erschienen) AS erschienen, COUNT(*) AS posten
@@ -67,6 +69,10 @@ UNION ALL
 SELECT 'k' || ki.id, 'kiste', ki.id, ki.name, COUNT(k.id), COALESCE(SUM(k.anzahl), 0), 1, ki.regalplatz
 FROM kiste ki JOIN karte k ON k.kiste_id = ki.id AND k.nutzer_id = ki.nutzer_id
 WHERE ki.nutzer_id = ? GROUP BY ki.id
+UNION ALL
+SELECT 'd' || de.id, 'deck', de.id, de.name, COUNT(k.id), COALESCE(SUM(k.anzahl), 0), 2, de.regalplatz
+FROM deck de JOIN karte k ON k.deck_id = de.id AND k.nutzer_id = de.nutzer_id
+WHERE de.nutzer_id = ? GROUP BY de.id
 ORDER BY r, platz, id
 """
 
@@ -79,13 +85,14 @@ def routen(h) -> list[Route]:
         with closing(h.db()) as con:
             con.execute("BEGIN")  # ein Stand für alle Abfragen dieser Antwort
             k_._ab_version_3(con, 404)
+            k_._ab_version_8(con)
             z = con.execute(SQL_KOPF, (n,)).fetchone()
             quellen = {q["wert"]: dict(q) for q in con.execute(SQL_QUELLEN, (n,))}
             doppel = con.execute(SQL_DOPPEL, (n,)).fetchone()
             ohne = con.execute(SQL_OHNE_ORT, (n,)).fetchone()
             saetze = con.execute(SQL_SAETZE, (n,)).fetchall()
             sprachen = con.execute(SQL_SPRACHEN, (n,)).fetchall()
-            orte = con.execute(SQL_ORTE, (n, n)).fetchall()
+            orte = con.execute(SQL_ORTE, (n, n, n)).fetchall()
             wert = werte.gesamtwert(con, n)
         maximum = z["manawert_max"]
         return JSONResponse({
@@ -94,6 +101,7 @@ def routen(h) -> list[Route]:
             "wert": wert,   # {"wert": Euro (Durchschnitt 7 Tage), "ohne_preis", "tag"} oder None
             "binder": {"posten": z["binder_posten"], "karten": z["binder_karten"]},
             "kisten": {"posten": z["kisten_posten"], "karten": z["kisten_karten"]},
+            "decks": {"posten": z["deck_posten"], "karten": z["deck_karten"]},
             "quellen": [{"wert": w, "text": t, "posten": quellen.get(w, {}).get("posten", 0),
                          "karten": quellen.get(w, {}).get("karten", 0)} for w, t in k_.QUELLEN],
             "doppel": dict(doppel),
@@ -116,6 +124,7 @@ def routen(h) -> list[Route]:
         with closing(h.db()) as con:
             con.execute("BEGIN")  # ein Stand für alle Abfragen dieser Antwort
             k_._ab_version_3(con, 404)
+            k_._ab_version_8(con)
             return JSONResponse(k_.seite_lesen(con, a))
 
     return [

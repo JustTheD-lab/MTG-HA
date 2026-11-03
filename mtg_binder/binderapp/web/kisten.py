@@ -178,12 +178,15 @@ FACH_JOIN = " LEFT JOIN temp.fachwahl fw ON fw.karte_id = k.id"
 # Gesamtsammlung (Paket L): Bereich „alles“ statt einer Kiste; dazu Ort und Quelle. Die Tabellen ki (Kiste),
 # t, se, b (Tasche, Seite, Binder) gibt es nur in dieser Abfrage (VON_SAMMLUNG).
 QUELLEN = (("scan", "Scan"), ("manabox", "ManaBox"), ("manuell", "Von Hand"))
-ORT_DA = "(k.kiste_id IS NOT NULL OR k.tasche_id IS NOT NULL)"
-ORT_SCHLUESSEL = "(CASE WHEN k.kiste_id IS NOT NULL THEN 'k' || k.kiste_id ELSE 'b' || b.id END)"
+# Orte einer Karte: Binder-Tasche, Kiste oder (ab Version 8) Deck
+ORT_DA = "(k.kiste_id IS NOT NULL OR k.tasche_id IS NOT NULL OR k.deck_id IS NOT NULL)"
+ORT_SCHLUESSEL = ("(CASE WHEN k.kiste_id IS NOT NULL THEN 'k' || k.kiste_id WHEN k.deck_id IS NOT NULL "
+                  "THEN 'd' || k.deck_id ELSE 'b' || b.id END)")
+ORT_RANG = "(CASE WHEN k.kiste_id IS NOT NULL THEN 1 WHEN k.deck_id IS NOT NULL THEN 2 ELSE 0 END)"
 SAMMLUNG_GRUPPIERUNGEN = {
     **GRUPPIERUNGEN,
-    "ort": Gruppierung("Ort", ("(k.kiste_id IS NOT NULL)", "COALESCE(ki.regalplatz, b.regalplatz)"),
-                       ORT_SCHLUESSEL, "COALESCE(ki.name, b.name)"),
+    "ort": Gruppierung("Ort", (ORT_RANG, "COALESCE(ki.regalplatz, b.regalplatz, de.regalplatz)"),
+                       ORT_SCHLUESSEL, "COALESCE(ki.name, b.name, de.name)"),
     "quelle": Gruppierung("Quelle", (_rang("k.quelle", QUELLEN),), "k.quelle", "NULL"),
 }
 ALLE_GRUPPIERUNGEN = SAMMLUNG_GRUPPIERUNGEN   # zum Nachschlagen nach der Prüfung in anfrage_lesen
@@ -199,7 +202,7 @@ def gruppentext(gruppe: str, schluessel: str, extra) -> str:
     if gruppe == "buchstabe":
         return schluessel
     if gruppe == "ort":
-        return f"{'Kiste' if schluessel.startswith('k') else 'Binder'} {extra}"
+        return f"{ {'k': 'Kiste', 'd': 'Deck'}.get(schluessel[:1], 'Binder')} {extra}"
     if gruppe == "quelle":
         return dict(QUELLEN).get(schluessel, schluessel)
     if gruppe == "sprache":
@@ -228,7 +231,7 @@ SKALARE = ("sort", "richtung", "gruppe", "ab", "anzahl", "foil", "mw_von", "mw_b
 LISTEN = ("farbe", "seltenheit", "typ", "sprache", "set")
 SAMMLUNG_SKALARE = ("doppel",)
 SAMMLUNG_LISTEN = ("ort", "quelle")
-ORT_MUSTER = re.compile(r"[kb][0-9]{1,9}")
+ORT_MUSTER = re.compile(r"[kbd][0-9]{1,9}")
 ZAHL = re.compile(r"[0-9]{1,9}")
 SPRACHE_MUSTER = re.compile(r"[a-z]{2,3}")
 SET_MUSTER = re.compile(r"[a-z0-9]{2,8}")
@@ -316,17 +319,21 @@ def anfrage_lesen(query_params, kiste_id: int | None, nutzer: int) -> Anfrage:
     if sammlung:
         where = ["k.nutzer_id = ?", ORT_DA]
         args: list = [nutzer]
-        orte = _liste(roh, "ort", muster=ORT_MUSTER, hinweis="Erwartet werden Orte wie k12 (Kiste) oder b3 (Binder).")
+        orte = _liste(roh, "ort", muster=ORT_MUSTER,
+                      hinweis="Erwartet werden Orte wie k12 (Kiste), b3 (Binder) oder d5 (Deck).")
         kisten_ids = [int(o[1:]) for o in orte if o[0] == "k"]
         binder_ids = [int(o[1:]) for o in orte if o[0] == "b"]
+        deck_ids = [int(o[1:]) for o in orte if o[0] == "d"]
         teile = []
         if kisten_ids:
             teile.append(f"k.kiste_id IN ({','.join('?' * len(kisten_ids))})")
         if binder_ids:
             teile.append(f"b.id IN ({','.join('?' * len(binder_ids))})")
+        if deck_ids:
+            teile.append(f"k.deck_id IN ({','.join('?' * len(deck_ids))})")
         if teile:
             where.append("(" + " OR ".join(teile) + ")")
-            args += kisten_ids + binder_ids
+            args += kisten_ids + binder_ids + deck_ids
         quellen = _liste(roh, "quelle", erlaubt={q for q, _ in QUELLEN},
                          hinweis="Möglich: " + _auswahl(q for q, _ in QUELLEN) + ".")
         if quellen:
@@ -398,7 +405,8 @@ def anfrage_lesen(query_params, kiste_id: int | None, nutzer: int) -> Anfrage:
 
 VON = "FROM karte k LEFT JOIN kartendaten kd ON kd.scryfall_id = k.scryfall_id"
 VON_SAMMLUNG = (f"{VON} LEFT JOIN kiste ki ON ki.id = k.kiste_id LEFT JOIN tasche t ON t.id = k.tasche_id "
-                "LEFT JOIN seite se ON se.id = t.seite_id LEFT JOIN binder b ON b.id = se.binder_id")
+                "LEFT JOIN seite se ON se.id = t.seite_id LEFT JOIN binder b ON b.id = se.binder_id "
+                "LEFT JOIN deck de ON de.id = k.deck_id")
 
 SPALTEN = f"""k.id, k.name, {SATZ} AS satz, kd.set_name, k.nummer, k.sprache, k.foil, k.anzahl,
        COALESCE(k.bild, kd.bild) AS bild, kd.manakosten, kd.manawert, kd.farben, kd.farbgruppe,
@@ -406,9 +414,10 @@ SPALTEN = f"""k.id, k.name, {SATZ} AS satz, kd.set_name, k.nummer, k.sprache, k.
 SPALTEN_SAMMLUNG = f"{SPALTEN}, k.quelle, k.kiste_id"
 # Ort je Karte, nur für die Karten einer Seite (seite_lesen)
 SQL_ORT = ("SELECT k.id, k.kiste_id, ki.name AS kiste_name, b.id AS binder_id, b.name AS binder_name, "
-           "se.nummer AS seite, t.zeile, t.spalte FROM karte k LEFT JOIN kiste ki ON ki.id = k.kiste_id "
+           "se.nummer AS seite, t.zeile, t.spalte, k.deck_id, de.name AS deck_name FROM karte k "
+           "LEFT JOIN kiste ki ON ki.id = k.kiste_id "
            "LEFT JOIN tasche t ON t.id = k.tasche_id LEFT JOIN seite se ON se.id = t.seite_id "
-           "LEFT JOIN binder b ON b.id = se.binder_id WHERE k.id IN ({platz})")
+           "LEFT JOIN binder b ON b.id = se.binder_id LEFT JOIN deck de ON de.id = k.deck_id WHERE k.id IN ({platz})")
 
 
 def von(a: Anfrage) -> str:
@@ -520,6 +529,8 @@ def seite_lesen(con, a: Anfrage) -> dict:
             if z["kiste_id"] is not None:
                 k["ort"] = {"art": "kiste", "id": z["kiste_id"], "name": z["kiste_name"],
                             "text": f"Kiste {z['kiste_name']}"}
+            elif z["deck_id"] is not None:
+                k["ort"] = {"art": "deck", "id": z["deck_id"], "name": z["deck_name"], "text": f"Deck {z['deck_name']}"}
             elif z["binder_id"] is not None:
                 k["ort"] = {"art": "binder", "id": z["binder_id"], "name": z["binder_name"], "seite": z["seite"],
                             "zeile": z["zeile"], "spalte": z["spalte"],
@@ -590,6 +601,14 @@ def _ab_version_3(con, status: int) -> None:
     if version(con) < KISTEN_AB_VERSION:
         raise Fehler("Bulkkisten gibt es erst ab Datenbankversion 3. Bitte zuerst: python -m binderapp.db.migrieren",
                      status)
+
+
+def _ab_version_8(con) -> None:
+    """Gesamtsammlung und Sets kennen ab dem Deckbau den Ort „Deck“ (Spalte karte.deck_id, Version 8). Das Add-on
+    migriert beim Start selbst; eine ältere Datenbank am PC bekommt eine klare Meldung statt eines Fehlers 500."""
+    if version(con) < 8:
+        raise Fehler("Die Gesamtsammlung braucht die Datenbankversion 8. Bitte zuerst sichern und migrieren: "
+                     "python -m binderapp.db.migrieren", 409)
 
 
 def kiste_mit_karten_loeschen(con, nutzer: int, kiste_id: int) -> dict:

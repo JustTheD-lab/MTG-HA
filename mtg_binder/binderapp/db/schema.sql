@@ -1,4 +1,4 @@
--- Datenmodell der MTG-Binder-App (Stand 02.11.2026, Version 7)
+-- Datenmodell der MTG-Binder-App (Stand 03.11.2026, Version 8)
 --
 -- Binder → Seite → Tasche → Karte. Jede Sammlung gehört einem Nutzer.
 -- Fotos tragen den Verarbeitungsstatus (späterer Upload-Puffer, Phase 5).
@@ -118,7 +118,12 @@ CREATE TABLE IF NOT EXISTS karte (
     zustand      TEXT,                     -- Erhaltung laut Quelle, z. B. near_mint
     -- ab Version 6 (Sortierregeln)
     sortieren    TEXT CHECK (sortieren IS NULL OR sortieren = 'offen'),  -- offen: wartet aufs Einsortieren (Bulk-Scan)
-    vorgemerkt_binder_id INTEGER REFERENCES binder(id) ON DELETE SET NULL  -- schwebend: für diesen Binder vorgemerkt
+    vorgemerkt_binder_id INTEGER REFERENCES binder(id) ON DELETE SET NULL,  -- schwebend: für diesen Binder vorgemerkt
+    -- ab Version 8 (Deckbau): dritter Ort „Deck“ (die App sorgt dafür, dass nur einer von Tasche, Kiste, Deck gesetzt
+    -- ist); die Herkunft merkt sich, woher eine Karte ins Deck kam (Zerlegen legt sie dorthin zurück)
+    deck_id      INTEGER REFERENCES deck(id),
+    herkunft_tasche_id INTEGER REFERENCES tasche(id) ON DELETE SET NULL,
+    herkunft_kiste_id  INTEGER REFERENCES kiste(id) ON DELETE SET NULL
 );
 
 -- Kartendaten je Druck (ab Version 3), abgeleitet aus dem Scryfall-Katalog (binderapp.katalog),
@@ -268,7 +273,30 @@ CREATE TABLE IF NOT EXISTS deck_karte (
     foil         INTEGER NOT NULL DEFAULT 0 CHECK (foil IN (0, 1)),
     commander    INTEGER NOT NULL DEFAULT 0 CHECK (commander IN (0, 1)),
     basic        INTEGER NOT NULL DEFAULT 0 CHECK (basic IN (0, 1)),
-    proxy        INTEGER NOT NULL DEFAULT 0 CHECK (proxy IN (0, 1))   -- zählt als vorhanden, nicht in der Fehlt-Liste
+    proxy        INTEGER NOT NULL DEFAULT 0 CHECK (proxy IN (0, 1)),  -- zählt als vorhanden, nicht in der Fehlt-Liste
+    -- ab Version 8: Zahl der Cardmarket-Produkte in deck_produkt (NULL = noch nicht im Katalog gesucht)
+    produkte     INTEGER
+);
+
+-- Cardmarket-Produkte je Deckzeile (ab Version 8), abgeleitet aus dem Katalog, ohne Historie: bei angegebenem Druck
+-- genau eins, bei nur einem Namen alle Drucke der Karte (Preis = günstigster Druck, Entscheidung des Nutzers).
+-- Der tägliche Preisabruf speichert auch diese Produkte.
+CREATE TABLE IF NOT EXISTS deck_produkt (
+    deck_karte_id INTEGER NOT NULL REFERENCES deck_karte(id) ON DELETE CASCADE,
+    cardmarket_id INTEGER NOT NULL,
+    PRIMARY KEY (deck_karte_id, cardmarket_id)
+);
+
+-- Haken der Entnahme beim Deckbau (ab Version 8), bis „Fertig“ (dann wandern die Karten ins Deck). `abgehakt` = 0:
+-- nur ein anderes Exemplar gewählt. Zwischenstand, ohne Historie.
+CREATE TABLE IF NOT EXISTS deck_entnahme (
+    id            INTEGER PRIMARY KEY,
+    deck_id       INTEGER NOT NULL REFERENCES deck(id) ON DELETE CASCADE,
+    deck_karte_id INTEGER NOT NULL REFERENCES deck_karte(id) ON DELETE CASCADE,
+    karte_id      INTEGER NOT NULL REFERENCES karte(id) ON DELETE CASCADE,
+    anzahl        INTEGER NOT NULL CHECK (anzahl >= 1),
+    abgehakt      INTEGER NOT NULL DEFAULT 0 CHECK (abgehakt IN (0, 1)),
+    UNIQUE (deck_karte_id, karte_id)
 );
 
 -- Änderungshistorie: eine Zeile je Änderung, mit Quelle und den geänderten Feldern als JSON.
@@ -328,5 +356,9 @@ CREATE INDEX IF NOT EXISTS i_karte_vorgemerkt ON karte(vorgemerkt_binder_id) WHE
 CREATE INDEX IF NOT EXISTS i_deck_nutzer      ON deck(nutzer_id, regalplatz, id);
 CREATE INDEX IF NOT EXISTS i_deck_karte       ON deck_karte(deck_id);
 CREATE INDEX IF NOT EXISTS i_karte_oracle     ON karte(oracle_id);
+-- ab Version 8: Deckbau
+CREATE INDEX IF NOT EXISTS i_karte_deck       ON karte(deck_id) WHERE deck_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS i_deck_produkt_cm  ON deck_produkt(cardmarket_id);
+CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 
-PRAGMA user_version = 7;
+PRAGMA user_version = 8;

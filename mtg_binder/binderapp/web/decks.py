@@ -1,19 +1,30 @@
-"""Decks: Import aus Archidekt (Link) oder Export-Text, Abgleich mit der Sammlung, Fehlt-Liste (ab Version 7).
+"""Decks: Import aus Archidekt (Link) oder Export-Text, Abgleich, Preise, Fehlt-Liste, Deckbau (ab Version 8).
 
-    GET   /api/decks                              alle Decks mit Summen (Regalboden „Decks“)
+    GET   /api/decks                              alle Decks mit Summen und Werten (Regalboden „Decks“)
     POST  /api/decks/vorschau  {"archidekt": Link} oder {"text", "name"}   Probelauf, schreibt nichts
     POST  /api/decks           dasselbe, legt das Deck an (201)
-    GET   /api/deck/{id}                          Zeilen mit Abgleich, Summen, Fehlt-Liste (Text für Cardmarket)
+    GET   /api/deck/{id}                          Zeilen mit Abgleich und Preisen, Summen, Werte, Fehlt-Liste
     GET   /api/deck/{id}/fehlt                    Fehlt-Liste als Textdatei
     PATCH /api/deck/{id}       {"name"?, "abgleich"?: "name"|"druck", "basics_auslassen"?: bool}
     POST  /api/deck/{id}/zeile/{zeile}/proxy  {"proxy": bool}
     POST  /api/deck/{id}/neu-laden  {"ausfuehren"?: bool, "text"? (nur Text-Decks)}   ohne „ausfuehren“ nur Vorschau
-    POST  /api/deck/{id}/loeschen   {"name"}      zweite Bestätigung: Name eintippen
+    POST  /api/deck/{id}/loeschen   {"name"}      zweite Bestätigung: Name eintippen; nur ohne Karten im Deck
+  Deckbau (decks.bau):
+    GET   /api/deck/{id}/entnahme                 Entnahmeliste nach Ort, Haken, offene Karten
+    POST  /api/deck/{id}/entnahme/haken  {"zeile", "karte", "anzahl", "abgehakt"}
+    GET   /api/deck/{id}/entnahme/alternativen?zeile=   freie Exemplare einer Zeile
+    POST  /api/deck/{id}/entnahme/wahl   {"zeile", "karte"}   anderes Exemplar
+    POST  /api/deck/{id}/entnahme/fertig          abgehakte Karten ins Deck (ein Schritt, Rückgängig)
+    GET   /api/deck/{id}/zerlegen?karten=1,2      wohin jede Karte zurückgeht (ohne „karten“: alle)
+    POST  /api/deck/{id}/zerlegen  {"karten"?: [IDs], "ersatz_kiste"?: ID}   zurücklegen (ein Schritt)
+    POST  /api/deck/{id}/zur-sammlung             alle Karten der Liste neu im Deck anlegen (ein Schritt)
 
-Schreiben nur angemeldet, mit Historie (decks.abgleich). Archidekt wird nur auf Wunsch abgefragt (Import, Neu laden).
+Schreiben nur angemeldet, mit Historie. Archidekt wird nur auf Wunsch abgefragt (Import, Neu laden).
+Rückgängig der Schritte: POST /api/schritt/{schritt}/rueckgaengig (kistenschreiben.py).
 """
 from __future__ import annotations
 
+import re
 from contextlib import closing
 
 from starlette.concurrency import run_in_threadpool
@@ -21,18 +32,27 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
 from binderapp.db.datenbank import aendern, loeschen, version
-from binderapp.decks import abgleich, lesen
+from binderapp.decks import abgleich, bau, lesen
+from binderapp.preise import zeitplan
 from binderapp.web.helfer import Fehler, fehler
 
 __all__ = ["routen"]
 
 NAME_LAENGE = 120
+GROSS = 2 ** 62
 KEIN_KATALOG = "Für Decks braucht die App den Kartenkatalog (die Erkennung am PC schickt ihn beim Start)."
 
 
 def _ab_version_7(con) -> None:
-    if version(con) < 7:
-        raise Fehler("Decks gibt es erst ab Datenbankversion 7. Bitte die App neu starten.", 409)
+    """Decks brauchen ab dem Deckbau (03.11.2026) die Datenbankversion 8 (Ort „Deck“)."""
+    if version(con) < 8:
+        raise Fehler("Decks brauchen die Datenbankversion 8. Bitte die App neu starten.", 409)
+
+
+def _id(wert, feld: str) -> int:
+    if isinstance(wert, bool) or not isinstance(wert, int) or not 1 <= wert < GROSS:
+        raise Fehler(f"„{feld}“ muss eine ganze Zahl sein.")
+    return wert
 
 
 def _name(wert) -> str:
@@ -98,7 +118,7 @@ def routen(h) -> list[Route]:
     @lesend
     def decks(request):
         with closing(h.db()) as con:
-            if version(con) < 7:
+            if version(con) < 8:
                 return JSONResponse({"verfuegbar": False, "decks": []})
             return JSONResponse({"verfuegbar": True, "decks": abgleich.uebersicht(con, h.nutzer)})
 
@@ -120,6 +140,7 @@ def routen(h) -> list[Route]:
             _ab_version_7(con)
             return abgleich.anlegen(con, h.nutzer, kopf, zeilen, quelle)
         deck_id = await run_in_threadpool(h.schreibvorgang, arbeit)
+        zeitplan.anstossen()   # Add-on: Preise der neuen Produkte bald nachtragen
         return JSONResponse({"id": deck_id, **_bericht(kopf, zeilen, unbekannt, unlesbar, quelle)}, status_code=201)
 
     def _deck_id(request) -> int:
@@ -208,6 +229,7 @@ def routen(h) -> list[Route]:
             return abgleich.unterschiede(con, deck_id, zeilen)
         if ausfuehren:
             ergebnis = await run_in_threadpool(h.schreibvorgang, arbeit)
+            zeitplan.anstossen()
         else:
             with closing(h.db()) as con:
                 ergebnis = arbeit(con)
@@ -224,13 +246,124 @@ def routen(h) -> list[Route]:
             deck_ = _lesen(con, deck_id)
             if not isinstance(d.get("name"), str) or d["name"].strip() != deck_["name"]:
                 raise Fehler("Der eingetippte Name passt nicht zum Deck.")
+            if con.execute("SELECT 1 FROM karte WHERE deck_id = ? LIMIT 1", (deck_id,)).fetchone() is not None:
+                raise Fehler("Im Deck liegen noch Karten. Bitte das Deck zuerst zerlegen.", 409)
             for z in con.execute("SELECT id FROM deck_karte WHERE deck_id = ?", (deck_id,)).fetchall():
                 loeschen(con, h.nutzer, abgleich.QUELLE, "deck_karte", z["id"])
             loeschen(con, h.nutzer, abgleich.QUELLE, "deck", deck_id)
             return {"geloescht": deck_id}
         return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
 
+    # ------------------------------------------------------------ Deckbau
+
+    def _schreiben(arbeit):
+        def mit_pruefung(con):
+            _ab_version_7(con)
+            return arbeit(con)
+        return run_in_threadpool(h.schreibvorgang, mit_pruefung)
+
+    def _bild_hinweis(eintraege) -> None:
+        ordner = h.bilder / "scryfall"
+        for e in eintraege:
+            e["vorschau"] = bool(e.get("scryfall_id")) and (ordner / f"{e['scryfall_id']}_200.webp").is_file()
+
+    @lesend
+    def entnahme(request):
+        with closing(h.db()) as con:
+            _ab_version_7(con)
+            p = bau.plan(con, h.nutzer, _deck_id(request))
+        for g in p["gruppen"]:
+            _bild_hinweis(g["eintraege"])
+        return JSONResponse(p)
+
+    @h.schreibend
+    async def entnahme_haken(request):
+        deck_id = _deck_id(request)
+        d = await h.json_daten(request)
+        _pruefen(d, {"zeile", "karte", "anzahl", "abgehakt"})
+        zeile, karte, anzahl = _id(d.get("zeile"), "zeile"), _id(d.get("karte"), "karte"), _id(d.get("anzahl"), "anzahl")
+        abgehakt = _bool(d.get("abgehakt"), "abgehakt")
+        return JSONResponse(await _schreiben(lambda con: bau.haken(con, h.nutzer, deck_id, zeile, karte, anzahl,
+                                                                   abgehakt)))
+
+    @lesend
+    def entnahme_alternativen(request):
+        roh = request.query_params.get("zeile", "")
+        if not re.fullmatch(r"[0-9]{1,12}", roh):
+            raise Fehler("Bitte „zeile“ angeben.")
+        with closing(h.db()) as con:
+            _ab_version_7(con)
+            liste = bau.alternativen(con, h.nutzer, _deck_id(request), int(roh))
+        _bild_hinweis(liste)
+        return JSONResponse({"alternativen": liste})
+
+    @h.schreibend
+    async def entnahme_wahl(request):
+        deck_id = _deck_id(request)
+        d = await h.json_daten(request)
+        _pruefen(d, {"zeile", "karte"})
+        zeile, karte = _id(d.get("zeile"), "zeile"), _id(d.get("karte"), "karte")
+        return JSONResponse(await _schreiben(lambda con: bau.waehlen(con, h.nutzer, deck_id, zeile, karte)))
+
+    @h.schreibend
+    async def entnahme_fertig(request):
+        deck_id = _deck_id(request)
+        return JSONResponse(await _schreiben(lambda con: bau.fertig(con, h.nutzer, deck_id)))
+
+    def _karten_ids(roh) -> list[int] | None:
+        if roh is None:
+            return None
+        if not isinstance(roh, list) or not roh or len(roh) > 2000:
+            raise Fehler("„karten“ muss eine Liste von Karten-IDs sein.")
+        return [_id(i, "karten") for i in roh]
+
+    @lesend
+    def zerlegen_plan(request):
+        roh = request.query_params.get("karten")
+        ids = None
+        if roh:
+            if len(roh) > 20000 or not re.fullmatch(r"[0-9]{1,12}(,[0-9]{1,12})*", roh):
+                raise Fehler("„karten“: Karten-IDs mit Komma getrennt.")
+            ids = [int(t) for t in roh.split(",")]
+        with closing(h.db()) as con:
+            _ab_version_7(con)
+            p = bau.zerlegen_plan(con, h.nutzer, _deck_id(request), ids)
+        _bild_hinweis(p["karten"])
+        return JSONResponse(p)
+
+    @h.schreibend
+    async def zerlegen(request):
+        deck_id = _deck_id(request)
+        d = await h.json_daten(request)
+        _pruefen(d, {"karten", "ersatz_kiste"})
+        ids = _karten_ids(d.get("karten"))
+        ersatz = _id(d["ersatz_kiste"], "ersatz_kiste") if d.get("ersatz_kiste") is not None else None
+        return JSONResponse(await _schreiben(lambda con: bau.zerlegen(con, h.nutzer, deck_id, ids, ersatz)))
+
+    @h.schreibend
+    async def zur_sammlung(request):
+        deck_id = _deck_id(request)
+
+        def arbeit(con):
+            kat = h.katalog()
+            try:
+                return bau.zur_sammlung(con, kat, h.nutzer, deck_id)
+            finally:
+                if kat is not None:
+                    kat.close()
+        antwort = await _schreiben(arbeit)
+        zeitplan.anstossen()   # Add-on: Preise der neuen Karten bald nachtragen
+        return JSONResponse(antwort, status_code=201)
+
     return [
+        Route("/deck/{id:int}/entnahme", entnahme),
+        Route("/deck/{id:int}/entnahme/haken", entnahme_haken, methods=["POST"]),
+        Route("/deck/{id:int}/entnahme/alternativen", entnahme_alternativen),
+        Route("/deck/{id:int}/entnahme/wahl", entnahme_wahl, methods=["POST"]),
+        Route("/deck/{id:int}/entnahme/fertig", entnahme_fertig, methods=["POST"]),
+        Route("/deck/{id:int}/zerlegen", zerlegen_plan),
+        Route("/deck/{id:int}/zerlegen", zerlegen, methods=["POST"]),
+        Route("/deck/{id:int}/zur-sammlung", zur_sammlung, methods=["POST"]),
         Route("/decks", decks),
         Route("/decks", anlegen, methods=["POST"]),
         Route("/decks/vorschau", vorschau, methods=["POST"]),

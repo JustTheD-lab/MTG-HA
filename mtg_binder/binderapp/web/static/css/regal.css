@@ -429,5 +429,6 @@
 }
 .regal-deck-commander { font-size: 0.82rem; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .regal-deck-zahlen { font-variant-numeric: tabular-nums; color: var(--text-2); }
+.regal-deck-wert { font-size: 0.8rem; color: var(--messing-hell); font-variant-numeric: tabular-nums; }
 .regal-deck-balken { display: block; height: 3px; border-radius: 999px; background: var(--flaeche-3); overflow: hidden; }
 .regal-deck-balken > span { display: block; height: 100%; background: var(--messing); border-radius: 999px; }

@@ -69,6 +69,9 @@ def verschieben(con, nutzer: int, ids: list[int], ziel: int) -> dict:
     _kiste_holen(con, nutzer, ziel)
     vorher = summe(con, nutzer)
     schritt = schritte.neuer_schritt()
+    # ab Version 8: eine Karte aus einem Deck verlässt das Deck (ein Ort je Karte), die Herkunft gilt nicht mehr
+    deck_felder = ({"deck_id": None, "herkunft_tasche_id": None, "herkunft_kiste_id": None}
+                   if datenbank.version(con) >= 8 else {})
     verschoben = karten = schon_dort = 0
     taschen: set[int] = set()
     fehlend = 0
@@ -83,7 +86,8 @@ def verschieben(con, nutzer: int, ids: list[int], ziel: int) -> dict:
             continue
         if k["tasche_id"] is not None:
             taschen.add(k["tasche_id"])
-        schritte.aendern_genau(con, nutzer, "karte", kid, {"tasche_id": None, "kiste_id": ziel}, schritt=schritt)
+        schritte.aendern_genau(con, nutzer, "karte", kid, {"tasche_id": None, "kiste_id": ziel, **deck_felder},
+                               schritt=schritt)
         verschoben += 1
         karten += k["anzahl"]
     if fehlend:

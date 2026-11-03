@@ -235,6 +235,20 @@ def _oracle_nach_name(kat, name: str) -> str | None:
     return None
 
 
+def produkte_suchen(kat, z: dict) -> list[int]:
+    """Cardmarket-Produkte einer Deckzeile: der angegebene Druck oder (nur Name) alle Drucke der Karte. Für den
+    Preis zählt dann der günstigste Druck (Entscheidung des Nutzers, 02.11.2026). Älterer Katalog: leer."""
+    if "cardmarket_id" not in {s[1] for s in kat.execute("PRAGMA table_info(druck)")}:
+        return []
+    if z.get("druck_angegeben") and z.get("scryfall_id"):
+        sql, wert = "SELECT cardmarket_id FROM druck WHERE scryfall_id = ?", z["scryfall_id"]
+    elif z.get("oracle_id"):
+        sql, wert = "SELECT cardmarket_id FROM druck WHERE oracle_id = ?", z["oracle_id"]
+    else:
+        return []
+    return sorted({r[0] for r in kat.execute(sql + " AND cardmarket_id IS NOT NULL", (wert,))})
+
+
 def aufloesen(kat, zeilen: list[dict]) -> tuple[list[dict], list[str]]:
     """Ergänzt jede Zeile aus dem Katalog; gibt (Zeilen, unbekannte Namen) zurück. Unbekannte Zeilen bleiben mit
     ihrem Namen erhalten (oracle_id leer, Abgleich dann nach Name)."""
@@ -266,4 +280,7 @@ def aufloesen(kat, zeilen: list[dict]) -> tuple[list[dict], list[str]]:
             z["set_code"], z["nummer"] = druck["set_code"], druck["nummer"]
         else:
             z["set_code"] = z["nummer"] = None
-    return zusammenfassen(zeilen), unbekannt
+    zeilen = zusammenfassen(zeilen)
+    for z in zeilen:
+        z["produkte"] = produkte_suchen(kat, z)
+    return zeilen, unbekannt

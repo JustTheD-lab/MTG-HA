@@ -39,7 +39,28 @@ def was_tun(con, datei: Path) -> str | None:
                         " (SELECT 1 FROM preis p WHERE p.cardmarket_id = d.cardmarket_id AND p.tag = ?) LIMIT 1",
                         (neuester,)).fetchone()
     offen = con.execute("SELECT 1 FROM kartendaten WHERE cardmarket_id IS NULL LIMIT 1").fetchone()
+    if version(con) >= 8 and not (fehlt or offen):   # Decklisten: neue Zeilen oder Produkte ohne Preis des Tages
+        offen = con.execute("SELECT 1 FROM deck_karte WHERE produkte IS NULL LIMIT 1").fetchone()
+        # nur Zeilen ganz ohne Preis (bei „nur Name“ haben manche alte Drucke nie einen; das soll nicht stündlich
+        # die große Datei lesen lassen)
+        fehlt = con.execute("SELECT 1 FROM deck_karte k WHERE k.produkte > 0 AND NOT EXISTS (SELECT 1 FROM deck_produkt"
+                            " d JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ? WHERE"
+                            " d.deck_karte_id = k.id) LIMIT 1", (neuester,)).fetchone()
     return "nachtragen" if (fehlt or offen) and datei.is_file() else None
+
+
+_NACHGETRAGEN: dict[str, tuple] = {}   # Datenbank → Stand beim letzten Nachtragen
+
+
+def _stand(con, tag: str | None) -> tuple:
+    """Kennzeichen für „schon nachgetragen“: Tag und Zahl der Produkte (Sammlung und Decks). Produkte, die in der
+    Preisdatei nie vorkommen, lösen so kein stündliches Lesen der großen Datei aus, neue Karten aber schon."""
+    teile = [tag, con.execute("SELECT COUNT(*) FROM kartendaten WHERE cardmarket_id IS NOT NULL").fetchone()[0],
+             con.execute("SELECT COUNT(*) FROM kartendaten WHERE cardmarket_id IS NULL").fetchone()[0]]
+    if version(con) >= 8:
+        teile += [con.execute("SELECT COUNT(*) FROM deck_produkt").fetchone()[0],
+                  con.execute("SELECT COUNT(*) FROM deck_karte WHERE produkte IS NULL").fetchone()[0]]
+    return tuple(teile)
 
 
 def einmal(datenbank: Path, ordner: Path, katalog: Path | None) -> dict | None:
@@ -47,14 +68,19 @@ def einmal(datenbank: Path, ordner: Path, katalog: Path | None) -> dict | None:
     with closing(verbinden(datenbank, nur_lesen=True)) as con:
         aufgabe = was_tun(con, datei)
         neuester = con.execute("SELECT MAX(tag) FROM preisabruf").fetchone()[0] if aufgabe == "nachtragen" else None
+        stand = _stand(con, neuester) if aufgabe == "nachtragen" else None
     if aufgabe is None:
         return None
+    if aufgabe == "nachtragen" and _NACHGETRAGEN.get(str(datenbank)) == stand:
+        return None   # mit genau diesem Stand schon nachgetragen
     if aufgabe == "nachtragen":
         kopf = datei.read_bytes()[:2000]
         m = re.search(rb'"createdAt"\s*:\s*"(\d{4}-\d{2}-\d{2})', kopf)
         if not m or m.group(1).decode() != neuester:
             return None   # die gespeicherte Datei gehört zu einem anderen Tag: auf den nächsten Abruf warten
-        ergebnis = abruf.abrufen(datenbank, ordner, katalog, datei=datei)
+        ergebnis = abruf.abrufen(datenbank, ordner, katalog, datei=datei, nachtragen=True)
+        with closing(verbinden(datenbank, nur_lesen=True)) as con:   # Stand nach dem Nachtragen merken
+            _NACHGETRAGEN[str(datenbank)] = _stand(con, neuester)
     else:
         ergebnis = abruf.abrufen(datenbank, ordner, katalog)
     ergebnis["aufgabe"] = aufgabe

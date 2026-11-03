@@ -51,7 +51,26 @@ def herunterladen(ziel: Path, url: str = URL, oeffnen=urllib.request.urlopen) ->
 
 
 def sammlung_ids(con) -> set[int]:
-    return {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM kartendaten WHERE cardmarket_id IS NOT NULL")}
+    """Produkte, deren Preise gespeichert werden: die Sammlung und (ab Version 8) die Decklisten, auch fehlende Karten
+    (bei Zeilen ohne Druck alle Drucke der Karte, für den günstigsten Preis)."""
+    ids = {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM kartendaten WHERE cardmarket_id IS NOT NULL")}
+    if version(con) >= 8:
+        ids |= {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM deck_produkt")}
+    return ids
+
+
+def deck_produkte_nachtragen(con, katalog: Path | None) -> int:
+    """Deckzeilen ohne gesuchte Cardmarket-Produkte (vor Version 8 importiert) aus dem Katalog ergänzen."""
+    if katalog is None or not Path(katalog).is_file() or version(con) < 8:
+        return 0
+    from binderapp.decks import abgleich, lesen
+    offen = [dict(z) for z in con.execute("SELECT * FROM deck_karte WHERE produkte IS NULL")]
+    if not offen:
+        return 0
+    with closing(verbinden(katalog, nur_lesen=True)) as kat:
+        for z in offen:
+            abgleich._produkte_schreiben(con, z["id"], lesen.produkte_suchen(kat, z))
+    return len(offen)
 
 
 def _zahl(wert):
@@ -81,16 +100,20 @@ def einlesen(roh: bytes, ids: set[int]) -> tuple[str, int, list[tuple]]:
     return erstellt, produkte, zeilen
 
 
-def speichern(con, erstellt: str, produkte: int, zeilen: list[tuple]) -> dict:
-    """Schreibt die Preise des Tages (in der Transaktion des Aufrufers)."""
+def speichern(con, erstellt: str, produkte: int, zeilen: list[tuple], nachtragen: bool = False) -> dict:
+    """Schreibt die Preise des Tages (in der Transaktion des Aufrufers). Beim Nachtragen aus der schon geladenen
+    Datei bleibt der Zeitpunkt des Abrufs stehen, sonst würde nie wieder neu geladen (Befund 03.11.2026)."""
     tag = erstellt[:10]
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", tag):
         raise AbrufFehler(f"Unbekanntes Datum in der Preisdatei: {erstellt}")
     con.executemany("INSERT OR REPLACE INTO preis (cardmarket_id, tag, low, avg7, low_foil, avg7_foil)"
                     " VALUES (?, ?, ?, ?, ?, ?)", [(z[0], tag, *z[1:]) for z in zeilen])
-    con.execute("INSERT OR REPLACE INTO preisabruf (tag, erstellt, abgerufen, produkte, gespeichert)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (tag, erstellt, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"), produkte, len(zeilen)))
+    con.execute("INSERT INTO preisabruf (tag, erstellt, abgerufen, produkte, gespeichert) VALUES (?, ?, ?, ?, ?)"
+                " ON CONFLICT(tag) DO UPDATE SET erstellt = excluded.erstellt, produkte = excluded.produkte,"
+                " gespeichert = excluded.gespeichert,"
+                " abgerufen = CASE WHEN ? THEN preisabruf.abgerufen ELSE excluded.abgerufen END",
+                (tag, erstellt, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"), produkte, len(zeilen),
+                 int(nachtragen)))
     return {"tag": tag, "erstellt": erstellt, "produkte": produkte, "gespeichert": len(zeilen)}
 
 
@@ -115,18 +138,20 @@ def cardmarket_nachtragen(con, katalog: Path | None) -> int:
 
 
 def abrufen(datenbank: Path, ordner: Path, katalog: Path | None = None, datei: Path | None = None,
-            oeffnen=urllib.request.urlopen) -> dict:
-    """Ganzer Ablauf: Cardmarket-IDs ergänzen, Datei laden (oder `datei` nehmen), Preise des Tages speichern."""
+            oeffnen=urllib.request.urlopen, nachtragen: bool = False) -> dict:
+    """Ganzer Ablauf: Cardmarket-IDs ergänzen, Datei laden (oder `datei` nehmen), Preise des Tages speichern.
+    `nachtragen`: nur neue Produkte aus der schon geladenen Datei (Zeitpunkt des Abrufs bleibt)."""
     with closing(verbinden(datenbank)) as con:
         if version(con) < 4:
             raise AbrufFehler("Die Datenbank kennt noch keine Preise (Version 4 nötig).")
         with schreiben(con):
             ergaenzt = cardmarket_nachtragen(con, katalog)
+            deck_produkte_nachtragen(con, katalog)
         ids = sammlung_ids(con)
     quelle = datei or herunterladen(Path(ordner) / "price_guide_1.json", oeffnen=oeffnen)
     erstellt, produkte, zeilen = einlesen(Path(quelle).read_bytes(), ids)
     with closing(verbinden(datenbank)) as con, schreiben(con):
-        ergebnis = speichern(con, erstellt, produkte, zeilen)
+        ergebnis = speichern(con, erstellt, produkte, zeilen, nachtragen=nachtragen)
     ergebnis["cardmarket_ergaenzt"] = ergaenzt
     ergebnis["sammlung_produkte"] = len(ids)
     return ergebnis

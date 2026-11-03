@@ -87,6 +87,11 @@ gehört, zum Beispiel „Preis (Ø 7 Tage) ab 5 € → Spezial“ oder „Farbe
 - Die Deckansicht zeigt je Karte, ob sie da ist und wo sie liegt; fehlende Karten lassen sich als Text für die
   Cardmarket-Wunschliste kopieren. Basic Lands auslassen und Proxys markieren geht jederzeit.
 - Braucht den Kartenkatalog im Add-on (schickt die Erkennung am PC).
+- Deck bauen: „Deck bauen“ zeigt, welche Karte wo liegt; abhaken und am Ende „Fertig“. Die Karten liegen danach im
+  Deck (eigener Ort). „Zerlegen“ legt sie an den alten Platz zurück. Für ein gekauftes fertiges Deck gibt es
+  „Deck zur Sammlung hinzufügen“.
+- Preise je Deck: Wert der Liste, Kosten der Fehlt-Liste und Wert im Deck (Cardmarket Ø 7 Tage, bei Karten ohne
+  angegebenen Druck der günstigste Druck).
 
 ## Werte in Home Assistant (MQTT)
 

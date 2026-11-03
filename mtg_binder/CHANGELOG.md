@@ -1,5 +1,22 @@
 # Änderungen
 
+## 0.10.0
+- Deckbau: Ein Deck ist jetzt ein eigener Ort wie eine Kiste.
+  - „Deck bauen“ zeigt eine Entnahmeliste nach Ort (Kisten nach Fach, Binder nach Seite und Platz). Die App schlägt
+    das Exemplar vor (genauer Druck zuerst, dann Kisten vor Bindern), ein anderes lässt sich wählen.
+  - Abhaken merkt nur vor (bleibt gespeichert, auch beim Gerätewechsel); „Fertig“ legt alle abgehakten Karten in
+    einem Schritt ins Deck, mit Rückgängig. Tauchen fehlende Karten später auf, bietet das Deck einen Nachtrag an.
+  - „Zerlegen“ legt die Karten an ihren alten Platz zurück (sonst Herkunftskiste, Sortierregel oder eine Kiste
+    nach Wahl). Ein Deck mit Karten lässt sich erst nach dem Zerlegen löschen.
+  - „Deck zur Sammlung hinzufügen“ (z. B. Precon): legt alle Karten der Liste neu im Deck an (Basics ja, Proxys
+    nein).
+- Deckpreise: Wert der Deckliste, Kosten der Fehlt-Liste, Wert im Deck mit Veränderung zum Vortag, Preis je Karte
+  (sortierbar). Steht nur der Name in der Liste, zählt der günstigste Druck. Der tägliche Preisabruf speichert
+  dafür auch die Karten der Decklisten.
+- Karten in Decks zählen zur Sammlung; in anderen Decks stehen sie als „steckt in Deck X“. Gesamtsammlung und
+  Kartenansicht kennen den Ort „Deck“. Home Assistant: je Deck Sensoren für Wert und Karten.
+- Die Datenbank wird beim Start auf Version 8 gebracht, vorher legt das Add-on eine Sicherung an.
+
 ## 0.9.1
 - Archidekt-Import korrigiert: Es zählt nur die erste Kategorie einer Karte (wie bei Archidekt). Karten mit einer
   zusätzlichen Kategorie „Maybeboard“ und Karten in eigenen Kategorien wie „Tokens“ fehlten bisher. Schon

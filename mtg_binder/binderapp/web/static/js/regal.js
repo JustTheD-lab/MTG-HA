@@ -158,6 +158,9 @@ function deckHtml(d) {
   const s = d.summe ?? {};
   const gesamt = s.karten ?? 0;
   const anteil = gesamt > 0 ? Math.min(100, Math.round((s.vorhanden ?? 0) / gesamt * 100)) : 0;
+  const w = d.wert;
+  const wertText = !w ? '' : d.gebaut && w.im_deck != null ? euro(w.im_deck)
+    : w.liste != null ? `Liste ${euro(w.liste)}` : '';
   const bild = d.bild
     ? `<img alt="" width="63" height="88" loading="lazy" decoding="async" src="${esc(bildUrl('scryfall', d.bild, 400))}"`
       + ` data-sid="${esc(d.bild)}">`
@@ -169,6 +172,7 @@ function deckHtml(d) {
     + `<span class="regal-deck-name">${esc(d.name)}</span>`
     + (d.commander ? `<span class="regal-deck-commander">${esc(d.commander)}</span>` : '')
     + `<span class="regal-deck-zahlen etikett">${esc(zahl(s.vorhanden))} / ${esc(zahl(gesamt))} vorhanden</span>`
+    + (wertText ? `<span class="regal-deck-wert">${esc(wertText)}</span>` : '')
     + `<span class="regal-deck-balken" aria-hidden="true"><span style="width:${anteil}%"></span></span>`
     + '</span></button></li>';
 }

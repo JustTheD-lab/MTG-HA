@@ -36,6 +36,7 @@ Die Entitäts-IDs entstehen aus „MTG“ und dem Namen. Wer eine ID in Home Ass
 | `sensor.mtg_top_5_gewinner` / `sensor.mtg_top_5_verlierer` | größte Steigerung / größter Verlust in € zum Vortag, Liste im Attribut `karten` | 1 h |
 | `sensor.mtg_binder_<name>_wert`, `sensor.mtg_binder_<name>_karten` | je Binder | 1 h |
 | `sensor.mtg_kiste_<name>_wert`, `sensor.mtg_kiste_<name>_karten` | je Kiste | 1 h |
+| `sensor.mtg_deck_<name>_wert`, `sensor.mtg_deck_<name>_karten` | je Deck: Wert und Zahl der Karten, die im Deck liegen; Attribut `fehlt_kosten` (Kosten der Fehlt-Liste) | 1 h |
 
 - Werte und Top-Listen nutzen die Preisart **Ø 7 Tage** von Cardmarket, Foil-Karten den Foil-Preis.
 - Nach jedem neuen Preistag kommen die Werte sofort, nicht erst zur vollen Stunde.
@@ -43,7 +44,8 @@ Die Entitäts-IDs entstehen aus „MTG“ und dem Namen. Wer eine ID in Home Ass
   verfälschen sie also nicht.
 - Gibt es keinen passenden früheren Tag, steht der Sensor auf „unbekannt“. Der Verlauf entsteht erst mit den
   täglichen Abrufen.
-- Neue Binder und Kisten bekommen ihre Sensoren von selbst, gelöschte verschwinden wieder.
+- Neue Binder, Kisten und Decks bekommen ihre Sensoren von selbst, gelöschte verschwinden wieder. Karten in Decks
+  zählen zum Gesamtwert und zur Kartenzahl der Sammlung (ab Add-on 0.10.0).
 
 ## Dashboard-Karte
 

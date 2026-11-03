@@ -5,13 +5,40 @@
 // Karten sind Links in Binder und Kisten. Alle Aufrufe laufen über `holen` und `senden`; Texte mit `esc`.
 // Schreibende Knöpfe (Proxy, Neu laden, Umbenennen, Löschen) nur mit Schreibrecht.
 
-import { holen, senden, esc, gehe, zurueck, bildUrl, scryfallBild, bewegungReduziert } from './gemeinsam.js';
+import { holen, senden, esc, gehe, zurueck, bildUrl, scryfallBild, bewegungReduziert, euro, vorliebe } from './gemeinsam.js';
 import { angemeldet } from './anmeldung.js';
-import { dialog, dialogOffen } from './dialog.js';
+import { dialog, dialogOffen, bestaetigen } from './dialog.js';
+
+// Meldung mit Rückgängig, die die nächste Deckansicht zeigt (z. B. nach „Fertig“ in der Entnahme)
+let wartendeMeldung = null;
+export function meldungMerken(text, schritt = null) { wartendeMeldung = { text, schritt }; }
+
+/** Meldungszeile mit Text, optional „Rückgängig“ (POST api/schritt/{id}/rueckgaengig) und Schließen. */
+export function toastZeigen(box, text, { schritt = null, art = 'ok', nachRueck = null } = {}) {
+  box.hidden = false;
+  box.className = `deck-toast${art === 'fehler' ? ' deck-toast--fehler' : ''}`;
+  box.innerHTML = '<span class="deck-toast-text"></span>'
+    + (schritt ? '<button type="button" class="knopf deck-toast-rueck">Rückgängig</button>' : '')
+    + '<button type="button" class="knopf knopf-sym deck-toast-zu" aria-label="Meldung schließen">×</button>';
+  box.querySelector('.deck-toast-text').textContent = text;
+  box.querySelector('.deck-toast-zu').addEventListener('click', () => { box.hidden = true; });
+  const rueck = box.querySelector('.deck-toast-rueck');
+  rueck?.addEventListener('click', async () => {
+    rueck.disabled = true;
+    try {
+      await senden(`/api/schritt/${encodeURIComponent(schritt)}/rueckgaengig`);
+    } catch (f) {
+      toastZeigen(box, f.message, { art: 'fehler' });
+      return;
+    }
+    if (nachRueck) await nachRueck();
+    toastZeigen(box, 'Rückgängig gemacht.');
+  });
+}
 
 const sym = (d, g = 18) => `<svg viewBox="0 0 24 24" width="${g}" height="${g}" fill="none" stroke="currentColor"`
   + ` stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${d}</svg>`;
-const ZURUECK = sym('<path d="M15 5l-7 7 7 7"/>', 20);
+export const ZURUECK = sym('<path d="M15 5l-7 7 7 7"/>', 20);
 const KOPIE = sym('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/>');
 const NEU = sym('<path d="M20 12a8 8 0 11-2.4-5.7"/><path d="M20 4v5h-5"/>');
 
@@ -27,14 +54,14 @@ const GRUPPEN = [
 
 let Z = null;                    // Zustand der gezeigten Ansicht
 
-function el(tag, klasse, html) {
+export function el(tag, klasse, html) {
   const e = document.createElement(tag);
   if (klasse) e.className = klasse;
   if (html !== undefined) e.innerHTML = html;
   return e;
 }
 
-function knopfIn(fuss, text, klasse, beiKlick) {
+export function knopfIn(fuss, text, klasse, beiKlick) {
   const k = Object.assign(document.createElement('button'), { type: 'button', className: `knopf ${klasse}`.trim(), textContent: text });
   k.addEventListener('click', beiKlick);
   fuss.append(k);
@@ -42,7 +69,7 @@ function knopfIn(fuss, text, klasse, beiKlick) {
 }
 
 /** Bild einer Karte: Vorschau des Servers, dann Scryfall direkt, dann eine schlichte Fläche. */
-function bildHtml(k, breite = 200) {
+export function bildHtml(k, breite = 200) {
   if (!k.scryfall_id) return '<span class="deck-bild deck-bild--leer" aria-hidden="true"></span>';
   // `vorschau: false` meldet der Server, wenn es kein Vorschaubild gibt: dann gleich Scryfall (keine 404-Anfrage)
   const direkt = k.vorschau === false && scryfallBild(k.scryfall_id);
@@ -70,7 +97,7 @@ export function bilderAbsichern(wurzel) {
 }
 
 /** Linkklicks über die App (neuer Verlaufseintrag); Strg/Cmd-Klick bleibt dem Browser. */
-function linksAnschliessen(wurzel) {
+export function linksAnschliessen(wurzel) {
   wurzel.addEventListener('click', (e) => {
     const a = e.target.closest('a[href^="#/"]');
     if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
@@ -222,14 +249,44 @@ function gruppeVon(k) {
 function statusVon(k) {
   if (k.ausgelassen) return { text: 'ausgelassen', art: 'aus' };
   if (k.proxy) return { text: 'Proxy', art: 'proxy' };
-  if (k.fehlt > 0) {
-    return { text: k.vorhanden > 0 ? `fehlt ${k.fehlt} · ${k.vorhanden} da` : `fehlt ${k.fehlt}`, art: 'fehlt' };
-  }
-  if (!k.genau && k.druck_angegeben) return { text: 'anderer Druck', art: 'anders' };
-  return { text: 'vorhanden', art: 'da' };
+  const teile = [];
+  if (k.im_deck > 0) teile.push(`${zahl(k.im_deck)} im Deck`);
+  if (k.verfuegbar > 0) teile.push(`${zahl(k.verfuegbar)} verfügbar`);
+  if (k.fehlt > 0) teile.push(`fehlt ${zahl(k.fehlt)}`);
+  if (k.fehlt <= 0 && !k.genau && k.druck_angegeben) teile.push('anderer Druck');
+  return { text: teile.join(' · ') || 'vorhanden', art: k.fehlt > 0 ? 'fehlt' : 'da' };
+}
+
+/** „steckt in Deck X“ (zählt nicht als frei). */
+function andereDecksHtml(k) {
+  if (!k.andere_decks?.length) return '';
+  return `<p class="deck-andere">${k.andere_decks.map((a) => `steckt in <a href="#/deck/${Number(a.deck_id)}">Deck ${esc(a.deck)}</a>`
+    + `${a.anzahl > 1 ? ` (${zahl(a.anzahl)}×)` : ''}`).join(' · ')}</p>`;
+}
+
+function preisHtml(k) {
+  if (k.preis == null || k.ausgelassen || k.proxy) return '';
+  const summe = k.anzahl > 1 ? ` <span class="deck-preis-summe">· ${esc(euro(k.preis * k.anzahl))}</span>` : '';
+  return `<span class="deck-preis">${esc(euro(k.preis))}${summe}</span>`;
+}
+
+function veraenderungText(v) {
+  if (!v || (v.euro == null && v.prozent == null)) return '';
+  const w = v.euro ?? v.prozent;
+  const art = w > 0 ? 'auf' : w < 0 ? 'ab' : 'gleich';
+  const vz = w > 0 ? '+' : w < 0 ? '−' : '±';
+  const teile = [];
+  if (v.euro != null) teile.push(`${vz}${euro(Math.abs(v.euro))}`);
+  if (v.prozent != null) teile.push(`${vz}${Math.abs(v.prozent).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`);
+  return `<span class="preis-${art} deck-veraenderung" title="zum Vortag">${esc(teile.join(' · '))}</span>`;
 }
 
 function ortHtml(o) {
+  if (o.art === 'deck') {
+    if (Z && o.deck_id === Z.id) return '';
+    return `<li><a class="deck-ort" href="#/deck/${Number(o.deck_id)}">${esc(`Deck ${o.deck}`)}</a>`
+      + `<span class="deck-ort-zusatz">${esc(o.anzahl > 1 ? ` · ${zahl(o.anzahl)}×` : '')}</span></li>`;
+  }
   const mal = o.anzahl > 1 ? ` · ${zahl(o.anzahl)}×` : '';
   const foil = o.foil ? ' · Foil' : '';
   const anders = o.genau === false ? ' · anderer Druck' : '';
@@ -246,7 +303,8 @@ function zeileHtml(k, schreiben) {
   const st = statusVon(k);
   const druck = k.druck_angegeben && k.set_code
     ? `<span class="deck-druck">${esc(String(k.set_code).toUpperCase())}${k.nummer ? ` · ${esc(k.nummer)}` : ''}</span>` : '';
-  const orte = (k.orte ?? []).length ? `<ul class="deck-orte" aria-label="Orte in der Sammlung">${k.orte.map(ortHtml).join('')}</ul>` : '';
+  const orteHtml = (k.orte ?? []).map(ortHtml).join('');
+  const orte = orteHtml ? `<ul class="deck-orte" aria-label="Orte in der Sammlung">${orteHtml}</ul>` : '';
   const proxy = schreiben && !k.ausgelassen
     ? `<button type="button" class="knopf deck-proxy" data-zeile="${Number(k.id)}" data-proxy="${k.proxy ? 1 : 0}"`
       + ` aria-pressed="${k.proxy ? 'true' : 'false'}" aria-label="Proxy für ${esc(k.name)}">Proxy</button>` : '';
@@ -254,20 +312,58 @@ function zeileHtml(k, schreiben) {
     + '<div class="deck-zeile-text">'
     + `<p class="deck-zeile-kopf"><span class="deck-anzahl">${zahl(k.anzahl)}×</span><span class="deck-name">${esc(k.name)}</span>`
     + `${k.foil ? '<span class="deck-foil" title="Foil">Foil</span>' : ''}</p>`
-    + `<p class="deck-zeile-unter">${druck}<span class="deck-status deck-status--${st.art}">${esc(st.text)}</span></p>`
-    + orte + '</div>' + proxy + '</li>';
+    + `<p class="deck-zeile-unter">${druck}<span class="deck-status deck-status--${st.art}">${esc(st.text)}</span>${preisHtml(k)}</p>`
+    + andereDecksHtml(k) + orte + '</div>' + proxy + '</li>';
 }
 
 function balkenHtml(s) {
-  const gesamt = (s.vorhanden ?? 0) + (s.fehlt ?? 0) + (s.proxy ?? 0) || s.karten || 1;
+  const gesamt = (s.im_deck ?? 0) + (s.verfuegbar ?? 0) + (s.fehlt ?? 0) + (s.proxy ?? 0) || s.karten || 1;
   const teil = (n) => `${((n ?? 0) / gesamt * 100).toFixed(2)}%`;
-  return `<div class="deck-balken" role="img" aria-label="${zahl(s.vorhanden)} von ${zahl(gesamt)} vorhanden, ${zahl(s.fehlt)} fehlen, ${zahl(s.proxy)} Proxy">`
-    + `<span class="deck-balken-da" style="width:${teil(s.vorhanden)}"></span>`
+  return `<div class="deck-balken" role="img" aria-label="${zahl(s.im_deck)} im Deck, ${zahl(s.verfuegbar)} verfügbar, ${zahl(s.fehlt)} fehlen, ${zahl(s.proxy)} Proxy">`
+    + `<span class="deck-balken-deck" style="width:${teil(s.im_deck)}"></span>`
+    + `<span class="deck-balken-da" style="width:${teil(s.verfuegbar)}"></span>`
     + `<span class="deck-balken-proxy" style="width:${teil(s.proxy)}"></span>`
     + `<span class="deck-balken-fehlt" style="width:${teil(s.fehlt)}"></span></div>`
     + `<p class="deck-zahlen"><span class="deck-zahl-da">${zahl(s.vorhanden)} von ${zahl(gesamt)} vorhanden</span>`
+    + `<span>${zahl(s.im_deck)} im Deck</span><span>${zahl(s.verfuegbar)} verfügbar</span>`
     + `<span>${zahl(s.fehlt)} fehlen</span><span>${zahl(s.proxy)} Proxy</span>`
     + (s.ausgelassen ? `<span>${zahl(s.ausgelassen)} ausgelassen</span>` : '') + '</p>';
+}
+
+/** Drei Werte im Kopf: Deckliste, Im Deck (mit Veränderung zum Vortag), Fehlt-Liste. */
+function wertHtml(w) {
+  if (!w || (w.liste == null && w.fehlt == null && w.im_deck == null)) return '';
+  const feld = (titel, wert, extra = '') => `<div class="deck-wert"><dt class="etikett">${titel}</dt>`
+    + `<dd>${esc(euro(wert))}${extra}</dd></div>`;
+  return '<dl class="deck-werte" aria-label="Werte">' + feld('Deckliste', w.liste)
+    + feld('Im Deck', w.im_deck, veraenderungText(w.veraenderung) ? ` ${veraenderungText(w.veraenderung)}` : '')
+    + feld('Fehlt-Liste', w.fehlt) + '</dl>'
+    + (w.ohne_preis ? `<p class="deck-hinweis deck-ohne-preis">${zahl(w.ohne_preis)} Karten ohne Preis</p>` : '');
+}
+
+const SORTIERUNGEN = [['gruppe', 'Gruppe'], ['name', 'Name'], ['preis', 'Preis']];
+
+function sortiert(karten, art) {
+  const kopie = [...karten];
+  if (art === 'name') kopie.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  else kopie.sort((a, b) => (b.preis ?? -1) - (a.preis ?? -1) || a.name.localeCompare(b.name, 'de'));
+  return kopie;
+}
+
+function ueberzaehligHtml(d) {
+  const u = d.ueberzaehlig ?? [];
+  if (!u.length) return '';
+  const ids = u.map((x) => Number(x.karte_id)).join(',');
+  return '<section class="deck-gruppe deck-gruppe--ueberzaehlig" aria-label="Überzählig">'
+    + `<h2 class="deck-gruppe-titel etikett">Überzählig · ${zahl(u.reduce((s, x) => s + (x.anzahl ?? 0), 0))}</h2>`
+    + '<p class="deck-hinweis">Diese Karten liegen im Deck, werden aber von keiner Zeile der Liste gebraucht.</p>'
+    + `<ul class="deck-zeilen">${u.map((x) => `<li class="deck-zeile deck-zeile--aus">${bildHtml(x)}<div class="deck-zeile-text">`
+      + `<p class="deck-zeile-kopf"><span class="deck-anzahl">${zahl(x.anzahl)}×</span><span class="deck-name">${esc(x.name)}</span>`
+      + `${x.foil ? '<span class="deck-foil">Foil</span>' : ''}</p>`
+      + `<p class="deck-zeile-unter"><span class="deck-druck">${esc(String(x.set_code ?? '').toUpperCase())}${x.nummer ? ` · ${esc(x.nummer)}` : ''}</span></p>`
+      + '</div></li>').join('')}</ul>`
+    + (angemeldet() ? `<p><a class="knopf deck-zuruecklegen" href="#/deck/${Number(Z.id)}/zerlegen?karten=${ids}">Zurücklegen</a></p>` : '')
+    + '</section>';
 }
 
 function quelleHtml(d) {
@@ -283,7 +379,15 @@ function zeichnen() {
   const schreiben = angemeldet();
   z.titel.textContent = d.name;
   z.quelle.innerHTML = `Quelle: ${quelleHtml(d)}`;
-  z.kopfZahlen.innerHTML = balkenHtml(d.summe ?? {});
+  z.kopfZahlen.innerHTML = wertHtml(d.wert) + balkenHtml(d.summe ?? {});
+  const sm = d.summe ?? {};
+  z.bauen.hidden = !schreiben || !(sm.verfuegbar > 0);
+  z.bauen.querySelector('span').textContent = d.gebaut ? `Nachtrag: ${zahl(sm.verfuegbar)} verfügbar` : 'Deck bauen';
+  z.bauen.setAttribute('href', `#/deck/${z.id}/bauen`);
+  z.zurSammlung.hidden = !schreiben || Boolean(d.gebaut);
+  z.zerlegen.hidden = !schreiben || !d.gebaut;
+  z.zerlegen.setAttribute('href', `#/deck/${z.id}/zerlegen`);
+  for (const b of z.sortierung.querySelectorAll('[data-sort]')) b.setAttribute('aria-pressed', String(b.dataset.sort === z.sort));
   z.basics.checked = Boolean(d.basics_auslassen);
   for (const b of z.abgleich.children) b.setAttribute('aria-pressed', String(b.dataset.abgleich === d.abgleich));
   z.umbenennen.hidden = !schreiben;
@@ -292,13 +396,35 @@ function zeichnen() {
 
   const gruppen = new Map(GRUPPEN.map((g) => [g.schluessel, []]));
   for (const k of d.karten ?? []) gruppen.get(gruppeVon(k)).push(k);
+  if (z.sort !== 'gruppe') {
+    z.liste.innerHTML = `<section class="deck-gruppe" aria-label="Alle Karten"><ul class="deck-zeilen">`
+      + `${sortiert(d.karten ?? [], z.sort).map((k) => zeileHtml(k, schreiben)).join('')}</ul></section>` + ueberzaehligHtml(d);
+    return;
+  }
   z.liste.innerHTML = GRUPPEN.filter((g) => gruppen.get(g.schluessel).length).map((g) => {
     const zeilen = gruppen.get(g.schluessel);
     const summe = zeilen.reduce((s, k) => s + (k.anzahl ?? 0), 0);
     return `<section class="deck-gruppe deck-gruppe--${g.schluessel}" aria-label="${esc(g.titel)}">`
       + `<h2 class="deck-gruppe-titel etikett">${esc(g.titel)} · ${zahl(summe)}</h2>`
       + `<ul class="deck-zeilen">${zeilen.map((k) => zeileHtml(k, schreiben)).join('')}</ul></section>`;
-  }).join('') || '<p class="deck-hinweis">Dieses Deck hat keine Karten.</p>';
+  }).join('') + ueberzaehligHtml(d) || '<p class="deck-hinweis">Dieses Deck hat keine Karten.</p>';
+}
+
+async function zurSammlung(z) {
+  const ja = await bestaetigen({ titel: 'Deck zur Sammlung hinzufügen?',
+    text: 'Alle Karten der Liste kommen neu in die Sammlung, Ort ist das Deck (Basics ja, Proxys nein).', ja: 'Hinzufügen' });
+  if (!ja || Z !== z) return;
+  z.zurSammlung.disabled = true;
+  try {
+    const a = await senden(`/api/deck/${z.id}/zur-sammlung`, { daten: {} });
+    await laden(z, { still: true });
+    toastZeigen(z.toast, `${zahl(a.karten)} Karten (${zahl(a.posten)} Posten) liegen jetzt im Deck.`,
+      { schritt: a.schritt, nachRueck: () => laden(z, { still: true }) });
+  } catch (f) {
+    toastZeigen(z.toast, f.message, { art: 'fehler' });
+  } finally {
+    z.zurSammlung.disabled = false;
+  }
 }
 
 async function laden(z, { still = false } = {}) {
@@ -469,6 +595,10 @@ function aufraeumen() {
 
 export async function zeigen(wurzel, parameter) {
   aufraeumen();
+  if (parameter.modus) {
+    const { bauenZeigen, zerlegenZeigen } = await import('./deckbau.js');
+    return parameter.modus === 'bauen' ? bauenZeigen(wurzel, parameter) : zerlegenZeigen(wurzel, parameter);
+  }
   const bereich = el('section', 'deck');
   bereich.setAttribute('aria-label', 'Deck');
   bereich.innerHTML = '<header class="deck-kopfzeile">'
@@ -481,11 +611,19 @@ export async function zeigen(wurzel, parameter) {
     + '<div class="deck-segmente" role="group" aria-label="Abgleich"><span class="etikett deck-segmente-titel">Abgleich</span>'
     + '<button type="button" class="knopf deck-pille" data-abgleich="name" aria-pressed="false">Name</button>'
     + '<button type="button" class="knopf deck-pille" data-abgleich="druck" aria-pressed="false">Genauer Druck</button></div></div>'
+    + '<div class="deck-segmente deck-sortierung" role="group" aria-label="Sortierung"><span class="etikett deck-segmente-titel">Sortierung</span>'
+    + SORTIERUNGEN.map(([s, t]) => `<button type="button" class="knopf deck-pille" data-sort="${s}" aria-pressed="false">${t}</button>`).join('')
+    + '</div>'
+    + '<div class="deck-knoepfe deck-aktionen">'
+    + '<a class="knopf knopf-haupt deck-bauen" href="#/deck/0/bauen" hidden><span>Deck bauen</span></a>'
+    + '<button type="button" class="knopf deck-zur-sammlung" hidden>Deck zur Sammlung hinzufügen</button>'
+    + '<a class="knopf deck-zerlegen" href="#/deck/0/zerlegen" hidden>Zerlegen</a></div>'
     + '<div class="deck-knoepfe">'
     + `<button type="button" class="knopf deck-fehlt-kopieren">${KOPIE}<span>Fehlt-Liste kopieren</span></button>`
     + `<button type="button" class="knopf deck-neu-laden" hidden>${NEU}<span>Neu laden</span></button>`
     + '<button type="button" class="knopf deck-umbenennen" hidden>Umbenennen</button>'
     + '<button type="button" class="knopf knopf-gefahr deck-loeschen" hidden>Löschen</button></div></div>'
+    + '<div class="deck-toast" role="status" hidden></div>'
     + '<p class="deck-hinweis deck-meldung" role="alert"></p>'
     + '<p class="nur-vorleser" role="status" aria-live="polite"></p>'
     + '<div class="deck-liste"><p class="deck-hinweis">Deck wird geladen …</p></div>';
@@ -500,9 +638,26 @@ export async function zeigen(wurzel, parameter) {
     abgleich: bereich.querySelector('.deck-segmente'), liste: bereich.querySelector('.deck-liste'),
     neuLaden: bereich.querySelector('.deck-neu-laden'), umbenennen: bereich.querySelector('.deck-umbenennen'),
     loeschen: bereich.querySelector('.deck-loeschen'), meldung: bereich.querySelector('.deck-meldung'),
-    status: bereich.querySelector('[role="status"]'), taste: null, sitzung: null,
+    status: bereich.querySelector('.nur-vorleser'), taste: null, sitzung: null,
+    toast: bereich.querySelector('.deck-toast'), bauen: bereich.querySelector('.deck-bauen'),
+    zurSammlung: bereich.querySelector('.deck-zur-sammlung'), zerlegen: bereich.querySelector('.deck-zerlegen'),
+    sortierung: bereich.querySelector('.deck-sortierung'),
+    sort: SORTIERUNGEN.some(([s]) => s === vorliebe('deck.sort')) ? vorliebe('deck.sort') : 'gruppe',
   };
   Z = z;
+  z.zurSammlung.addEventListener('click', () => zurSammlung(z));
+  z.sortierung.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sort]');
+    if (!b) return;
+    z.sort = b.dataset.sort;
+    vorliebe('deck.sort', z.sort);
+    if (z.daten) zeichnen();
+  });
+  if (wartendeMeldung) {
+    const m = wartendeMeldung;
+    wartendeMeldung = null;
+    toastZeigen(z.toast, m.text, { schritt: m.schritt, nachRueck: () => laden(z, { still: true }) });
+  }
   bereich.querySelector('.deck-zurueck').addEventListener('click', () => zurueck('#/'));
   z.basics.addEventListener('change', () => aendern(z, { basics_auslassen: z.basics.checked }));
   z.abgleich.addEventListener('click', (e) => {
@@ -537,13 +692,19 @@ export async function zeigen(wurzel, parameter) {
   if (Z === z && !z.daten) z.liste.replaceChildren();
 }
 
+/** Dieselbe Ansicht „deck“, aber andere Adresse (Deck, Entnahme, Zerlegen): immer neu aufbauen. */
 export async function aktualisieren(parameter) {
-  if (Z && Number(parameter.deck) !== Z.id) {
-    Z.id = Number(parameter.deck);
-    await laden(Z);
-  }
+  const wurzel = document.getElementById('buehne');
+  const nochDa = Z && !parameter.modus && Z.id === Number(parameter.deck);
+  if (nochDa) return;
+  aufraeumen();
+  const { aufraeumenBau } = await import('./deckbau.js');
+  aufraeumenBau();
+  wurzel.replaceChildren();
+  await zeigen(wurzel, parameter);
 }
 
 export async function verlassen() {
   aufraeumen();
+  if (!wartendeMeldung) import('./deckbau.js').then((m) => m.aufraeumenBau());
 }

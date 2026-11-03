@@ -132,7 +132,7 @@ function filterLesen(roh, optionen) {
   f.foil = o.foil === 0 || o.foil === 1 ? o.foil : null;
   f.anzahl_min = ganz(o.anzahl_min, 1, 999);
   f.q = typeof o.q === 'string' ? o.q.slice(0, 60) : '';
-  f.ort = liste('ort').filter((w) => /^[kb][0-9]{1,9}$/.test(w));       // nur in der Sammlung wirksam
+  f.ort = liste('ort').filter((w) => /^[kbd][0-9]{1,9}$/.test(w));       // nur in der Sammlung wirksam
   f.quelle = liste('quelle', QUELLEN);
   f.doppel = o.doppel === 1 ? 1 : null;
   return f;
@@ -152,7 +152,7 @@ function filterParameter(f, sammlung = false) {
   return p;
 }
 
-const ortName = (o) => `${o.art === 'kiste' ? 'Kiste' : 'Binder'} ${o.name}`;
+const ortName = (o) => `${o.art === 'kiste' ? 'Kiste' : o.art === 'deck' ? 'Deck' : 'Binder'} ${o.name}`;
 
 /** Aktive Filter als Liste für die Pillen oben: { name, wert, text }. */
 function aktiveFilter(s) {
@@ -486,7 +486,10 @@ function titelSetzen() {
 function zahlenZeichnen() {
   const k = S.kopf;
   let t = `${zahl(k.karten)} ${k.karten === 1 ? 'Karte' : 'Karten'} · ${zahl(k.posten)} Posten`;
-  if (S.sammlung) t += ` · davon in Bindern ${zahl(k.binder.karten)} · davon in Kisten ${zahl(k.kisten.karten)}`;
+  if (S.sammlung) {
+    t += ` · davon in Bindern ${zahl(k.binder.karten)} · davon in Kisten ${zahl(k.kisten.karten)}`;
+    if (k.decks && k.decks.karten > 0) t += ` · davon in Decks ${zahl(k.decks.karten)}`;
+  }
   const gefiltert = aktiveFilter(S).length > 0;
   if (gefiltert && S.gesamt) t += S.sammlung ? ` · angezeigt: ${zahl(S.gesamt.posten)} Posten` : ` · davon ${zahl(S.gesamt.posten)} angezeigt`;
   const z = S.wurzel.querySelector('.kiste-zahlen');
@@ -515,7 +518,7 @@ function sammlungInfoZeichnen() {
       + `mögliche Doppel: ${zahl(k.doppel.posten)}</button>`
     : '<span class="si-teil">keine möglichen Doppel</span>';
   const ohne = k.ohne_ort.karten > 0
-    ? `<span class="si-teil si-warn" title="Karten, die weder in einer Kiste noch in einem Binder liegen"><span class="si-wert">${zahl(k.ohne_ort.karten)}</span> Karten ohne Ort (nicht mitgezählt)</span>` : '';
+    ? `<span class="si-teil si-warn" title="Karten, die weder in einer Kiste noch in einem Binder oder Deck liegen"><span class="si-wert">${zahl(k.ohne_ort.karten)}</span> Karten ohne Ort (nicht mitgezählt)</span>` : '';
   box.innerHTML = `<span class="etikett si-titel">Quellen</span>${quellen}<span class="si-trenn" aria-hidden="true"></span>${doppel}${ohne}`;
 }
 

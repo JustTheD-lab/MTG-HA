@@ -15,6 +15,8 @@
 //   #/sets                     Sets: Übersicht mit Vollständigkeit der Sammlung (sets.js)
 //   #/set/ecl                  ein Set: Drucke und Namen, vorhanden oder fehlend (sets.js; Code nur [a-z0-9]{2,8})
 //   #/deck/7                   Deck 7: Abgleich mit der Sammlung, Fehlt-Liste (deck.js)
+//   #/deck/7/bauen             Entnahme für Deck 7 (Karten aus Binder und Kisten holen, deckbau.js)
+//   #/deck/7/zerlegen[?karten=1,2]   Deck zerlegen: Karten zurücklegen (deckbau.js)
 //   #/pruefen                 Prüfansicht: unsichere Karten nacheinander
 //   #/pruefen/karte/12         dazu Karte 12 groß
 //
@@ -79,7 +81,12 @@ export function lesen(hash) {
     return { ansicht: 'set', binder: null, kiste: null, sammlung: false, seite: null, karte: null, set: teile[1] };
   }
   if (teile[0] === 'deck' && zahl(teile[1]) !== null) {
-    return { ansicht: 'deck', binder: null, kiste: null, sammlung: false, seite: null, karte: null, deck: zahl(teile[1]) };
+    // #/deck/7/bauen (Entnahme) und #/deck/7/zerlegen[?karten=1,2] (Zerlegen)
+    const modus = teile[2] === 'bauen' || teile[2]?.split('?')[0] === 'zerlegen' ? teile[2].split('?')[0] : null;
+    const abfrage = new URLSearchParams(hash.split('?')[1] ?? '');
+    const ids = (abfrage.get('karten') ?? '').split(',').filter((x) => /^\d+$/.test(x)).map(Number);
+    return { ansicht: 'deck', binder: null, kiste: null, sammlung: false, seite: null, karte: null, deck: zahl(teile[1]),
+             modus, karten: modus === 'zerlegen' && ids.length ? ids : null };
   }
   if (teile[0] === 'pruefen') {
     return { ansicht: 'pruefen', binder: null, kiste: null, sammlung: false, seite: null,

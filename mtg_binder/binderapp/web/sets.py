@@ -64,6 +64,7 @@ def routen(h) -> list[Route]:
     def sets(request):
         with closing(h.db()) as con:
             k_._ab_version_3(con, 404)
+            k_._ab_version_8(con)
             besitz = _besitz(con, h.nutzer)
         je_set: dict[str, dict] = {}
         for z in besitz:
@@ -108,6 +109,7 @@ def routen(h) -> list[Route]:
             raise Fehler("Set nicht gefunden.", 404)
         with closing(h.db()) as con:
             k_._ab_version_3(con, 404)
+            k_._ab_version_8(con)
             besitz = _besitz(con, h.nutzer, code)
         kat = h.katalog()
         if kat is None:

@@ -13,7 +13,7 @@ import re
 import sqlite3
 import uuid
 
-from binderapp.db.datenbank import _protokoll
+from binderapp.db.datenbank import _protokoll, version
 from binderapp.db.seiten import Fehler
 
 QUELLE = "nutzer"
@@ -31,9 +31,11 @@ def neuer_schritt() -> str:
 
 
 def summe(con, nutzer: int) -> tuple[int, int]:
-    """(Posten, Karten) über alle Binder und Kisten des Nutzers (Summenprüfung bei Verschieben und Abzug)."""
+    """(Posten, Karten) über alle Binder, Kisten und (ab Version 8) Decks des Nutzers (Summenprüfung bei Verschieben,
+    Abzug und Deckbau)."""
+    deck = " OR deck_id IS NOT NULL" if version(con) >= 8 else ""
     z = con.execute("SELECT COUNT(*), COALESCE(SUM(anzahl), 0) FROM karte WHERE nutzer_id = ? "
-                    "AND (kiste_id IS NOT NULL OR tasche_id IS NOT NULL)", (nutzer,)).fetchone()
+                    f"AND (kiste_id IS NOT NULL OR tasche_id IS NOT NULL{deck})", (nutzer,)).fetchone()
     return z[0], z[1]
 
 
@@ -119,8 +121,11 @@ def zuruecknehmen(con, nutzer: int, schritt: str) -> tuple[str, list]:
                 raise Fehler(KONFLIKT, 409)
             if any(aktuell[k] != v for k, v in neu.items()):
                 raise Fehler(KONFLIKT, 409)
-            con.execute(f"UPDATE {tabelle} SET {', '.join(f'{k} = ?' for k in alt)} WHERE id = ?",
-                        (*alt.values(), z["datensatz"]))
+            try:
+                con.execute(f"UPDATE {tabelle} SET {', '.join(f'{k} = ?' for k in alt)} WHERE id = ?",
+                            (*alt.values(), z["datensatz"]))
+            except sqlite3.IntegrityError:  # Deck, Tasche oder Kiste gibt es nicht mehr (z. B. Deck gelöscht)
+                raise Fehler(KONFLIKT, 409)
             _protokoll(con, nutzer, QUELLE, tabelle, z["datensatz"], "geaendert", neu, alt, neuer, schritt)
         elif z["aktion"] == "angelegt":
             if aktuell is None or not neu or any(aktuell[k] != v for k, v in neu.items() if k in aktuell.keys()):

@@ -140,6 +140,8 @@ def werte(con, nutzer: int, art: str, preisart: str = PREISART) -> dict[int, dic
                               "JOIN seite s ON s.id = t.seite_id", bedingung="")
     elif art == "kiste":
         sql = SQL_WERT.format(gruppe="k.kiste_id", preis=preis, verbindung="", bedingung="AND k.kiste_id IS NOT NULL")
+    elif art == "deck":   # ab Version 8: Karten, die im Deck liegen
+        sql = SQL_WERT.format(gruppe="k.deck_id", preis=preis, verbindung="", bedingung="AND k.deck_id IS NOT NULL")
     else:
         raise ValueError(art)
     return {z[0]: {"wert": round(z[1] or 0, 2), "ohne_preis": z[2]} for z in con.execute(sql, (tag, nutzer))}
@@ -162,7 +164,7 @@ FROM karte k
 JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
 JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?
 JOIN preis q ON q.cardmarket_id = d.cardmarket_id AND q.tag = ?
-WHERE k.nutzer_id = ? AND {jetzt} IS NOT NULL AND {frueher} IS NOT NULL
+WHERE k.nutzer_id = ? AND {jetzt} IS NOT NULL AND {frueher} IS NOT NULL {bedingung}
 """
 
 
@@ -176,15 +178,18 @@ def vergleichstage(con) -> dict[str, str | None]:
             for name, (abstand, toleranz) in ABSTAENDE.items()}
 
 
-def veraenderung_gesamt(con, nutzer: int, preisart: str = PREISART) -> dict[str, dict]:
-    """{"vortag"|"tage3"|"tage30": {"euro": …, "prozent": …, "tag": …}}; ohne passenden früheren Tag None-Werte."""
+def veraenderung_gesamt(con, nutzer: int, preisart: str = PREISART, deck_id: int | None = None) -> dict[str, dict]:
+    """{"vortag"|"tage3"|"tage30": {"euro": …, "prozent": …, "tag": …}}; ohne passenden früheren Tag None-Werte.
+    Mit `deck_id` nur die Karten, die in diesem Deck liegen (ab Version 8)."""
     tag = neuester_tag(con)
     ergebnis = {}
+    bedingung, extra = ("AND k.deck_id = ?", (deck_id,)) if deck_id is not None else ("", ())
     for name, frueher_tag in vergleichstage(con).items():
         euro = prozent = None
         if frueher_tag is not None:
-            sql = SQL_VERAENDERUNG.format(jetzt=preis_ausdruck(preisart, "p"), frueher=preis_ausdruck(preisart, "q"))
-            z = con.execute(sql, (tag, frueher_tag, nutzer)).fetchone()
+            sql = SQL_VERAENDERUNG.format(jetzt=preis_ausdruck(preisart, "p"), frueher=preis_ausdruck(preisart, "q"),
+                                          bedingung=bedingung)
+            z = con.execute(sql, (tag, frueher_tag, nutzer, *extra)).fetchone()
             if z is not None and z[0] is not None and z[1] is not None:
                 euro = round(z[0] - z[1], 2)
                 prozent = _prozent(z[0], z[1])

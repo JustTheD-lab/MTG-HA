@@ -143,6 +143,9 @@ LEFT JOIN kiste ki ON ki.id = k.kiste_id
 LEFT JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
 WHERE k.id = ? AND k.nutzer_id = ?
 """
+# ab Version 8 zusätzlich der Ort „Deck“
+SQL_KARTE_V8 = SQL_KARTE_V3.replace("ki.name AS kiste_name,", "ki.name AS kiste_name, de.name AS deck_name,").replace(
+    "LEFT JOIN kartendaten d", "LEFT JOIN deck de ON de.id = k.deck_id\nLEFT JOIN kartendaten d")
 
 SQL_SUCHE = """
 SELECT k.id, k.name, k.set_code, k.nummer, k.sprache, k.status, k.geprueft, k.bild,
@@ -352,7 +355,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
 
     def karte(request):
         with closing(db()) as con:
-            sql = SQL_KARTE_V3 if version(con) >= 3 else SQL_KARTE
+            sql = SQL_KARTE_V8 if version(con) >= 8 else SQL_KARTE_V3 if version(con) >= 3 else SQL_KARTE
             k = con.execute(sql, (request.path_params["id"], NUTZER)).fetchone()
             if k is None:
                 return fehler("Karte nicht gefunden", 404)

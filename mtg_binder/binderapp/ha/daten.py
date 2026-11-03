@@ -47,7 +47,13 @@ WHERE ki.nutzer_id = ? GROUP BY ki.id ORDER BY ki.regalplatz, ki.name
 """
 SQL_SAMMLUNG = """
 SELECT COUNT(*) AS posten, COALESCE(SUM(anzahl), 0) AS karten FROM karte
-WHERE nutzer_id = ? AND (kiste_id IS NOT NULL OR tasche_id IS NOT NULL)
+WHERE nutzer_id = ? AND (kiste_id IS NOT NULL OR tasche_id IS NOT NULL {deck})
+"""
+# ab Version 8: Decks als Ort (Karten, die im Deck liegen); Kosten der Fehlt-Liste aus dem Abgleich
+SQL_DECKS = """
+SELECT de.id, de.name, COALESCE(SUM(k.anzahl), 0) AS karten
+FROM deck de LEFT JOIN karte k ON k.deck_id = de.id
+WHERE de.nutzer_id = ? GROUP BY de.id ORDER BY de.regalplatz, de.id
 """
 
 
@@ -88,7 +94,8 @@ def status(con, nutzer: int = NUTZER) -> dict:
 
 def werte(con, nutzer: int = NUTZER, preisart: str = preise.PREISART) -> dict:
     gesamt = preise.gesamtwert(con, nutzer, preisart)
-    sammlung = con.execute(SQL_SAMMLUNG, (nutzer,)).fetchone()
+    sammlung = con.execute(SQL_SAMMLUNG.format(deck="OR deck_id IS NOT NULL" if version(con) >= 8 else ""),
+                           (nutzer,)).fetchone()
     wert_binder = preise.werte(con, nutzer, "binder", preisart)
     binder = [{"id": z["id"], "name": z["name"], "karten": z["karten"],
                "wert": wert_binder.get(z["id"], {}).get("wert") if gesamt else None}
@@ -99,6 +106,15 @@ def werte(con, nutzer: int = NUTZER, preisart: str = preise.PREISART) -> dict:
         kisten = [{"id": z["id"], "name": z["name"], "karten": z["karten"],
                    "wert": wert_kisten.get(z["id"], {}).get("wert") if gesamt else None}
                   for z in con.execute(SQL_KISTEN, (nutzer,))]
+    decks = []
+    if version(con) >= 8:
+        from binderapp.decks import abgleich
+        wert_decks = preise.werte(con, nutzer, "deck", preisart)
+        for z in con.execute(SQL_DECKS, (nutzer,)).fetchall():
+            fehlt = abgleich.abgleichen(con, nutzer, abgleich.deck_holen(con, nutzer, z["id"]), preisart)["wert"]
+            decks.append({"id": z["id"], "name": z["name"], "karten": z["karten"],
+                          "wert": wert_decks.get(z["id"], {}).get("wert", 0.0) if gesamt else None,
+                          "fehlt_kosten": fehlt["fehlt"] if fehlt else None})
     veraenderung = preise.veraenderung_gesamt(con, nutzer, preisart)
     aenderung = preise.groesste_aenderung(con, nutzer, TOP, preisart)
     return {
@@ -111,6 +127,7 @@ def werte(con, nutzer: int = NUTZER, preisart: str = preise.PREISART) -> dict:
         "veraenderung": veraenderung,
         "binder": binder,
         "kisten": kisten,
+        "decks": decks,
         "teuerste": preise.teuerste(con, nutzer, TOP, preisart),
         "gewinner": aenderung["gewinner"],
         "verlierer": aenderung["verlierer"],

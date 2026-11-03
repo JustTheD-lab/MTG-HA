@@ -248,7 +248,8 @@ function kartendatenHtml(k) {
 function datenHtml(k) {
   const gruende = gruendeListe(k.gruende);
   let lage;
-  if (istKistenkarte(k)) lage = `Kiste ${k.kiste_name ?? ''}`.trim();
+  if (k.deck_id != null) lage = null;
+  else if (istKistenkarte(k)) lage = `Kiste ${k.kiste_name ?? ''}`.trim();
   else if (k.binder_id == null) lage = 'nicht im Binder';
   else {
     lage = [k.binder_name, k.seite != null && `Seite ${k.seite}`, k.zeile != null && `Zeile ${k.zeile}`,
@@ -261,7 +262,8 @@ function datenHtml(k) {
       ${importiert(k) && !gruende.length ? '' : feldHtml('Erkennung', esc(erkennung(k)), true)}
       ${importiert(k) && k.konfidenz == null ? '' : feldHtml('Konfidenz', esc(k.konfidenz == null ? 'keine Angabe' : prozent(k.konfidenz)))}
       ${gruende.length ? feldHtml('Gründe', `<ul>${gruende.map((g) => `<li title="${esc(g)}">${esc(grundText(g))}</li>`).join('')}</ul>`, true) : ''}
-      ${feldHtml('Lage', esc(lage), true)}
+      ${feldHtml('Lage', lage === null
+        ? `<a href="#/deck/${Number(k.deck_id)}">${esc(`Deck ${k.deck_name ?? ''}`.trim())}</a>` : esc(lage), true)}
     </dl>`;
 }
 
