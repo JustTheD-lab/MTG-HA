@@ -10,7 +10,10 @@
          Karten der Tasche an eine andere Stelle (auch in einen anderen Binder; ohne Stelle: nächste freie
          Tasche). Ist das Ziel besetzt, wird getauscht. Inhalt und Foto-Ausschnitt wandern mit den Karten.
     POST /api/seite/{id}/karte  {"zeile", "spalte", "scryfall_id", "foil"?, "sprache"?}
-         Eine Karte aus dem Katalog in eine leere Tasche legen (Quelle „manuell“, Status „sicher“, geprüft).
+         Eine Karte aus dem Katalog in eine Tasche ohne Karte legen (leer, Rückseite oder unklar; Quelle „manuell“,
+         Status „sicher“, geprüft).
+    POST /api/tasche/{id}/leeren
+         Rückseite oder unklare Tasche ohne Karte als leer markieren (04.11.2026).
 
 Löschen läuft über DELETE /api/karte/{id} (pruefen.py), in eine Kiste über POST /api/karten/verschieben
 (kistenschreiben.py). Jeder Schritt lässt sich mit POST /api/schritt/{schritt}/rueckgaengig zurücknehmen.
@@ -31,7 +34,7 @@ from binderapp.web.kisten import _ab_version_3
 from binderapp.web.kistenschreiben import ANZAHL_MAX, _ganzzahl, druck_nachschlagen
 from binderapp.web.pruefen import SPRACHEN, _kennung
 
-__all__ = ["routen", "foil_umschalten", "seite_foil", "tasche_verschieben", "karte_einlegen"]
+__all__ = ["routen", "foil_umschalten", "seite_foil", "tasche_verschieben", "karte_einlegen", "tasche_leeren"]
 
 GROSS = 2 ** 62
 NICHT_KOPIEREN = ("id", "angelegt", "geaendert")
@@ -209,7 +212,9 @@ def karte_einlegen(con, nutzer: int, seite_id: int, zeile, spalte, daten: dict, 
     else:
         tasche_id = t["id"]
         if t["inhalt"] != "karte":
-            schritte.aendern_genau(con, nutzer, "tasche", tasche_id, {"inhalt": "karte"}, schritt=schritt)
+            # Rückseite: Der Foto-Ausschnitt zeigt die Rückseite, nicht die neue Karte (Rückgängig stellt ihn wieder her)
+            felder = {"inhalt": "karte", **({"ausschnitt": None} if t["inhalt"] == "rueckseite" else {})}
+            schritte.aendern_genau(con, nutzer, "tasche", tasche_id, felder, schritt=schritt)
     karte_id = schritte.einfuegen(con, nutzer, "karte", {
         "nutzer_id": nutzer, "tasche_id": tasche_id, "kiste_id": None, "quelle": "manuell",
         "scryfall_id": daten["scryfall_id"], "oracle_id": daten["oracle_id"], "name": daten["name"],
@@ -220,6 +225,22 @@ def karte_einlegen(con, nutzer: int, seite_id: int, zeile, spalte, daten: dict, 
     kartendaten.schreiben(con, daten, art="behalten")   # abgeleitet aus dem Katalog, ohne Historie
     return {"id": karte_id, "schritt": schritt, "tasche_id": tasche_id, "name": daten["name"],
             "binder_id": seite["binder_id"], "seite_id": seite_id, "zeile": zeile, "spalte": spalte}
+
+
+def tasche_leeren(con, nutzer: int, tasche_id: int) -> dict:
+    """Rückseite oder unklare Tasche ohne Karte als leer markieren (Wunsch des Nutzers, 04.11.2026). Der Foto-
+    Ausschnitt bleibt gespeichert; Rückgängig stellt den alten Inhalt wieder her."""
+    t = con.execute("SELECT t.* FROM tasche t JOIN seite s ON s.id = t.seite_id JOIN binder b ON b.id = s.binder_id"
+                    " WHERE t.id = ? AND b.nutzer_id = ?", (tasche_id, nutzer)).fetchone()
+    if t is None:
+        raise Fehler("Tasche nicht gefunden.", 404)
+    if _karten_in(con, tasche_id):
+        raise Fehler("In dieser Tasche liegt eine Karte. Bitte die Karte löschen oder verschieben.", 409)
+    if t["inhalt"] == "leer":
+        return {"schritt": None, "tasche_id": tasche_id, "vorher": "leer"}
+    schritt = schritte.neuer_schritt()
+    schritte.aendern_genau(con, nutzer, "tasche", tasche_id, {"inhalt": "leer"}, schritt=schritt)
+    return {"schritt": schritt, "tasche_id": tasche_id, "vorher": t["inhalt"]}
 
 
 # ---------------------------------------------------------------- Routen
@@ -276,7 +297,13 @@ def routen(h) -> list[Route]:
         zeitplan.anstossen()   # Add-on: Preis des neuen Drucks bald nachtragen
         return JSONResponse(antwort, status_code=201)
 
+    @h.schreibend
+    async def leeren(request):
+        tasche_id = int(request.path_params["id"])
+        return JSONResponse(await _ausfuehren(lambda con: tasche_leeren(con, h.nutzer, tasche_id)))
+
     return [
+        Route("/tasche/{id:int}/leeren", leeren, methods=["POST"]),
         Route("/karte/{id:int}/foil", karte_foil, methods=["POST"]),
         Route("/seite/{id:int}/foil", ganze_seite_foil, methods=["POST"]),
         Route("/tasche/{id:int}/verschieben", verschieben, methods=["POST"]),

@@ -453,6 +453,11 @@
 }
 .tisch-bearb-an .tisch-leerknopf:hover { background: rgba(201, 164, 106, 0.26); }
 .tisch-bearb-an .tisch-leerknopf:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; }
+/* Rückseite oder unklare Tasche: das Foto bleibt durch den Schleier sichtbar */
+.tisch-bearb-an .tisch-leerknopf-foto {
+  place-items: end center; padding-bottom: 14%;   /* das Plus unter dem Etikett „Rückseite“ */
+  background: rgba(23, 19, 15, 0.45); border: 2px dashed var(--messing);
+}
 .tisch-leerknopf .tisch-sym { width: max(20px, calc(var(--tasche-b) * 0.24)); height: max(20px, calc(var(--tasche-b) * 0.24)); }
 
 /* gewählte Karte (Verschieben) */

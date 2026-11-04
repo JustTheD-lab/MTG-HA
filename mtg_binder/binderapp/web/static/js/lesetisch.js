@@ -630,13 +630,19 @@ function tascheBauen(t, seite, zeile, spalte, eifrig) {
     if (k.anzahl > 1) tasche.append(el('span', 'tisch-anzahl', `×${k.anzahl}`));
     return tasche;
   }
-  tasche.setAttribute('role', 'img');
-  tasche.setAttribute('aria-label', typ === 'rueckseite' ? 'Kartenrückseite' : 'Tasche unklar, Erkennung unsicher');
   const flaeche = el('div', 'tisch-foto');
+  flaeche.setAttribute('role', 'img');
+  flaeche.setAttribute('aria-label', typ === 'rueckseite' ? 'Kartenrückseite' : 'Tasche unklar, Erkennung unsicher');
   flaeche.append(bildBauen(t, null, eifrig));
   tasche.append(flaeche);
   if (typ === 'rueckseite') tasche.append(el('span', 'tisch-etikett', 'Rückseite'));
   else tasche.append(abzeichen('unsicher', false));
+  // Bearbeiten-Modus (04.11.2026): auch Rückseiten und unklare Taschen ohne Karte lassen sich füllen oder leeren
+  const knopf = el('button', 'tisch-leerknopf tisch-leerknopf-foto', SYM_PLUS);
+  knopf.type = 'button';
+  knopf.setAttribute('aria-label', `${typ === 'rueckseite' ? 'Rückseite' : 'Unklare Tasche'}: Karte hineinlegen, `
+    + 'mit „Löschen“ als leer markieren oder Ziel zum Verschieben');
+  tasche.append(knopf);
   return tasche;
 }
 
@@ -1477,7 +1483,7 @@ function werkzeugZeichnen() {
     hinweis = 'Karten antippen: Foil an oder aus';
     extra = knopf('seitefoil', `${SYM_STERN}<span>${z.breit ? 'Beide Seiten Foil' : 'Ganze Seite Foil'}</span>`);
   } else if (b.werkzeug === 'loeschen') {
-    hinweis = 'Karten antippen: aus der Sammlung entfernen';
+    hinweis = 'Karten antippen: aus der Sammlung entfernen (Rückseiten: als leer markieren)';
   } else if (b.wahl) {
     hinweis = `„${b.wahl.name}“ gewählt: Ziel-Tasche antippen`;
     extra = knopf('binder', 'In anderen Binder …') + knopf('kiste', 'In eine Kiste …') + knopf('abbrechen', 'Abbrechen');
@@ -1534,7 +1540,9 @@ function bearbTasche(tasche) {
     return void verschiebenNach(ort, k);
   }
   if (!k) {
-    if (tasche.dataset.typ === 'leer') hinzufuegen(ort);
+    // Rückseite oder unklare Tasche: „Löschen“ markiert sie als leer, sonst wie eine leere Tasche eine Karte einlegen
+    if (b.werkzeug === 'loeschen' && tasche.dataset.typ !== 'leer' && t?.id != null) return void tascheLeeren(t, ort);
+    hinzufuegen(ort);
     return;
   }
   if (b.werkzeug === 'foil') return void foilUmschalten(ort, k);
@@ -1626,6 +1634,17 @@ async function kartenLoeschen(k) {
     if (z.bearb) z.bearb.wahl = null;
     await laden(true);
     meldung(`„${k.name}“ aus der Sammlung entfernt.`, { karte: k.id });
+  });
+}
+
+async function tascheLeeren(t, ort) {
+  const zustand = z;
+  await bearbAktion(async () => {
+    const r = await senden(`/api/tasche/${t.id}/leeren`, {});
+    if (z !== zustand) return;
+    await laden(true);
+    meldung(`${r.vorher === 'rueckseite' ? 'Rückseite' : 'Tasche'} auf Seite ${ort.nr}, Reihe ${ort.zeile}, `
+      + `Platz ${ort.spalte} als leer markiert.`, { schritte: r.schritt ? [r.schritt] : [] });
   });
 }
 

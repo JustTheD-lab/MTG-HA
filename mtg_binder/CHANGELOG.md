@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.14.1
+- Binder bearbeiten: Taschen mit Rückseite (und unklare Taschen ohne Karte) lassen sich jetzt bearbeiten.
+  Antippen legt eine Karte hinein, das Werkzeug „Löschen“ markiert die Tasche als leer, beim Verschieben sind
+  sie ein Ziel. Alles mit Rückgängig.
+
 ## 0.14.0
 - Bulk-Scan: je Durchgang „Alle Karten Foil“ und „Sets wählen“. Foil-Karten werden wie gewohnt zu Posten
   zusammengefasst und nach Foil-Preis bewertet.
