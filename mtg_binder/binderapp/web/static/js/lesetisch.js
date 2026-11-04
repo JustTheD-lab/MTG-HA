@@ -20,6 +20,7 @@ import { holen, senden, geaendert, bildUrl, bildSrcset, esc, gehe, zurueck, bewe
   euro, preisStreifen, preisText } from './gemeinsam.js';
 import { dialog, bestaetigen, dialogOffen } from './dialog.js';
 import { angemeldet, knopf as anmeldeKnopf } from './anmeldung.js';
+import { BINDERFARBEN, farbwahl, tischFarbe } from './farbrad.js';
 
 const KARTE = 63 / 88;        // Seitenverhältnis einer Karte
 const INNEN = 0.035;          // Rand der Seite, im Verhältnis zur Seitenbreite
@@ -34,8 +35,6 @@ const SCHWELLE = 50;          // Wischen ab so vielen Pixeln
 const TAKT = 4000;            // Abfrage in ms, solange Fotos auf die Erkennung warten
 const WARTET = new Set(['neu', 'in_verarbeitung']);
 const OHNE_TASCHEN = new Set(['neu', 'in_verarbeitung', 'fehler']);
-const FARBEN = [['schwarz', 'schwarz'], ['durchsichtig', 'durchsichtig'], ['gelb', 'gelb'], ['blau', 'blau'],
-  ['gruen', 'grün'], ['rot', 'rot'], ['braun', 'braun']];
 
 /** Schlichte Strich-Symbole (Inline-SVG, currentColor). */
 const SYM = (pfad, breite = 1.5) => `<svg class="tisch-sym" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"`
@@ -111,7 +110,7 @@ export async function zeigen(wurzel, p, vorher) {
   if (z !== zustand) return;  // inzwischen woanders hin
 
   datenSetzen(binder);
-  tisch.dataset.farbe = binder.farbe || 'schwarz';
+  tischFarbe(tisch, binder.farbe);
   zustand.angewandt = 0;
   zustand.seite = Math.min(Math.max(p.seite || 1, 1), Math.max(zustand.N, 1));
   // Kartenlinks bleiben stabil: Liegt die Karte inzwischen auf einer anderen Seite, dorthin springen.
@@ -237,7 +236,7 @@ function anwenden(binder) {
     z.bearb.wahl = null;
     werkzeugZeichnen();
   }
-  z.tisch.dataset.farbe = binder.farbe || 'schwarz';
+  tischFarbe(z.tisch, binder.farbe);
   const titel = z.leiste.querySelector('.tisch-titel');
   if (titel) titelSetzen(titel, binder);
   // Die Ansicht bleibt auf ihrer Seite (Seiten-ID), auch wenn davor Seiten dazukommen oder wegfallen.
@@ -1230,8 +1229,7 @@ function verwaltungOeffnen() {
       <h3 class="etikett">Binder bearbeiten</h3>
       <label class="etikett feld-etikett" for="tisch-v-name">Name</label>
       <input id="tisch-v-name" class="feld" data-v="name" type="text" maxlength="60" autocomplete="off" spellcheck="false">
-      <label class="etikett feld-etikett" for="tisch-v-farbe">Farbe</label>
-      <select id="tisch-v-farbe" class="feld" data-v="farbe">${FARBEN.map(([w, t]) => `<option value="${w}">${t}</option>`).join('')}</select>
+      <div data-v="farbplatz"></div>
       <div class="tisch-v-zeile"><button type="button" class="knopf knopf-haupt" data-v="speichern">Speichern</button></div>
       <p class="meldung" role="alert"></p>
     </section>
@@ -1266,7 +1264,8 @@ function verwaltungOeffnen() {
     m.setAttribute('role', gut ? 'status' : 'alert');
   };
   feld('name').value = zustand.binder.name;
-  feld('farbe').value = zustand.binder.farbe || 'schwarz';
+  const farbWahl = farbwahl({ farben: BINDERFARBEN, wert: zustand.binder.farbe || 'schwarz' });
+  feld('farbplatz').append(farbWahl);
   // Erste Bestätigung: der genaue Name; zweite: die Rückfrage beim Klick
   feld('loeschname').addEventListener('input', () => {
     feld('loeschen').disabled = feld('loeschname').value.trim() !== zustand.binder.name;
@@ -1404,7 +1403,7 @@ function verwaltungOeffnen() {
     } else if (was === 'speichern') {
       ausfuehren(knopf, 'bearbeiten', async () => {
         const name = feld('name').value.trim();
-        const farbe = feld('farbe').value;
+        const farbe = farbWahl.wert;
         const daten = {};
         if (name !== zustand.binder.name) daten.name = name;
         if (farbe !== zustand.binder.farbe) daten.farbe = farbe;

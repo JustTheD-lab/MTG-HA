@@ -272,13 +272,11 @@
   background: var(--messing-dunkel); opacity: 0.6; pointer-events: none;
 }
 
-/* Etikettfarben (Plakette der Kiste und Farbwahl im Dialog) */
+/* Etikett der dunklen Kisten (Metall). Farbige Kisten (feste Farbe oder Farbrad) bekommen ihre Farbe als --kf
+   über das style-Attribut (js/farbrad.js, kistenAussehen); ihr Etikett bleibt Messing. */
 .regal-ek-messing { --ek: var(--messing); }
 .regal-ek-silber  { --ek: #b9bdc4; }
 .regal-ek-kupfer  { --ek: #c07a52; }
-.regal-ek-gruen   { --ek: #6aa386; }
-.regal-ek-blau    { --ek: #6a93c4; }
-.regal-ek-rot     { --ek: #cf6e66; }
 
 .regal-kiste {
   --ek: var(--messing);
@@ -313,6 +311,15 @@
   transition: border-color var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve);
 }
 @media (hover: hover) { .regal-kiste:hover .regal-kiste-front { border-color: var(--messing-dunkel); background: var(--flaeche-3); } }
+
+/* Farbige Kiste: der ganze Körper in der gewählten Farbe, Zahlen in passender Schriftfarbe */
+.regal-kiste-farbig .regal-kiste-front { background: var(--kf); border-color: var(--kf-kante); }
+.regal-kiste-farbig .regal-kiste-zahlen, .regal-kiste-farbig .regal-kiste-posten { color: var(--kt2); }
+.regal-kiste-farbig .regal-kiste-karten { color: var(--kt); }
+.regal-kiste-farbig .regal-kiste-kanten { margin: 0 6px; }
+@media (hover: hover) {
+  .regal-kiste-farbig:hover .regal-kiste-front { background: var(--kf); border-color: var(--messing-dunkel); filter: brightness(1.08); }
+}
 
 /* Messing-Etikett mit dem Namen */
 .regal-kiste-etikett {
@@ -368,21 +375,7 @@
 .regal-sammlung-zahlen { flex: 1 1 auto; min-width: 0; font-variant-numeric: tabular-nums; letter-spacing: 0.05em; }
 .regal-sammlung-pfeil { flex: none; color: var(--text-3); }
 
-/* ---------- Dialog „Neue Kiste" (liegt außerhalb der Szene) ---------- */
-
-.regal-kf { margin: 0; padding: 0; border: 0; min-width: 0; }
-.regal-kf legend { margin: 0; padding: 16px 0 6px; }
-.regal-kf-liste { display: flex; flex-wrap: wrap; gap: 8px; }
-.regal-kf-wahl { position: relative; display: inline-flex; }
-.regal-kf-eingabe { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.regal-kf-pille {
-  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 12px;
-  border: 1px solid var(--linie-stark); border-radius: 999px; font-size: 0.94rem; color: var(--text-2);
-  transition: border-color var(--dauer-kurz) var(--kurve), background-color var(--dauer-kurz) var(--kurve);
-}
-.regal-kf-chip { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--ek, var(--messing)); }
-.regal-kf-eingabe:checked + .regal-kf-pille { border-color: var(--messing); background: var(--messing-schleier); color: var(--text); }
-.regal-kf-eingabe:focus-visible + .regal-kf-pille { outline: 2px solid var(--messing); outline-offset: 2px; }
+/* Dialog „Neue Kiste“: die Farbwahl kommt aus css/farbrad.css */
 
 /* ---------- Regalboden „Decks" ---------- */
 

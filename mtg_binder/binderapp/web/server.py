@@ -200,6 +200,8 @@ def _karte_kurz(z) -> dict:
 
 
 def farbname(farbe) -> str:
+    if isinstance(farbe, str) and farbe.startswith("#"):
+        return f"eigene Farbe {farbe}"
     return FARBNAMEN.get(farbe, farbe or "")
 
 

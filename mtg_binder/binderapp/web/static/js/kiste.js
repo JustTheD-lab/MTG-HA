@@ -22,6 +22,7 @@ import { esc, bildUrl, gehe, zurueck, senden, fehlerText, SchnittstellenFehler, 
 import { knopf as anmeldeKnopf, angemeldet, sitzung } from './anmeldung.js';
 import { dialog, bestaetigen, dialogOffen } from './dialog.js';
 import { druckWaehlen } from './pruefen.js';
+import { KISTENFARBEN, farbwahl } from './farbrad.js';
 
 const SEITE = 60;
 const ZUSTAENDE = [
@@ -1044,7 +1045,7 @@ function adminZeichnen() {
     hinweis.hidden = false;
   });
   neu('kiste-faecherknopf', SYM.faecher, 'Fächer', 'Fächer dieser Kiste bearbeiten', faecherOeffnen);
-  neu('kiste-umbenennen', SYM.stift, 'Umbenennen', 'Kiste umbenennen', umbenennen);
+  neu('kiste-umbenennen', SYM.stift, 'Bearbeiten', 'Name und Farbe der Kiste ändern', umbenennen);
   neu('kiste-loeschen', SYM.muell, 'Löschen', s.kopf.posten === 0 ? 'Leere Kiste löschen' : 'Kiste mit allen Karten löschen',
     loeschen);
 }
@@ -1081,15 +1082,19 @@ async function faecherOeffnen() {
   }
 }
 
+/** Name und Farbe der Kiste ändern (Farbe: Metalletikett, feste Farbe oder Farbrad). */
 async function umbenennen() {
   const s = S;
   const form = el('form');
   form.id = 'kiste-umbenennen-form';
   form.noValidate = true;
-  form.innerHTML = '<label class="etikett feld-etikett" for="kiste-name-feld">Neuer Name</label>'
+  form.innerHTML = '<label class="etikett feld-etikett" for="kiste-name-feld">Name</label>'
     + `<input id="kiste-name-feld" class="feld" type="text" maxlength="60" value="${esc(s.kopf.name)}" autocomplete="off"`
     + ' enterkeyhint="done" spellcheck="false"><p class="meldung" role="alert" aria-live="assertive"></p>';
-  const d = dialog({ titel: 'Kiste umbenennen', klasse: 'dialog-klein', inhalt: form });
+  const alteFarbe = s.kopf.etikettfarbe || 'messing';
+  const wahl = farbwahl({ farben: KISTENFARBEN, wert: alteFarbe });
+  form.querySelector('.meldung').before(wahl);
+  const d = dialog({ titel: 'Kiste bearbeiten', klasse: 'dialog-klein', inhalt: form });
   const feld = form.querySelector('input');
   const text = form.querySelector('.meldung');
   const abbrechen = el('button', 'knopf', 'Abbrechen');
@@ -1103,12 +1108,19 @@ async function umbenennen() {
     e.preventDefault();
     const name = feld.value.trim();
     if (!name) { text.textContent = 'Bitte einen Namen für die Kiste eingeben.'; feld.focus(); return; }
-    if (name === s.kopf.name) { d.schliessen(false); return; }
+    const daten = {};
+    if (name !== s.kopf.name) daten.name = name;
+    if (wahl.wert !== alteFarbe) daten.etikettfarbe = wahl.wert;
+    if (!Object.keys(daten).length) { d.schliessen(false); return; }
     speichernKnopf.disabled = true;
     text.textContent = '';
     try {
-      await senden(`/api/kiste/${s.id}`, { methode: 'PATCH', daten: { name } });
-      if (S === s) { s.kopf.name = name; titelSetzen(); }
+      await senden(`/api/kiste/${s.id}`, { methode: 'PATCH', daten });
+      if (S === s) {
+        s.kopf.name = name;
+        if (daten.etikettfarbe) s.kopf.etikettfarbe = daten.etikettfarbe;
+        titelSetzen();
+      }
       d.schliessen(true);
     } catch (f) {
       text.textContent = f.message;

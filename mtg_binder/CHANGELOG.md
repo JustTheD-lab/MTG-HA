@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.13.0
+- Farbrad für Binder und Kisten: Neben den festen Farben lässt sich jede Farbe wählen (Farbkreis, Helligkeit,
+  Farbcode). Gilt beim Anlegen eines Binders, unter „Binder bearbeiten“, bei „Neue Kiste“ und bei „Kiste
+  bearbeiten“ (früher „Umbenennen“, jetzt mit Farbe).
+- Farbige Kisten: Die ganze Kiste bekommt die Farbe, das Etikett bleibt Messing. Messing, Silber und Kupfer sind
+  weiter dunkle Kisten mit Metalletikett. Schrift auf hellen Farben wird automatisch dunkel.
+
 ## 0.12.0
 - Nur noch das Add-on fragt Scryfall: Es merkt sich neue und geänderte Karten, die Erkennung am PC holt sie über
   das Heimnetz ab (Port 8099, mit Schlüssel) und fragt Scryfall nicht mehr selbst. Die Bilder neuer Karten lädt

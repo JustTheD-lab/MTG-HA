@@ -15,6 +15,7 @@
 import { dialog, bestaetigen } from './dialog.js';
 import { holen, senden, geaendert, fehlerText, SchnittstellenFehler, adresse } from './gemeinsam.js';
 import { laden, angemeldet, anmelden, sitzung } from './anmeldung.js';
+import { BINDERFARBEN, farbwahl } from './farbrad.js';
 
 const MB = 1024 * 1024;
 const VORSCHAU_BREITE = 160;
@@ -22,8 +23,6 @@ const VORSCHAU_MAX = 25 * MB;
 const TYPEN = new Set(['image/jpeg', 'image/heic', 'image/heif']);
 const ENDUNG = /\.(jpe?g|heic|heif)$/i;
 const RASTER = ['2x2', '3x3'];
-const FARBEN = [['schwarz', 'Schwarz'], ['durchsichtig', 'Durchsichtig'], ['gelb', 'Gelb'], ['blau', 'Blau'],
-  ['gruen', 'Grün'], ['rot', 'Rot'], ['braun', 'Braun']];
 const ABBRUCH = { abbruch: true };
 
 const svg = (pfade, g = 20) => `<svg viewBox="0 0 24 24" width="${g}" height="${g}" fill="none" stroke="currentColor"`
@@ -114,12 +113,7 @@ export async function oeffnen(ziel = {}) {
           <div class="hl-segmente">${RASTER.map((r) => `<label class="hl-segment"><input type="radio" name="${p}-raster" value="${r}"`
             + `${r === '3x3' ? ' checked' : ''}><span>${r}</span></label>`).join('')}</div>
         </fieldset>
-        <fieldset class="hl-gruppe">
-          <legend class="etikett">Farbe <span class="hl-farbname">Schwarz</span></legend>
-          <div class="hl-farben">${FARBEN.map(([wert, text]) => `<label class="hl-farbe" title="${text}"><input type="radio"`
-            + ` name="${p}-farbe" value="${wert}"${wert === 'schwarz' ? ' checked' : ''}><span class="hl-punkt"`
-            + ` data-farbe="${wert}"></span><span class="nur-vorleser">${text}</span></label>`).join('')}</div>
-        </fieldset>
+        <div class="hl-gruppe hl-farbplatz"></div>
       </div>
     </section>
     <section class="hl-abschnitt" data-teil="stelle" hidden>
@@ -156,7 +150,9 @@ export async function oeffnen(ziel = {}) {
   const stelleWahl = q(`#${p}-stelle`);
   const neuBereich = q('.hl-neu');
   const nameFeld = q(`#${p}-name`);
-  const farbName = q('.hl-farbname');
+  const farbWahl = farbwahl({ farben: BINDERFARBEN, wert: z.farbe });
+  q('.hl-farbplatz').append(farbWahl);
+  farbWahl.addEventListener('farbwahl', (ev) => { z.farbe = ev.detail; });
   const liste = q('.hl-liste');
   const dateiFeld = q('.hl-datei');
   const ablage = q('.hl-ablage');
@@ -255,10 +251,6 @@ export async function oeffnen(ziel = {}) {
   wurzel.addEventListener('change', (ev) => {
     const t = ev.target;
     if (t.name === `${p}-raster`) z.raster = t.value;
-    if (t.name === `${p}-farbe`) {
-      z.farbe = t.value;
-      farbName.textContent = FARBEN.find(([w]) => w === t.value)?.[1] ?? '';
-    }
   });
 
   // ---------- Vorschaubilder (klein, nacheinander) ----------

@@ -35,6 +35,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from binderapp.db.datenbank import einfuegen, aendern, loeschen, version
+from binderapp.db.seiten import EIGENE_FARBE
 from binderapp.preise import werte
 from binderapp.sortieren import einsortieren
 from binderapp.web.helfer import Fehler, fehler
@@ -585,9 +586,12 @@ def _name_pruefen(name) -> str:
 
 
 def _etikettfarbe_pruefen(farbe) -> str:
+    """Farbe der Kiste: Messing, Silber, Kupfer (dunkle Kiste mit Metalletikett), eine feste Farbe oder eine eigene
+    aus dem Farbrad als #rrggbb (dann ist die ganze Kiste farbig; Wunsch des Nutzers, 04.11.2026)."""
     wert = str(farbe).strip().lower().replace("ü", "ue") if isinstance(farbe, str) else ""
-    if wert not in {f for f, _ in ETIKETTFARBEN}:
-        raise Fehler("Unbekannte Etikettfarbe. Möglich: " + _auswahl(f for f, _ in ETIKETTFARBEN) + ".")
+    if wert not in {f for f, _ in ETIKETTFARBEN} and not EIGENE_FARBE.fullmatch(wert):
+        raise Fehler("Unbekannte Farbe. Möglich: " + _auswahl(f for f, _ in ETIKETTFARBEN)
+                     + " oder eine eigene Farbe wie #3a6f9c.")
     return wert
 
 

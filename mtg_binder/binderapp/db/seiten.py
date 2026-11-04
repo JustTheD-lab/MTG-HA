@@ -11,6 +11,7 @@ frei, und jede geänderte Seite bekommt ihre eigene Zeile in der Historie (alt u
 """
 from __future__ import annotations
 
+import re
 import unicodedata
 
 from binderapp.db.datenbank import aendern, einfuegen, loeschen
@@ -18,6 +19,7 @@ from binderapp.db.datenbank import aendern, einfuegen, loeschen
 QUELLE = "nutzer"
 RASTER = ("2x2", "3x3")
 FARBEN = ("schwarz", "durchsichtig", "gelb", "blau", "gruen", "rot", "braun")
+EIGENE_FARBE = re.compile(r"#[0-9a-f]{6}")   # aus dem Farbrad, klein geschrieben gespeichert
 NAME_LAENGE = 60
 LEERSEITEN_HOECHSTENS = 50
 
@@ -47,9 +49,11 @@ def _name_pruefen(name) -> str:
 
 
 def _farbe_pruefen(farbe) -> str:
+    """Eine der festen Farben oder eine eigene Farbe aus dem Farbrad als #rrggbb (Wunsch des Nutzers, 04.11.2026)."""
     farbe = str(farbe or "").strip().lower().replace("ü", "ue")
-    if farbe not in FARBEN:
-        raise Fehler("Unbekannte Farbe. Möglich: " + ", ".join(f.replace("ue", "ü") for f in FARBEN) + ".")
+    if farbe not in FARBEN and not EIGENE_FARBE.fullmatch(farbe):
+        raise Fehler("Unbekannte Farbe. Möglich: " + ", ".join(f.replace("ue", "ü") for f in FARBEN)
+                     + " oder eine eigene Farbe wie #3a6f9c.")
     return farbe
 
 

@@ -1,0 +1,44 @@
+/* Farbwahl für Binder und Kisten: feste Farben und ein eigenes Farbrad (js/farbrad.js). Klassen beginnen mit „fw-“. */
+
+.fw { margin: 0; padding: 0; border: 0; min-width: 0; }
+.fw > legend { margin: 0; padding: 16px 0 2px; }
+.fw-name { color: var(--text-2); font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+.fw-liste { display: flex; flex-wrap: wrap; gap: 2px; margin: 4px 0 0 -4px; }
+.fw-feld {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  position: relative; width: 44px; height: 44px; margin: 0; padding: 0; border: 0; background: none;
+}
+.fw-punkt {
+  position: absolute; inset: 7px; border-radius: 50%;
+  border: 1px solid var(--linie-stark);
+  transition: box-shadow var(--dauer-kurz) var(--kurve);
+}
+.fw-regenbogen {
+  background:
+    radial-gradient(circle, #fff 0, rgba(255, 255, 255, 0) 70%),
+    conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.fw-feld[aria-checked="true"] .fw-punkt { box-shadow: 0 0 0 2px var(--flaeche-1), 0 0 0 3.5px var(--messing); }
+.fw-feld:focus-visible { outline: none; }
+.fw-feld:focus-visible .fw-punkt { outline: 2px solid var(--messing-hell); outline-offset: 4px; }
+
+.fw-rad { display: grid; gap: 6px; margin-top: 12px; max-width: 260px; }
+.fw-kreis { position: relative; width: min(220px, 70vw); aspect-ratio: 1; margin-bottom: 6px; }
+.fw-leinwand {
+  display: block; width: 100%; height: 100%; border-radius: 50%;
+  touch-action: none; cursor: crosshair;
+  box-shadow: 0 0 0 1px var(--linie-stark);
+}
+.fw-marke {
+  position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 1px 4px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.fw-hell { width: 100%; min-height: 32px; accent-color: var(--messing); }
+.fw-zeile { display: flex; align-items: center; gap: 10px; }
+.fw-vorschau {
+  flex: none; width: 44px; height: 44px; border-radius: var(--radius-klein);
+  border: 1px solid var(--linie-stark);
+}
+.fw-hex { flex: 1 1 auto; min-width: 0; max-width: 140px; font-variant-numeric: tabular-nums; text-transform: lowercase; }

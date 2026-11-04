@@ -49,6 +49,7 @@
   --einband-kante: #6d5946;
   --seite-grund: #17130f;
 }
+/* data-farbe="eigen": Farbe aus dem Farbrad; --einband, --einband-kante und --seite-grund setzt js/farbrad.js */
 .tisch[data-farbe="sonst"] {
   --einband: var(--binder-sonst);
   --einband-kante: #7a6552;

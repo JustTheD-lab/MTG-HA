@@ -7,11 +7,10 @@
 import { holen, senden, esc, gehe, bildUrl, bildSrcset, bewegungReduziert, euro, scryfallBild } from './gemeinsam.js';
 import { knopf as anmeldeKnopf, angemeldet, laden, sitzung } from './anmeldung.js';
 import { dialog, dialogOffen } from './dialog.js';
+import { KISTENFARBEN, farbwahl, istEigen, kistenAussehen, rueckenStil } from './farbrad.js';
 
 const ABSTAND = 4;                 // Lücke zwischen zwei Rücken in px (wie im CSS)
 const FARBEN = ['schwarz', 'gelb', 'durchsichtig', 'blau', 'gruen', 'rot', 'braun'];
-const ETIKETTFARBEN = ['messing', 'silber', 'kupfer', 'gruen', 'blau', 'rot'];
-const STANDARD_ETIKETTFARBEN = [{ wert: 'messing', text: 'Messing' }];   // Rückfall, falls /api/kisten/optionen fehlt
 const NAME_MAX = 60;               // Länge eines Kistennamens (wie auf dem Server)
 const STATUS_ABSTAND = 30000;      // Erkennung und Prüfen-Zähler: höchstens alle 30 s
 const STATUS_MINDEST = 2000;       // beim Zurückkehren in den Tab nicht öfter als alle 2 s
@@ -42,6 +41,7 @@ const mehrzahl = (n, eins, viele) => `${zahl(n)} ${Number(n) === 1 ? eins : viel
 
 function farbklasse(farbe) {
   const f = String(farbe ?? '').toLowerCase().replace(/ü/g, 'ue').replace(/ß/g, 'ss').trim();
+  if (istEigen(f)) return 'eigen';   // eigene Farbe aus dem Farbrad: Stil über rueckenStil
   return FARBEN.includes(f) ? f : 'braun';
 }
 
@@ -84,7 +84,7 @@ function rueckenHtml(b) {
   const titel = hinweise.length ? ` title="${esc(hinweise.join(', '))}"` : '';
   return `<li class="regal-platz"><button type="button" class="regal-ruecken regal-farbe-${farbklasse(b.farbe)}"`
     + ` data-binder="${b.id}" aria-label="${esc(textBinder(b))}"${titel}`
-    + ` style="--faktor:${hoehenfaktor(b)};--titel:${titelgroesse(b.name)}rem">`
+    + ` style="--faktor:${hoehenfaktor(b)};--titel:${titelgroesse(b.name)}rem;${rueckenStil(b.farbe)}">`
     + (b.offen > 0 ? '<span class="regal-offen" aria-hidden="true"></span>' : '')
     + (b.fehler > 0 ? '<span class="regal-fehler" aria-hidden="true"></span>' : '')
     + (b.in_arbeit > 0 ? '<span class="regal-arbeit" aria-hidden="true"></span>' : '')
@@ -104,20 +104,17 @@ function elementAus(html) {
 
 // ---------- Kisten ----------
 
-function etikettklasse(farbe) {
-  const f = String(farbe ?? '').toLowerCase().replace(/ü/g, 'ue').trim();
-  return ETIKETTFARBEN.includes(f) ? f : 'messing';
-}
-
 function textKiste(k) {
   return `Kiste ${k.name}, ${mehrzahl(k.karten, 'Karte', 'Karten')}, ${mehrzahl(k.posten, 'Posten', 'Posten')}`
     + (k.wert != null ? `, Wert ${euro(k.wert)}` : '');
 }
 
-/** Eine Kiste in Vorderansicht: oben angedeutete Kartenkanten, davor die dunkle Front mit Messing-Etikett. */
+/** Eine Kiste in Vorderansicht: oben angedeutete Kartenkanten, davor die Front mit Etikett (dunkel mit
+    Metalletikett oder ganz in der gewählten Farbe). */
 function kisteHtml(k) {
-  return `<li class="regal-kistenplatz"><button type="button" class="regal-kiste regal-ek-${etikettklasse(k.etikettfarbe)}"`
-    + ` data-kiste="${k.id}" aria-label="${esc(textKiste(k))}">`
+  const aussehen = kistenAussehen(k.etikettfarbe);
+  return `<li class="regal-kistenplatz"><button type="button" class="regal-kiste ${aussehen.klasse}"`
+    + ` data-kiste="${k.id}" aria-label="${esc(textKiste(k))}"${aussehen.stil ? ` style="${aussehen.stil}"` : ''}>`
     + '<span class="regal-kiste-kanten" aria-hidden="true"></span>'
     + '<span class="regal-kiste-front">'
     + `<span class="regal-kiste-etikett"><span class="regal-kiste-name">${esc(k.name)}</span></span>`
@@ -234,14 +231,9 @@ function kistenbodenHtml(kisten) {
     + '</section>';
 }
 
-/** Dialog „Neue Kiste“: Name und Etikettfarbe. Gibt `{id}` der neuen Kiste zurück, sonst `undefined`. */
+/** Dialog „Neue Kiste“: Name und Farbe (feste Farben oder Farbrad). Gibt `{id}` der neuen Kiste zurück, sonst
+    `undefined`. */
 async function neueKisteFragen() {
-  let farben = STANDARD_ETIKETTFARBEN;
-  try {
-    const optionen = await holen('/api/kisten/optionen');
-    if (Array.isArray(optionen.etikettfarben) && optionen.etikettfarben.length) farben = optionen.etikettfarben;
-  } catch { /* Standardfarbe genügt */ }
-
   const form = document.createElement('form');
   form.id = 'kiste-neu-form';
   form.noValidate = true;
@@ -250,12 +242,9 @@ async function neueKisteFragen() {
     + `<input id="kiste-neu-name" class="feld" type="text" name="name" maxlength="${NAME_MAX}" autocomplete="off"`
     + ' autocapitalize="sentences" spellcheck="false" enterkeyhint="done" required'
     + ' aria-describedby="kiste-neu-meldung">'
-    + '<fieldset class="regal-kf"><legend class="etikett feld-etikett">Etikettfarbe</legend><div class="regal-kf-liste">'
-    + farben.map((f, i) => `<label class="regal-kf-wahl"><input class="regal-kf-eingabe" type="radio" name="etikettfarbe"`
-      + ` value="${esc(f.wert)}"${i === 0 ? ' checked' : ''}><span class="regal-kf-pille">`
-      + `<span class="regal-kf-chip regal-ek-${etikettklasse(f.wert)}" aria-hidden="true"></span>${esc(f.text)}</span></label>`).join('')
-    + '</div></fieldset>'
     + '<p class="meldung" id="kiste-neu-meldung" role="alert" aria-live="assertive"></p>';
+  const wahl = farbwahl({ farben: KISTENFARBEN, wert: 'messing' });
+  form.querySelector('.meldung').before(wahl);
 
   const d = dialog({ titel: 'Neue Kiste', klasse: 'dialog-klein', inhalt: form });
   const feld = form.querySelector('#kiste-neu-name');
@@ -278,7 +267,7 @@ async function neueKisteFragen() {
       feld.focus();
       return;
     }
-    const farbe = form.querySelector('input[name="etikettfarbe"]:checked')?.value ?? 'messing';
+    const farbe = wahl.wert;
     los.disabled = true;
     meldung.textContent = '';
     try {

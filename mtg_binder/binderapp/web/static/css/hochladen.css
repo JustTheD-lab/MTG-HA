@@ -41,24 +41,7 @@
 .hl-segment input:checked + span { background: var(--messing); color: #1a1408; }
 .hl-segment input:focus-visible + span { outline: 2px solid var(--messing-hell); outline-offset: -4px; }
 
-/* Farbfelder */
-.hl-farben { display: flex; flex-wrap: wrap; gap: 4px 0; margin-left: -4px; }
-@media (min-width: 560px) { .hl-farben { gap: 4px 6px; } }
-.hl-farbe { position: relative; display: block; width: 44px; height: 44px; cursor: pointer; }
-.hl-punkt {
-  position: absolute; inset: 7px; border-radius: 50%; background: var(--c, var(--binder-sonst));
-  border: 1px solid var(--linie-stark);
-  transition: box-shadow var(--dauer-kurz) var(--kurve);
-}
-.hl-punkt[data-farbe="schwarz"] { --c: var(--binder-schwarz); }
-.hl-punkt[data-farbe="durchsichtig"] { --c: var(--binder-durchsichtig); }
-.hl-punkt[data-farbe="gelb"] { --c: var(--binder-gelb); }
-.hl-punkt[data-farbe="blau"] { --c: var(--binder-blau); }
-.hl-punkt[data-farbe="gruen"] { --c: #3f6b4a; }
-.hl-punkt[data-farbe="rot"] { --c: #8f3a34; }
-.hl-punkt[data-farbe="braun"] { --c: var(--binder-sonst); }
-.hl-farbe input:checked + .hl-punkt { box-shadow: 0 0 0 2px var(--flaeche-1), 0 0 0 3.5px var(--messing); }
-.hl-farbe input:focus-visible + .hl-punkt { outline: 2px solid var(--messing-hell); outline-offset: 4px; }
+/* Farbfelder und Farbrad: css/farbrad.css */
 
 /* ---------- Ablage ---------- */
 
