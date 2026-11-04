@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.12.0
+- Nur noch das Add-on fragt Scryfall: Es merkt sich neue und geänderte Karten, die Erkennung am PC holt sie über
+  das Heimnetz ab (Port 8099, mit Schlüssel) und fragt Scryfall nicht mehr selbst. Die Bilder neuer Karten lädt
+  sie weiter direkt vom Bildserver von Scryfall.
+- Junge Drucke ohne fertigen Scan fragt das Add-on täglich nach, damit der PC das Bild bekommt, sobald es fertig
+  ist. Beim ersten Abgleich nach dem Update kommen alle Drucke der letzten 120 Tage einmal in die Liste.
+
 ## 0.11.0
 - Neue Karten von Scryfall: Das Add-on gleicht seinen Kartenkatalog täglich selbst mit Scryfall ab und holt nur,
   was neu ist (alle Sprachen). Junge Drucke ohne Cardmarket-Produkt werden bis zu 120 Tage lang nachgefragt,

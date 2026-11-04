@@ -20,12 +20,23 @@ Weg (Scryfall-Schnittstelle, Stand 11/2026):
 Antwortet Scryfall mit 429 (zu viele Anfragen), wird 35 Sekunden gewartet und es höchstens dreimal neu versucht
 (Scryfall sperrt dann 30 Sekunden und verlangt, die Last zu senken). Nach einem gescheiterten Abgleich wartet das
 Add-on 6 Stunden. Nur IDs im UUID-Format werden übernommen; Weiterleitungen werden nicht verfolgt.
+
+Neuheiten für den PC (Wunsch des Nutzers, 04.11.2026, Add-on 0.12.0): Nur das Add-on fragt Scryfall. Jede neue
+oder geänderte Karte landet zusätzlich (gekürzt, ohne Preise, Regeltexte und Links) in der Tabelle `neuheit` mit
+laufender Nummer `lfd`. Die exe holt über `GET /pc/katalog/neu` alles nach ihrer letzten Nummer
+(`neuheiten_holen`) und schreibt es mit demselben `schreiben` in ihren Katalog; Namensverzeichnis und Bilder
+nimmt sie aus diesen Karten (`neuheit_karten`). Damit die exe auch Karten bekommt, die Scryfall erst später als
+fertigen Scan hat, frischt das Add-on junge Drucke ohne fertigen Scan täglich auf. Wird die Tabelle neu angelegt
+(erster Lauf, oder der PC hat einen neuen Katalog geschickt), kommen alle Drucke der letzten `AUFFRISCHEN_TAGE`
+einmal hinein. Die Kennung `meta.neuheit_kennung` wechselt mit jeder neuen Tabelle; dann beginnt die exe von vorn
+(das Schreiben ist wiederholbar).
 """
 from __future__ import annotations
 
 import json
 import logging
 import re
+import secrets
 import sqlite3
 import threading
 import time
@@ -60,6 +71,13 @@ BLOCK = 2000           # Karten je Schreibblock (Speicher im Add-on klein halten
 HOECHSTENS_ANTWORT = 32 * 1024 * 1024
 NACH_FEHLER = 6 * 3600   # nach einem fehlgeschlagenen Abgleich so lange warten (Scryfall nicht stündlich belasten)
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+NEUHEITEN_JE_SEITE = 500   # Karten je Antwort an den PC
+# Felder, die weder Katalog noch Erkennung brauchen (hält die Tabelle `neuheit` klein)
+WEGLASSEN = frozenset({
+    "prices", "purchase_uris", "related_uris", "legalities", "uri", "scryfall_uri", "rulings_uri",
+    "prints_search_uri", "set_uri", "set_search_uri", "scryfall_set_uri", "multiverse_ids", "mtgo_id",
+    "mtgo_foil_id", "arena_id", "tcgplayer_id", "tcgplayer_etched_id", "artist_ids", "oracle_text", "flavor_text",
+    "all_parts", "keywords", "games", "edhrec_rank", "penny_rank", "preview", "printed_text"})
 
 
 class AbgleichFehler(RuntimeError):
@@ -184,6 +202,19 @@ def letzter_abgleich(pfad: Path) -> str | None:
     return z[0] if z else None
 
 
+def saat_offen(pfad: Path) -> bool:
+    """Add-on: Die Neuheiten für den PC sind noch nicht angelegt oder nicht fertig gefüllt (dann sofort abgleichen,
+    auch wenn der letzte Abgleich jünger als 20 Stunden ist, z. B. direkt nach dem Update auf 0.12.0)."""
+    if not Path(pfad).is_file():
+        return False
+    try:
+        with closing(sqlite3.connect(f"{Path(pfad).resolve().as_uri()}?mode=ro", uri=True)) as kat:
+            z = kat.execute("SELECT wert FROM meta WHERE schluessel = 'neuheit_saat'").fetchone()
+    except sqlite3.Error:
+        return False
+    return not z or z[0] != "fertig"
+
+
 def faellig(pfad: Path, jetzt: datetime | None = None) -> bool:
     if not Path(pfad).is_file():
         return False   # ohne Katalog gibt es nichts abzugleichen (den ersten baut der PC)
@@ -290,6 +321,195 @@ def meta_schreiben(kat, zahl: dict) -> None:
     kat.executemany("INSERT OR REPLACE INTO meta (schluessel, wert) VALUES (?, ?)", list(meta.items()))
 
 
+# ----------------------------------------------------------------- Neuheiten für den PC
+
+
+NEUHEIT_TABELLE = """CREATE TABLE IF NOT EXISTS neuheit (
+    lfd          INTEGER PRIMARY KEY AUTOINCREMENT,   -- wird nie wieder vergeben
+    scryfall_id  TEXT NOT NULL UNIQUE,
+    art          TEXT NOT NULL CHECK (art IN ('druck', 'sprache')),
+    tag          TEXT NOT NULL,                       -- Tag der Aufnahme (UTC)
+    karte        TEXT NOT NULL                        -- Scryfall-Karte als JSON, gekürzt
+)"""
+
+
+def hat_neuheit(kat) -> bool:
+    return kat.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'neuheit'").fetchone() is not None
+
+
+def neuheit_anlegen(kat) -> bool:
+    """Add-on: legt die Tabelle `neuheit` mit neuer Kennung an (in der Transaktion des Aufrufers). True, wenn sie
+    neu ist oder noch keine Kennung hatte (z. B. ein Katalog, den der PC geschickt hat)."""
+    neu = not hat_neuheit(kat)
+    kat.execute(NEUHEIT_TABELLE)
+    if neu or not kat.execute("SELECT 1 FROM meta WHERE schluessel = 'neuheit_kennung'").fetchone():
+        kat.executemany("INSERT OR REPLACE INTO meta (schluessel, wert) VALUES (?, ?)",
+                        [("neuheit_kennung", secrets.token_hex(8)), ("neuheit_saat", "offen")])
+    # die Saat gilt erst als erledigt, wenn ein Abgleich sie ganz geschrieben hat (ein Abbruch wiederholt sie)
+    z = kat.execute("SELECT wert FROM meta WHERE schluessel = 'neuheit_saat'").fetchone()
+    return bool(z and z[0] == "offen")
+
+
+def gekuerzt(karte: dict) -> dict:
+    """Karte ohne die Felder in `WEGLASSEN` (auch in den Kartenseiten)."""
+    aus = {k: v for k, v in karte.items() if k not in WEGLASSEN}
+    if isinstance(aus.get("card_faces"), list):
+        aus["card_faces"] = [{k: v for k, v in s.items() if k not in WEGLASSEN} if isinstance(s, dict) else s
+                             for s in aus["card_faces"]]
+    return aus
+
+
+def neuheiten_merken(kat, karten: list[dict], art: str, tag: str) -> int:
+    """Merkt neue oder geänderte Karten mit neuer laufender Nummer (in der Transaktion des Aufrufers); unveränderte
+    behalten ihre Nummer, damit der PC sie nicht täglich neu bekommt."""
+    zahl = 0
+    for k in karten:
+        text = json.dumps(gekuerzt(k), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        alt = kat.execute("SELECT art, karte FROM neuheit WHERE scryfall_id = ?", (k["id"],)).fetchone()
+        if alt is not None and tuple(alt) == (art, text):
+            continue
+        kat.execute("DELETE FROM neuheit WHERE scryfall_id = ?", (k["id"],))
+        kat.execute("INSERT INTO neuheit (scryfall_id, art, tag, karte) VALUES (?, ?, ?, ?)", (k["id"], art, tag, text))
+        zahl += 1
+    return zahl
+
+
+def _ohne_fertigen_scan(kat, grenze: str) -> list[str]:
+    """Junge Drucke der Neuheiten, deren Bild noch kein fertiger Scan ist (täglich auffrischen, damit der PC den
+    Scan bekommt, sobald Scryfall ihn hat)."""
+    if not hat_neuheit(kat):
+        return []
+    aus = []
+    for sid, text in kat.execute("SELECT n.scryfall_id, n.karte FROM neuheit n JOIN druck d USING (scryfall_id) "
+                                 "WHERE n.art = 'druck' AND d.erschienen >= ?", (grenze,)):
+        try:
+            k = json.loads(text)
+        except ValueError:
+            continue
+        if k.get("image_status") != "highres_scan" and not k.get("digital") and (
+                k.get("image_uris") or any(isinstance(s, dict) and s.get("image_uris") for s in k.get("card_faces") or [])):
+            aus.append(sid)
+    return aus
+
+
+def _saat(kat, grenze: str) -> tuple[list[str], list[str]]:
+    """Für eine neue Tabelle `neuheit`: alle Drucke der letzten `AUFFRISCHEN_TAGE` und die Sprachdrucke der Sets
+    aus dieser Zeit (einmal; deckt auch einen Abgleich ab, der vor 0.12.0 ohne Neuheiten lief)."""
+    drucke = [z[0] for z in kat.execute("SELECT scryfall_id FROM druck WHERE erschienen >= ?", (grenze,))]
+    sprach = [z[0] for z in kat.execute("SELECT s.scryfall_id FROM sprachdruck s JOIN satz t USING (set_code) "
+                                        "WHERE t.erschienen >= ?", (grenze,))]
+    return drucke, sprach
+
+
+def neuheiten_lesen(pfad: Path, ab: int, kennung: str | None, hoechstens: int = NEUHEITEN_JE_SEITE) -> dict:
+    """Antwort an den PC: Neuheiten nach Nummer `ab`. Passt die Kennung nicht (neue Tabelle), beginnt die Liste von
+    vorn. Ohne Katalog oder Tabelle: Kennung None und keine Einträge."""
+    leer = {"kennung": None, "ab": 0, "eintraege": [], "weiter": False, "abgleich": None}
+    if not Path(pfad).is_file():
+        return leer
+    with closing(sqlite3.connect(f"{Path(pfad).resolve().as_uri()}?mode=ro", uri=True, timeout=30)) as kat:
+        if not hat_neuheit(kat):
+            return leer
+        meta = dict(kat.execute("SELECT schluessel, wert FROM meta WHERE schluessel IN ('neuheit_kennung', 'abgleich')"))
+        eigene = meta.get("neuheit_kennung")
+        if kennung != eigene:
+            ab = 0
+        zeilen = kat.execute("SELECT lfd, art, karte FROM neuheit WHERE lfd > ? ORDER BY lfd LIMIT ?",
+                             (int(ab), int(hoechstens) + 1)).fetchall()
+    weiter = len(zeilen) > hoechstens
+    zeilen = zeilen[:hoechstens]
+    return {"kennung": eigene, "ab": zeilen[-1][0] if zeilen else int(ab), "weiter": weiter,
+            "abgleich": meta.get("abgleich"),
+            "eintraege": [{"lfd": z[0], "art": z[1], "karte": json.loads(z[2])} for z in zeilen]}
+
+
+def neuheit_karten(pfad: Path, ids: list[str]) -> list[dict]:
+    """Karten aus der Tabelle `neuheit` des eigenen Katalogs (PC: statt Scryfall zu fragen)."""
+    if not ids or not Path(pfad).is_file():
+        return []
+    aus = []
+    with closing(sqlite3.connect(f"{Path(pfad).resolve().as_uri()}?mode=ro", uri=True)) as kat:
+        if not hat_neuheit(kat):
+            return []
+        for anfang in range(0, len(ids), 500):
+            teil = ids[anfang:anfang + 500]
+            platz = ", ".join("?" for _ in teil)
+            for (text,) in kat.execute(f"SELECT karte FROM neuheit WHERE scryfall_id IN ({platz})", teil):
+                try:
+                    aus.append(json.loads(text))
+                except ValueError:
+                    continue
+    return aus
+
+
+def _gueltige_eintraege(eintraege) -> tuple[list[dict], list[dict]]:
+    drucke, sprach = [], []
+    for e in eintraege if isinstance(eintraege, list) else []:
+        if not isinstance(e, dict) or not isinstance(e.get("karte"), dict):
+            continue
+        k = e["karte"]
+        if not isinstance(k.get("id"), str) or not UUID.match(k["id"]):
+            continue
+        if e.get("art") == "druck":
+            drucke.append(k)
+        elif e.get("art") == "sprache":
+            sprach.append(k)
+    return drucke, sprach
+
+
+def neuheiten_holen(pfad: Path, holen, bilder: Path | None = None, halt=lambda: False) -> dict:
+    """PC: holt die Neuheiten des Add-ons (`holen(ab, kennung)` → Antwort von `neuheiten_lesen`) seitenweise und
+    schreibt sie in den Katalog `pfad`, je Seite eine Transaktion mit der neuen Nummer. Ein Abbruch verliert nichts:
+    der nächste Lauf macht ab der letzten geschriebenen Seite weiter."""
+    pfad = Path(pfad)
+    if not pfad.is_file():
+        raise AbgleichFehler("Kein Katalog vorhanden.")
+    start = time.monotonic()
+    with closing(sqlite3.connect(f"{pfad.resolve().as_uri()}?mode=ro", uri=True)) as kat:
+        schema_pruefen(kat)
+        meta = dict(kat.execute("SELECT schluessel, wert FROM meta WHERE schluessel IN ('addon_kennung', 'addon_ab')"))
+    kennung = meta.get("addon_kennung")
+    ab = int(meta["addon_ab"]) if str(meta.get("addon_ab", "")).isdigit() else 0
+    zahl = {"drucke_neu": 0, "drucke_aufgefrischt": 0, "sprachdrucke_neu": 0, "saetze_neu": 0, "namen_neu": 0,
+            "eintraege": 0, "seiten": 0, "von_vorn": False}
+    heute = datetime.now(timezone.utc).date().isoformat()
+    for _ in range(100000):
+        antwort = holen(ab, kennung)
+        neue_kennung = antwort.get("kennung") if isinstance(antwort, dict) else None
+        if not isinstance(neue_kennung, str) or not neue_kennung:
+            break   # das Add-on hat noch keine Neuheiten (erster Abgleich steht aus)
+        if neue_kennung != kennung:
+            zahl["von_vorn"] = True
+        neues_ab = antwort.get("ab")
+        if not isinstance(neues_ab, int) or neues_ab < 0:
+            raise AbgleichFehler("Ungültige Antwort des Add-ons (Nummer).")
+        drucke, sprach = _gueltige_eintraege(antwort.get("eintraege"))
+        abgleich_dort = antwort.get("abgleich") if isinstance(antwort.get("abgleich"), str) else None
+
+        def arbeit(kat, drucke=drucke, sprach=sprach, k=neue_kennung, n=neues_ab, zeit=abgleich_dort):
+            kat.execute(NEUHEIT_TABELLE)
+            teil = schreiben(kat, drucke, sprach, bilder)
+            neuheiten_merken(kat, drucke, "druck", heute)
+            neuheiten_merken(kat, sprach, "sprache", heute)
+            meta = {"addon_kennung": k, "addon_ab": str(n)}
+            if zeit and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d", zeit):
+                meta["abgleich"] = zeit
+            kat.executemany("INSERT OR REPLACE INTO meta (schluessel, wert) VALUES (?, ?)", list(meta.items()))
+            return teil
+
+        teil = _transaktion(pfad, arbeit)
+        for k, v in teil.items():
+            zahl[k] += v
+        zahl["eintraege"] += len(drucke) + len(sprach)
+        zahl["seiten"] += 1
+        stillstand = neue_kennung == kennung and neues_ab <= ab
+        kennung, ab = neue_kennung, neues_ab
+        if not antwort.get("weiter") or halt() or stillstand:
+            break
+    zahl["sekunden"] = round(time.monotonic() - start, 1)
+    return zahl
+
+
 def _transaktion(pfad: Path, arbeit):
     with closing(sqlite3.connect(pfad, timeout=60)) as kat:
         try:
@@ -318,9 +538,10 @@ def schema_pruefen(kat) -> None:
 
 
 def abgleichen(pfad: Path, scryfall: Scryfall | None = None, bilder: Path | None = None,
-               heute: date | None = None, mit_sprachen: bool = True) -> dict:
-    """Gleicht den Katalog `pfad` mit Scryfall ab. Gibt die Zählung und die neuen Drucke (Scryfall-Karten) zurück.
+               heute: date | None = None, mit_sprachen: bool = True, neuheiten: bool = False) -> dict:
+    """Gleicht den Katalog `pfad` mit Scryfall ab. Gibt die Zählung zurück.
 
+    `neuheiten` (Add-on): neue und geänderte Karten zusätzlich für den PC in der Tabelle `neuheit` merken.
     Wirft `AbgleichFehler`, wenn Scryfall nicht erreichbar ist; dann bleibt der Katalog unverändert."""
     pfad = Path(pfad)
     if not pfad.is_file():
@@ -328,8 +549,11 @@ def abgleichen(pfad: Path, scryfall: Scryfall | None = None, bilder: Path | None
     scryfall = scryfall or Scryfall()
     start = time.monotonic()
     heute = heute or date.today()
+    grenze = (heute - timedelta(days=AUFFRISCHEN_TAGE)).isoformat()
     with closing(sqlite3.connect(f"{pfad.resolve().as_uri()}?mode=ro", uri=True)) as kat:
         schema_pruefen(kat)
+    saat = _transaktion(pfad, neuheit_anlegen) if neuheiten else False
+    with closing(sqlite3.connect(f"{pfad.resolve().as_uri()}?mode=ro", uri=True)) as kat:
         neu_default: list[str] = []
         for seite in scryfall.manifest():
             neu_default += _unbekannt(kat, _ids(seite))
@@ -340,23 +564,43 @@ def abgleichen(pfad: Path, scryfall: Scryfall | None = None, bilder: Path | None
             for sprache in sprachen(kat):
                 for seite in scryfall.manifest(sprache):
                     neu_sprache += [i for i in _unbekannt(kat, _ids(seite)) if i not in default_ids]
-        grenze = (heute - timedelta(days=AUFFRISCHEN_TAGE)).isoformat()
         auffrischen = [z[0] for z in kat.execute(
             "SELECT scryfall_id FROM druck WHERE cardmarket_id IS NULL AND erschienen >= ?", (grenze,))]
+        if neuheiten:
+            auffrischen += _ohne_fertigen_scan(kat, grenze)
+            if saat:
+                saat_drucke, saat_sprach = _saat(kat, grenze)
+                auffrischen += saat_drucke
+                neu_sprache += saat_sprach
     neu_sprache = list(dict.fromkeys(neu_sprache))
     fuer_druck = list(dict.fromkeys(neu_default + auffrischen))
     zahl = {"drucke_neu": 0, "drucke_aufgefrischt": 0, "sprachdrucke_neu": 0, "saetze_neu": 0, "namen_neu": 0}
+    if neuheiten:
+        zahl["neuheiten"] = 0
+    tag = heute.isoformat()
+
+    def arbeit(kat, art, karten):
+        teil = schreiben(kat, karten if art == "druck" else [], karten if art == "sprache" else [], bilder)
+        if neuheiten:
+            teil["neuheiten"] = neuheiten_merken(kat, karten, art, tag)
+        return teil
+
     # in Blöcken holen und schreiben: Drucke zuerst (Sprachdrucke brauchen ihre Oracle-ID für die Namenssuche)
     for art, ids in (("druck", fuer_druck), ("sprache", neu_sprache)):
         for anfang in range(0, len(ids), BLOCK):
             karten = scryfall.karten(ids[anfang:anfang + BLOCK])
-            teil = _transaktion(pfad, lambda kat: schreiben(kat, karten if art == "druck" else [],
-                                                              karten if art == "sprache" else [], bilder))
+            teil = _transaktion(pfad, lambda kat: arbeit(kat, art, karten))
             for k, v in teil.items():
                 zahl[k] += v
     zahl["anfragen"] = scryfall.anfragen
     zahl["sekunden"] = round(time.monotonic() - start, 1)
-    _transaktion(pfad, lambda kat: meta_schreiben(kat, zahl))
+
+    def abschluss(kat):
+        meta_schreiben(kat, zahl)
+        if saat:
+            kat.execute("INSERT OR REPLACE INTO meta (schluessel, wert) VALUES ('neuheit_saat', 'fertig')")
+
+    _transaktion(pfad, abschluss)
     return zahl
 
 
@@ -398,10 +642,10 @@ class Katalogabgleich(threading.Thread):
         self.halt.set()
 
     def einmal(self) -> dict | None:
-        if not faellig(self.katalog):
+        if not faellig(self.katalog) and not saat_offen(self.katalog):
             return None
-        zahl = abgleichen(self.katalog)
-        log.info("Scryfall-Abgleich: %s", kurz(zahl))
+        zahl = abgleichen(self.katalog, neuheiten=True)
+        log.info("Scryfall-Abgleich: %s, %s Neuheiten für den PC", kurz(zahl), zahl.get("neuheiten", 0))
         if self.datenbank is not None:
             nach_abgleich_app(self.datenbank, self.katalog)
         return zahl

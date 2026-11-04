@@ -445,6 +445,18 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
                     and not all((ordner / f"{i}_{b}.webp").is_file() for b in BREITEN[:2])][:500]
         return JSONResponse({"scryfall": await run_in_threadpool(lesen)})
 
+    async def katalog_neu(request):
+        """Neuheiten des täglichen Scryfall-Abgleichs für den PC (nur das Add-on fragt Scryfall)."""
+        from binderapp.katalog.abgleich import neuheiten_lesen
+        ab = request.query_params.get("ab", "0")
+        kennung = request.query_params.get("kennung") or None
+        if not ab.isdigit() or len(ab) > 18 or (kennung is not None and not re.fullmatch(r"[0-9a-f]{1,64}", kennung)):
+            raise Fehler("Ungültige Anfrage.")
+        try:
+            return JSONResponse(await run_in_threadpool(neuheiten_lesen, katalog, int(ab), kennung))
+        except sqlite3.Error as f:
+            raise Fehler(f"Katalog gerade nicht lesbar: {f}", 503)
+
     async def katalog_ersetzen(request):
         gebaut = request.headers.get("x-katalog-gebaut", "")
         groesse, teil = await _datei_empfangen(request, katalog, KATALOG_HOECHSTENS,
@@ -482,6 +494,7 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
         Route("/pc/bild/{art}/{datei}", geschuetzt(bild, braucht_speicher="bilder"), methods=["PUT"]),
         Route("/pc/bilder/fehlend", geschuetzt(bilder_fehlend)),
         Route("/pc/katalog", geschuetzt(katalog_ersetzen), methods=["PUT"]),
+        Route("/pc/katalog/neu", geschuetzt(katalog_neu)),
         Route("/pc/scan/fotos", geschuetzt(scan_liste)),
         Route("/pc/scan/foto/{id:int}", geschuetzt(scan_foto, braucht_speicher="fotos")),
         Route("/pc/scan/holen", geschuetzt(scan_holen, braucht_speicher="fotos"), methods=["POST"]),

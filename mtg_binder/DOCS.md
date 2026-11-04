@@ -28,9 +28,13 @@ trägt das Produkt bei neuen Sets oft erst später nach; danach bekommen die Kar
 Ohne Katalog im Add-on gibt es keinen Abgleich (den ersten schickt die Erkennung am PC). Fehler, etwa ohne
 Internet, stehen im Protokoll; der nächste Versuch folgt nach einer Stunde.
 
-Die Erkennung am PC macht dasselbe mit ihrem eigenen Katalog, wenn keine Fotos warten. Dazu lädt sie die Bilder
-neuer Karten und hängt sie an den Bildindex an. Neue Karten werden so auch auf Fotos erkannt. Bilder aus der
-Vorschauzeit eines Sets nimmt sie nicht, sondern erst den fertigen Scan.
+Nur das Add-on fragt Scryfall. Neue und geänderte Karten merkt es sich in einer Liste. Die Erkennung am PC holt
+sie stündlich über das Heimnetz ab (Port 8099, mit Schlüssel), wenn keine Fotos warten, und trägt sie in ihren
+eigenen Katalog ein. Danach lädt sie die Bilder neuer Karten direkt vom Bildserver von Scryfall und hängt sie an
+den Bildindex an. Neue Karten werden so auch auf Fotos erkannt. Bilder aus der Vorschauzeit eines Sets nimmt sie
+nicht, sondern erst den fertigen Scan; dafür fragt das Add-on junge Drucke ohne fertigen Scan täglich nach.
+Beim ersten Abgleich nach dem Update kommen alle Drucke der letzten 120 Tage einmal in die Liste. Ist das Add-on
+nicht erreichbar, versucht es die Erkennung eine Stunde später wieder.
 
 ## Einbau (über das Add-on-Repository)
 
