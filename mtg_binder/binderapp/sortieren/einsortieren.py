@@ -294,11 +294,13 @@ def _sortierbar(k) -> bool:
 def _verschieben(con, nutzer: int, k, ziel: int) -> tuple[str, int]:
     """Eigener Schritt (Quelle „sortierregel“): zusammenfassen oder verschieben. Gibt (Schritt, Karte) zurück."""
     schritt = schritte.neuer_schritt()
-    if k["status"] == "sicher" and not k["geprueft"] and not k["foil"] and k["scryfall_id"] and k["quelle"] == "scan":
+    # gleiche Foil-Angabe fasst zusammen (Foil-Durchgänge seit Version 9, 04.11.2026)
+    if k["status"] == "sicher" and not k["geprueft"] and k["scryfall_id"] and k["quelle"] == "scan":
         z = con.execute(
             "SELECT id, anzahl FROM karte WHERE nutzer_id = ? AND kiste_id = ? AND quelle = 'scan' AND scryfall_id = ?"
-            " AND COALESCE(sprache, '') = ? AND foil = 0 AND status = 'sicher' AND geprueft = 0 AND id <> ?"
-            " ORDER BY id LIMIT 1", (nutzer, ziel, k["scryfall_id"], k["sprache"] or "", k["id"])).fetchone()
+            " AND COALESCE(sprache, '') = ? AND foil = ? AND status = 'sicher' AND geprueft = 0 AND id <> ?"
+            " ORDER BY id LIMIT 1", (nutzer, ziel, k["scryfall_id"], k["sprache"] or "", 1 if k["foil"] else 0,
+                                     k["id"])).fetchone()
         if z is not None:
             schritte.aendern_genau(con, nutzer, "karte", z["id"], {"anzahl": z["anzahl"] + k["anzahl"]},
                                    schritt=schritt, quelle=QUELLE)

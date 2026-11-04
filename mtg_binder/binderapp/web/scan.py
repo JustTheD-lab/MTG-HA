@@ -24,7 +24,9 @@ from starlette.requests import ClientDisconnect
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
+from binderapp.db import erkennung
 from binderapp.db.datenbank import aendern, einfuegen
+from binderapp.katalog import setfamilie
 from binderapp.scan.ausloeser import GROESSTE_SEITE, Ausloeser
 from binderapp.sortieren import einsortieren
 from binderapp.web import hochladen, regeln
@@ -132,7 +134,9 @@ def routen(h: Helfer) -> list[Route]:
         return JSONResponse({"durchgaenge": durchgaenge, "offen": offen,
                              "gesamt": {"fotos": sum(d["fotos"] - d["verworfen"] for d in durchgaenge),
                                         "wartend": sum(d["neu"] for d in durchgaenge)},
-                             "speicher": h.fotos_ok()})
+                             "speicher": h.fotos_ok(),
+                             # ab Version 9: Foil und Sets je Durchgang einstellbar
+                             "je_durchgang": h.version() >= 9})
 
     def durchgang(request):
         version_pruefen()
@@ -155,9 +159,13 @@ def routen(h: Helfer) -> list[Route]:
         for f in antwort:
             if f["karte"]:
                 f["karte"]["ziel"] = ziele.get(f["karte"]["id"])
+        v9 = "foil" in d.keys()
         return JSONResponse({"id": d["id"], "begonnen": d["begonnen"] + "Z",
                              "beendet": d["beendet"] + "Z" if d["beendet"] else None,
                              "einsortieren": bool(d["einsortieren"]) if v6 else None,
+                             # ab Version 9: Foil und erlaubte Sets des Durchgangs (None = ältere Datenbank)
+                             "foil": bool(d["foil"]) if v9 else None,
+                             "sets": list(erkennung.sets_lesen(d["sets"])) if v9 else None,
                              "fotos": antwort})
 
     def original(request):
@@ -195,25 +203,74 @@ def routen(h: Helfer) -> list[Route]:
         did, neu = await run_in_threadpool(h.schreibvorgang, arbeit)
         return JSONResponse({"id": did, "neu": neu}, status_code=201 if neu else 200)
 
+    def sets_pruefen(roh) -> list[str]:
+        """Liste von Set-Codes: klein, ohne Doppelte, höchstens 30; mit Katalog nur bekannte Sets."""
+        if not isinstance(roh, list) or len(roh) > erkennung.SETS_HOECHSTENS:
+            raise Fehler(f"Bitte „sets“ als Liste von höchstens {erkennung.SETS_HOECHSTENS} Set-Codes angeben.")
+        codes = []
+        for s in roh:
+            if not isinstance(s, str) or not erkennung.SET_CODE.fullmatch(s.strip().lower()):
+                raise Fehler("Ungültiger Set-Code.")
+            if s.strip().lower() not in codes:
+                codes.append(s.strip().lower())
+        kat = h.katalog()
+        if kat is not None and codes:
+            with closing(kat):
+                unbekannt = [c for c in codes if c not in setfamilie.bekannt(kat, codes)]
+            if unbekannt:
+                raise Fehler("Unbekannte Sets: " + ", ".join(unbekannt) + ".")
+        return codes
+
     @h.schreibend
     async def einstellen(request):
-        """Einstellung des Durchgangs: {"einsortieren": true|false} (gilt für Karten, die danach erkannt werden)."""
+        """Einstellung des Durchgangs (gilt für Karten, die danach erkannt werden): {"einsortieren": bool,
+        "foil": bool, "sets": [Set-Codes]} – jede Angabe einzeln möglich; „sets“ leer = alle Sets."""
         did = request.path_params["id"]
         d = await h.json_daten(request)
-        if not isinstance(d.get("einsortieren"), bool) or set(d) - {"einsortieren"}:
-            raise Fehler("Bitte „einsortieren“ mit true oder false angeben.")
+        if not d or set(d) - {"einsortieren", "foil", "sets"}:
+            raise Fehler("Bitte „einsortieren“, „foil“ oder „sets“ angeben.")
+        for name in ("einsortieren", "foil"):
+            if name in d and not isinstance(d[name], bool):
+                raise Fehler(f"Bitte „{name}“ mit true oder false angeben.")
+        sets = await run_in_threadpool(sets_pruefen, d["sets"]) if "sets" in d else None
 
         def arbeit(con):
-            if not einsortieren.aktiv(con):
+            if "einsortieren" in d and not einsortieren.aktiv(con):
                 raise Fehler(regeln.NICHT_DA, 409)
+            if ("foil" in d or "sets" in d) and h.version() < 9:
+                raise Fehler("Die Datenbank kennt Foil und Sets je Durchgang noch nicht (Version 9 nötig).", 409)
             durchgang_holen(con, did)
-            aendern(con, h.nutzer, "nutzer", "scan_durchgang", did, {"einsortieren": int(d["einsortieren"])})
-            if not d["einsortieren"]:   # aus: auch Karten dieses Durchgangs, die noch warten, bleiben im Scan-Eingang
+            felder = {}
+            if "einsortieren" in d:
+                felder["einsortieren"] = int(d["einsortieren"])
+            if "foil" in d:
+                felder["foil"] = int(d["foil"])
+            if sets is not None:
+                felder["sets"] = json.dumps(sets) if sets else None
+            aendern(con, h.nutzer, "nutzer", "scan_durchgang", did, felder)
+            if d.get("einsortieren") is False:   # aus: Karten dieses Durchgangs, die noch warten, bleiben im Eingang
                 for z in con.execute("SELECT DISTINCT k.id FROM karte k JOIN scan_foto f ON f.karte_id = k.id"
                                      " WHERE f.durchgang_id = ? AND k.sortieren = 'offen'", (did,)).fetchall():
                     aendern(con, h.nutzer, einsortieren.QUELLE, "karte", z[0], {"sortieren": None})
         await run_in_threadpool(h.schreibvorgang, arbeit)
-        return JSONResponse({"einsortieren": d["einsortieren"]})
+        return JSONResponse({k: (sets if k == "sets" else d[k]) for k in d})
+
+    def sets_suchen(request):
+        kat = h.katalog()
+        if kat is None:
+            return JSONResponse({"verfuegbar": False, "sets": []})
+        with closing(kat):
+            return JSONResponse({"verfuegbar": True, "sets": setfamilie.suchen(kat, request.query_params.get("q", ""))})
+
+    def set_familie(request):
+        kat = h.katalog()
+        if kat is None:
+            raise Fehler("Ohne Katalog lassen sich keine Sets wählen.", 409)
+        with closing(kat):
+            familie = setfamilie.familie(kat, request.path_params["code"])
+        if familie is None:
+            raise Fehler("Set nicht gefunden.", 404)
+        return JSONResponse({"sets": familie})
 
     @h.schreibend
     async def beenden(request):
@@ -373,6 +430,8 @@ def routen(h: Helfer) -> list[Route]:
         Route("/scan/durchgang/{id:int}", _lesend(durchgang)),
         Route("/scan/durchgang/{id:int}/beenden", beenden, methods=["POST"]),
         Route("/scan/durchgang/{id:int}/einstellung", einstellen, methods=["POST"]),
+        Route("/scan/sets", _lesend(sets_suchen)),
+        Route("/scan/set/{code}/familie", _lesend(set_familie)),
         Route("/scan/durchgang/{id:int}/bild", bild, methods=["POST"]),
         Route("/scan/durchgang/{id:int}/foto", foto, methods=["POST"]),
         Route("/scan/foto/{id:int}/vorschau", vorschau, methods=["POST"]),

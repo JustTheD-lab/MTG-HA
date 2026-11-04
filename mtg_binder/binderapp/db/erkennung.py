@@ -105,19 +105,35 @@ SCAN_KISTE = "Scan-Eingang"
 SCAN_MARKE = "@scan-eingang"   # kiste.extern_name: findet die Kiste auch nach dem Umbenennen
 
 SQL_SCAN_NEUE = (
-    "SELECT f.id AS scan_id, f.datei, f.durchgang_id, f.nummer, f.sha256"
+    "SELECT f.id AS scan_id, f.datei, f.durchgang_id, f.nummer, f.sha256{sets}"
     " FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id"
     " WHERE f.status = 'neu' AND d.nutzer_id = ? ORDER BY f.id LIMIT ?")
+SET_CODE = re.compile(r"[a-z0-9]{2,8}")
+SETS_HOECHSTENS = 30
+
+
+def sets_lesen(wert) -> tuple[str, ...]:
+    """Erlaubte Sets eines Durchgangs (JSON-Liste oder Liste) als geprüftes Tupel; alles Ungültige fällt weg."""
+    if isinstance(wert, str):
+        try:
+            wert = json.loads(wert)
+        except ValueError:
+            return ()
+    if not isinstance(wert, list):
+        return ()
+    return tuple(dict.fromkeys(s for s in wert if isinstance(s, str) and SET_CODE.fullmatch(s)))[:SETS_HOECHSTENS]
 
 
 def scan_holen(con, nutzer: int, hoechstens: int) -> list[dict]:
-    """Bis zu `hoechstens` neue Scan-Fotos in Aufnahmereihenfolge; sie stehen danach auf „in_verarbeitung“."""
+    """Bis zu `hoechstens` neue Scan-Fotos in Aufnahmereihenfolge; sie stehen danach auf „in_verarbeitung“.
+    Ab Version 9 mit den erlaubten Sets des Durchgangs (`sets`, Liste; leer = alle)."""
     if version(con) < 5:
         return []
-    zeilen = con.execute(SQL_SCAN_NEUE, (nutzer, hoechstens)).fetchall()
+    v9 = version(con) >= 9
+    zeilen = con.execute(SQL_SCAN_NEUE.format(sets=", d.sets" if v9 else ""), (nutzer, hoechstens)).fetchall()
     for z in zeilen:
         aendern(con, nutzer, QUELLE, "scan_foto", z["scan_id"], {"status": "in_verarbeitung", "fehler": None})
-    return [dict(z) for z in zeilen]
+    return [{**dict(z), "sets": list(sets_lesen(z["sets"] if v9 else None))} for z in zeilen]
 
 
 def scan_kiste(con, nutzer: int) -> int:
@@ -145,14 +161,15 @@ def scan_kiste(con, nutzer: int) -> int:
 def scan_ergebnis_schreiben(con, nutzer: int, scan_id: int, tasche: Tasche | None) -> dict:
     """Legt die Karte des Scan-Fotos in der Kiste „Scan-Eingang“ an (oder zählt einen gleichen Posten hoch) und
     setzt das Foto auf „erkannt“. Ohne Karte (keine gefunden, Rückseite): Foto „fehler“ mit Grund."""
-    v6 = version(con) >= 6
-    f = con.execute("SELECT f.status" + (", d.einsortieren" if v6 else "") + " FROM scan_foto f"
-                    " JOIN scan_durchgang d ON d.id = f.durchgang_id"
+    v6, v9 = version(con) >= 6, version(con) >= 9
+    f = con.execute("SELECT f.status" + (", d.einsortieren" if v6 else "") + (", d.foil" if v9 else "")
+                    + " FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id"
                     " WHERE f.id = ? AND d.nutzer_id = ?", (scan_id, nutzer)).fetchone()
     if f is None or f["status"] != "in_verarbeitung":
         raise RuntimeError(f"Scan-Foto {scan_id} ist nicht in Arbeit.")
     # ab Version 6: die Karte wartet aufs Einsortieren nach den Sortierregeln (binderapp.sortieren)
     offen = {"sortieren": "offen"} if v6 and f["einsortieren"] else {}
+    foil = 1 if v9 and f["foil"] else 0   # ab Version 9: „alle Karten Foil“ des Durchgangs
     e = tasche.erk if tasche is not None else {}
     if tasche is None or e.get("status") == "rueckseite" or not e.get("name"):
         grund = ("Auf dem Foto liegt eine Kartenrückseite." if e.get("status") == "rueckseite"
@@ -164,14 +181,16 @@ def scan_ergebnis_schreiben(con, nutzer: int, scan_id: int, tasche: Tasche | Non
     if e.get("status") == "sicher" and e.get("scryfall_id"):
         z = con.execute(
             "SELECT id, anzahl FROM karte WHERE nutzer_id = ? AND kiste_id = ? AND quelle = 'scan' AND scryfall_id = ?"
-            " AND COALESCE(sprache, '') = ? AND foil = 0 AND status = 'sicher' AND geprueft = 0 ORDER BY id LIMIT 1",
-            (nutzer, kiste, e["scryfall_id"], e.get("sprache") or "")).fetchone()
+            " AND COALESCE(sprache, '') = ? AND foil = ? AND status = 'sicher' AND geprueft = 0 ORDER BY id LIMIT 1",
+            (nutzer, kiste, e["scryfall_id"], e.get("sprache") or "", foil)).fetchone()
         if z is not None:
             aendern(con, nutzer, QUELLE, "karte", z["id"], {"anzahl": z["anzahl"] + 1, **offen})
             kid, zusammen = z["id"], True
     if kid is None:
         felder = karte_felder(tasche, nutzer, None)
         felder.pop("tasche_id")
+        if foil:
+            felder["foil"] = 1
         kid = einfuegen(con, nutzer, QUELLE, "karte", {**felder, "kiste_id": kiste, "quelle": "scan", **offen})
     aendern(con, nutzer, QUELLE, "scan_foto", scan_id,
             {"status": "erkannt", "karte_id": kid, "fehler": None, "erkennung": ERKENNUNG})

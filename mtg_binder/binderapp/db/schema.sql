@@ -188,7 +188,11 @@ CREATE TABLE IF NOT EXISTS scan_durchgang (
     beendet    TEXT,
     geaendert  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     -- ab Version 6: erkannte Karten nach den Sortierregeln einsortieren (Einstellung je Durchgang)
-    einsortieren INTEGER NOT NULL DEFAULT 1 CHECK (einsortieren IN (0, 1))
+    einsortieren INTEGER NOT NULL DEFAULT 1 CHECK (einsortieren IN (0, 1)),
+    -- ab Version 9 (04.11.2026): alle Karten des Durchgangs sind Foil; erlaubte Sets als JSON-Liste der Set-Codes
+    -- (NULL = alle). Die Sets wirken nur auf die Wahl des Drucks, die Karte bestimmt die Erkennung wie bisher.
+    foil INTEGER NOT NULL DEFAULT 0 CHECK (foil IN (0, 1)),
+    sets TEXT
 );
 
 CREATE TABLE IF NOT EXISTS scan_foto (
@@ -361,4 +365,4 @@ CREATE INDEX IF NOT EXISTS i_karte_deck       ON karte(deck_id) WHERE deck_id IS
 CREATE INDEX IF NOT EXISTS i_deck_produkt_cm  ON deck_produkt(cardmarket_id);
 CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 
-PRAGMA user_version = 8;
+PRAGMA user_version = 9;

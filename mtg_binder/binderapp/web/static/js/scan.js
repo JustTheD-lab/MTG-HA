@@ -3,7 +3,8 @@
 // „ausloesen“ nimmt das Handy ein Standbild in voller Auflösung auf und lädt es in einer Warteschlange hoch.
 // Das Handy löst nie selbst aus.
 
-import { holen, senden, gehe, vorliebe } from './gemeinsam.js';
+import { holen, senden, gehe, vorliebe, esc } from './gemeinsam.js';
+import { dialog } from './dialog.js';
 
 const KARTE = 63 / 88;            // Kartenformat der Scanzone
 const BREITE = 60;                // Größe des Kontrollbildes
@@ -28,6 +29,12 @@ const SYM = {
 const SORTIEREN_HTML = '<div class="scan-sortieren" hidden><label class="scan-umschalter">'
   + '<input type="checkbox" class="scan-einsortieren" checked> <span>Automatisch einsortieren</span></label>'
   + '<a class="scan-regeln-link" href="#/regeln">Sortierregeln</a></div>';
+
+/** Einstellungen des Durchgangs (ab Datenbankversion 9): alle Karten Foil, erlaubte Sets (wirken nur auf den Druck). */
+const EINSTELLUNG_HTML = '<div class="scan-einstellung" hidden>'
+  + '<label class="scan-umschalter"><input type="checkbox" class="scan-foil"> <span>Alle Karten Foil</span></label>'
+  + '<div class="scan-sets-zeile"><span class="scan-sets-text">Alle Sets</span>'
+  + '<button type="button" class="knopf scan-sets-knopf">Sets wählen</button></div></div>';
 
 const beforeunload = (e) => {
   if (warteschlange.length) { e.preventDefault(); e.returnValue = ''; }
@@ -335,6 +342,134 @@ async function einsortierenEinrichten(a) {
   } catch { /* ohne Sortierregeln bleibt der Schalter verborgen */ }
 }
 
+/* ---------- Foil und Sets je Durchgang (ab Datenbankversion 9) ---------- */
+
+function einstellungSync(a) {
+  const text = a.sets.length ? `Sets: ${a.sets.map((s) => s.toUpperCase()).join(', ')}` : 'Alle Sets';
+  a.bereich.querySelectorAll('.scan-foil').forEach((box) => { box.checked = a.foil; });
+  a.bereich.querySelectorAll('.scan-sets-text').forEach((t) => { t.textContent = text; });
+}
+
+/** Schickt Einstellungen an den laufenden Durchgang (vor dem Start: nur merken, `starten` schickt sie). */
+async function einstellungSenden(a, daten) {
+  if (!a.durchgang) { a.einstellungGewaehlt = true; return true; }
+  try {
+    await senden(`/api/scan/durchgang/${a.durchgang}/einstellung`, { daten });
+    return true;
+  } catch (f) {
+    a.meldung = f.message; a.meldungKurz = true;
+    const ziel = a.durchgang ? a.el.fehler : a.el.fehlerStart;
+    ziel.textContent = f.message;
+    anzeigen();
+    return false;
+  }
+}
+
+/** Dialog „Sets wählen“: Suche, Familie des gewählten Sets (Vorschläge angehakt), gewählte Sets als Liste. */
+async function setsWaehlen(a) {
+  let gewaehlt = [...a.sets];
+  const inhalt = document.createElement('div');
+  inhalt.className = 'scan-setwahl';
+  inhalt.innerHTML = '<p class="dialog-text">Die Karte wird wie immer erkannt; der Druck wird nur unter diesen Sets'
+    + ' gesucht. Liegt eine Karte in keinem davon, kommt sie als „unsicher“ zur Prüfung.</p>'
+    + '<div class="scan-setwahl-gewaehlt" aria-live="polite"></div>'
+    + '<label class="etikett feld-etikett" for="scan-set-suche">Set suchen</label>'
+    + '<input id="scan-set-suche" class="feld" type="search" autocomplete="off" spellcheck="false"'
+    + ' placeholder="Name oder Code, z. B. Reality Fracture">'
+    + '<ul class="scan-setwahl-liste" aria-label="Gefundene Sets"></ul>'
+    + '<div class="scan-setwahl-familie" hidden></div>'
+    + '<p class="meldung" role="alert"></p>';
+  const d = dialog({ titel: 'Sets für diesen Durchgang', inhalt, voll: true });
+  const q = (s) => inhalt.querySelector(s);
+  const meldung = q('.meldung');
+
+  const gewaehltZeigen = () => {
+    q('.scan-setwahl-gewaehlt').innerHTML = gewaehlt.length
+      ? gewaehlt.map((s) => `<button type="button" class="pille scan-set-pille" data-weg="${esc(s)}"`
+        + ` aria-label="${esc(s.toUpperCase())} entfernen">${esc(s.toUpperCase())} ×</button>`).join('')
+      : '<p class="scan-text">Keine Einschränkung: alle Sets.</p>';
+  };
+  q('.scan-setwahl-gewaehlt').addEventListener('click', (e) => {
+    const p = e.target.closest('[data-weg]');
+    if (!p) return;
+    gewaehlt = gewaehlt.filter((s) => s !== p.dataset.weg);
+    gewaehltZeigen();
+  });
+
+  let lauf = 0;
+  const suchen = async () => {
+    const nr = ++lauf;
+    try {
+      const r = await holen(`/api/scan/sets?q=${encodeURIComponent(q('#scan-set-suche').value.trim())}`);
+      if (nr !== lauf) return;
+      if (!r.verfuegbar) { meldung.textContent = 'Ohne Kartenkatalog lassen sich keine Sets wählen.'; return; }
+      q('.scan-setwahl-liste').innerHTML = r.sets.map((s) => `<li><button type="button" class="scan-set-treffer"`
+        + ` data-code="${esc(s.code)}"><span class="scan-set-code">${esc(s.code.toUpperCase())}</span>`
+        + ` <span>${esc(s.name)}</span> <span class="scan-set-jahr">${esc((s.erschienen || '').slice(0, 4))}</span>`
+        + '</button></li>').join('') || '<li class="scan-text">Kein Set gefunden.</li>';
+    } catch (f) { if (nr === lauf) meldung.textContent = f.message; }
+  };
+  let uhr = null;
+  q('#scan-set-suche').addEventListener('input', () => { clearTimeout(uhr); uhr = setTimeout(suchen, 250); });
+
+  q('.scan-setwahl-liste').addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-code]');
+    if (!t) return;
+    meldung.textContent = '';
+    try {
+      const r = await holen(`/api/scan/set/${encodeURIComponent(t.dataset.code)}/familie`);
+      const fam = q('.scan-setwahl-familie');
+      fam.hidden = false;
+      fam.innerHTML = '<fieldset class="scan-familie"><legend class="etikett">Gehört dazu (Vorschlag angehakt)</legend>'
+        + r.sets.map((s) => `<label class="scan-umschalter scan-familie-zeile"><input type="checkbox" value="${esc(s.code)}"`
+          + `${s.vorwahl ? ' checked' : ''}> <span><b>${esc(s.code.toUpperCase())}</b> ${esc(s.name)}`
+          + ` <span class="scan-set-jahr">${esc(s.art)}</span></span></label>`).join('')
+        + '</fieldset><button type="button" class="knopf knopf-haupt scan-familie-dazu">Angehakte hinzufügen</button>';
+      fam.querySelector('.scan-familie-dazu').addEventListener('click', () => {
+        for (const box of fam.querySelectorAll('input:checked')) {
+          if (!gewaehlt.includes(box.value) && gewaehlt.length < 30) gewaehlt.push(box.value);
+        }
+        fam.hidden = true;
+        gewaehltZeigen();
+      });
+      fam.scrollIntoView({ block: 'nearest' });
+    } catch (f) { meldung.textContent = f.message; }
+  });
+
+  const alle = Object.assign(document.createElement('button'), { type: 'button', className: 'knopf', textContent: 'Alle Sets' });
+  const ok = Object.assign(document.createElement('button'), { type: 'button', className: 'knopf knopf-haupt', textContent: 'Übernehmen' });
+  alle.addEventListener('click', () => { gewaehlt = []; gewaehltZeigen(); });
+  ok.addEventListener('click', async () => {
+    ok.disabled = true;
+    if (await einstellungSenden(a, { sets: gewaehlt })) {
+      a.sets = gewaehlt;
+      einstellungSync(a);
+      d.schliessen(true);
+    } else {
+      meldung.textContent = a.meldung;
+      ok.disabled = false;
+    }
+  });
+  d.fuss.append(alle, ok);
+  gewaehltZeigen();
+  suchen();
+  q('#scan-set-suche').focus();
+}
+
+/** Schalter und Knopf einrichten: sichtbar nur ab Datenbankversion 9 (`je_durchgang` aus /api/scan). */
+function einstellungEinrichten(a, verfuegbar) {
+  einstellungSync(a);
+  if (!verfuegbar) return;
+  a.bereich.querySelectorAll('.scan-einstellung').forEach((z) => { z.hidden = false; });
+  a.bereich.querySelectorAll('.scan-foil').forEach((box) => box.addEventListener('change', async () => {
+    const gewollt = box.checked;
+    a.foil = gewollt;
+    einstellungSync(a);
+    if (!await einstellungSenden(a, { foil: gewollt })) { a.foil = !gewollt; einstellungSync(a); }
+  }));
+  a.bereich.querySelectorAll('.scan-sets-knopf').forEach((k) => k.addEventListener('click', () => setsWaehlen(a)));
+}
+
 /* ---------- Kamera ---------- */
 
 async function kameraHolen() {
@@ -386,6 +521,19 @@ async function starten(a) {
       if (typeof d.einsortieren === 'boolean' && d.einsortieren !== a.einsortieren) {
         a.einsortieren = d.einsortieren;      // fortgesetzter Durchgang: seine Einstellung zeigen
         einsortierenSync(a);
+      }
+      if (typeof d.foil === 'boolean') {
+        // neuer Durchgang oder vor dem Start gewählt: die Wahl gilt; sonst zeigt ein fortgesetzter seine eigene
+        if (r.neu || a.einstellungGewaehlt) {
+          if (a.foil !== d.foil || a.sets.join() !== (d.sets || []).join()) {
+            try {
+              await senden(`/api/scan/durchgang/${r.id}/einstellung`, { daten: { foil: a.foil, sets: a.sets } });
+            } catch (f) { a.el.fehlerStart.textContent = f.message; a.foil = d.foil; a.sets = d.sets || []; }
+          }
+        } else {
+          a.foil = d.foil; a.sets = d.sets || [];
+        }
+        einstellungSync(a);
       }
     } catch { a.anzahl = 0; }
   } catch (f) {
@@ -485,6 +633,7 @@ export async function zeigen(wurzel) {
     <div class="scan-start">
       <p class="scan-text">Lege das Handy so über den Card Slinger, dass die Scanzone auf der Karte liegt. Jede eingeworfene Karte wird erkannt und fotografiert, sobald sie ruhig liegt.</p>
       ${SORTIEREN_HTML}
+      ${EINSTELLUNG_HTML}
       <button type="button" class="knopf knopf-haupt scan-los">Scan starten</button>
       <p class="meldung scan-fehler-start" role="alert"></p>
     </div>
@@ -501,6 +650,7 @@ export async function zeigen(wurzel) {
         <p class="scan-messwerte" hidden></p>
         <p class="meldung scan-fehler" role="alert"></p>
         ${SORTIEREN_HTML}
+        ${EINSTELLUNG_HTML}
         <div class="scan-regler"><label for="scan-groesse" class="etikett">Scanzone</label>
           <input id="scan-groesse" type="range" min="50" max="100" step="1"><output class="scan-prozent"></output></div>
         <label class="scan-umschalter"><input type="checkbox" class="scan-messwerte-an"> <span>Messwerte</span></label>
@@ -529,11 +679,13 @@ export async function zeigen(wurzel) {
     letzterGrund: '', messwerteAn: false, anzahl: 0, aufnahmen: [], meldung: '', meldungKurz: false, fps: 0,
     prozent: Math.min(100, Math.max(50, Number(vorliebe('scan.zone')) || 85)), durchgang: null, fortgesetzt: false,
     neuerDurchgang: false, beendet: false, lauf: 0, imFlug: false, bereich, einsortieren: true,
+    foil: false, sets: [], einstellungGewaehlt: false,   // je Durchgang (ab Version 9)
   };
   ansicht = a;
 
   // Stand der Schnittstelle: bei alter Datenbank (409) ausblenden
-  try { await holen('/api/scan'); } catch (f) {
+  let stand = null;
+  try { stand = await holen('/api/scan'); } catch (f) {
     q('.scan-start').innerHTML = '<p class="scan-text">Scannen ist mit dieser Datenbank noch nicht möglich. Sie braucht ein Update.</p>';
     q('.scan-zurueck').addEventListener('click', () => gehe('#/'));
     return;
@@ -541,6 +693,7 @@ export async function zeigen(wurzel) {
   q('.scan-zurueck').addEventListener('click', () => gehe('#/'));
   a.el.start.addEventListener('click', () => starten(a));
   einsortierenEinrichten(a);   // nicht abwarten: der Schalter erscheint, sobald die Datenbank Auskunft gibt
+  einstellungEinrichten(a, stand?.je_durchgang === true);
 
   const regler = q('#scan-groesse'), prozent = q('.scan-prozent');
   regler.value = String(a.prozent); prozent.textContent = `${a.prozent} %`;
@@ -568,6 +721,7 @@ export async function zeigen(wurzel) {
       const r = await senden('/api/scan/durchgang', { daten: { neu: true, ...(a.einsortieren ? {} : { einsortieren: false }) } });
       a.durchgang = r.id; a.anzahl = 0; a.aufnahmen = []; a.neu = true; a.fortgesetzt = false; a.beendet = false;
       a.el.fort.hidden = true; a.meldung = 'Neuer Durchgang gestartet.'; a.el.letztes.hidden = true;
+      a.foil = false; a.sets = []; einstellungSync(a);   // ein neuer Durchgang beginnt ohne Foil und Set-Auswahl
       anzeigen();
     } catch (f) { a.meldung = f.message; anzeigen(); }
   });

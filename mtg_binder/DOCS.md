@@ -78,6 +78,15 @@ schickt die Erkennung am PC beim nächsten Start automatisch.
    unsichere bleiben einzeln und stehen in der Prüfansicht. Ist der PC aus, warten die Fotos im Scan-Eingang.
    Eine Erkennung dauert etwa 4 Sekunden je Foto (16 Fotos je Lauf).
 
+**Foil und Sets je Durchgang:** Am Scan-Bildschirm stellst du vor dem Start oder während des Scans ein:
+- **„Alle Karten Foil“:** Jede danach erkannte Karte ist Foil.
+- **„Sets wählen“:** Nach Name oder Code suchen, ein Set antippen. Die App hakt die zugehörigen Codes vor (Hauptset,
+  Commander, Bonus-Reihen, Special Guests vom selben Tag), du kannst weitere dazunehmen oder abwählen. Die Karte
+  wird wie immer erkannt; nur der Druck wird unter diesen Sets gesucht. Gibt es die Karte in keinem davon, kommt
+  sie als „unsicher“ zur Prüfung.
+
+Ein neuer Durchgang beginnt wieder ohne Foil und ohne Set-Auswahl.
+
 ## Sortierregeln
 
 Unter **„Sortierregeln“** (Regal, Kisten-Boden oder Scan-Eingang) legst du fest, in welche Kiste eine Karte

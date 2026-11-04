@@ -51,6 +51,36 @@
 .scan-prozent { min-width: 3.2em; text-align: right; font-size: 0.86rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .scan-umschalter { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; font-size: 0.86rem; color: var(--text-2); }
 
+/* Foil und Sets je Durchgang */
+.scan-einstellung { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 18px; }
+.scan-lauf .scan-einstellung { justify-content: flex-start; }
+.scan-einstellung[hidden] { display: none; }
+.scan-einstellung .scan-umschalter { min-height: 44px; }
+.scan-einstellung .scan-umschalter input, .scan-familie input { width: 20px; height: 20px; accent-color: var(--messing); }
+.scan-sets-zeile { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.scan-sets-text { font-size: 0.86rem; color: var(--text-2); overflow-wrap: anywhere; }
+.scan-sets-knopf { min-height: 36px; padding: 0 14px; font-size: 0.86rem; }
+.scan-setwahl-gewaehlt { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 6px; }
+.scan-setwahl-gewaehlt .scan-text { margin: 0; color: var(--text-2); }
+.scan-set-pille {
+  min-height: 36px; padding: 0 12px; border: 1px solid var(--messing); border-radius: 999px;
+  background: var(--messing-schleier, transparent); color: var(--text); font: inherit; font-size: 0.86rem; cursor: pointer;
+}
+.scan-setwahl-liste { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.scan-set-treffer {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; min-height: 44px; padding: 8px 12px; text-align: left;
+  border: 1px solid var(--linie-stark); border-radius: var(--radius-klein); background: var(--flaeche-2); color: var(--text);
+  font: inherit; cursor: pointer;
+}
+.scan-set-code { flex: none; min-width: 3.4em; font-weight: 600; color: var(--messing-hell); }
+.scan-set-jahr { margin-left: auto; color: var(--text-3, var(--text-2)); font-size: 0.82rem; }
+.scan-setwahl-familie { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--linie-stark); }
+.scan-setwahl-familie[hidden] { display: none; }
+.scan-familie { margin: 0 0 10px; padding: 0; border: 0; display: grid; gap: 2px; }
+.scan-familie-zeile { display: flex; min-height: 40px; }
+.scan-familie-zeile span { color: var(--text); }
+.scan-familie-zeile .scan-set-jahr { margin-left: 6px; }
+
 .scan-knoepfe { flex: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
   padding: 8px var(--rand-sicher) 12px; }
 .scan-knoepfe .knopf { min-height: 52px; }

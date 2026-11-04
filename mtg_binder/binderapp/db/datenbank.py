@@ -17,8 +17,8 @@ from pathlib import Path
 SCHEMA = Path(__file__).with_name("schema.sql")
 TABELLEN = {"binder", "seite", "tasche", "kiste", "karte", "foto", "nutzer", "scan_durchgang", "scan_foto",
             "sortierregel", "sortierfach", "deck", "deck_karte", "deck_entnahme"}
-VERSION = 8          # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
-                     # 7: Decks (02.11.2026), 8: Deckbau (03.11.2026)
+VERSION = 9          # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
+                     # 7: Decks (02.11.2026), 8: Deckbau (03.11.2026), 9: Foil und Sets je Scan-Durchgang (04.11.2026)
 MINDEST = 2          # ältester Stand, mit dem Server und Verarbeiter noch laufen (ohne Kisten)
 WARTEZEIT = 10       # Sekunden Wartezeit, wenn ein anderer Prozess gerade schreibt
 
@@ -88,7 +88,14 @@ SPALTEN_V8 = {
         ("produkte", "INTEGER"),
     ],
 }
-ALLE_SPALTEN = (SPALTEN_V2, SPALTEN_V3, SPALTEN_V4, SPALTEN_V6, SPALTEN_V8)
+# Spalten, die Version 9 anhängt (Wunsch des Nutzers, 04.11.2026): Einstellungen je Scan-Durchgang
+SPALTEN_V9 = {
+    "scan_durchgang": [
+        ("foil", "INTEGER NOT NULL DEFAULT 0 CHECK (foil IN (0, 1))"),
+        ("sets", "TEXT"),
+    ],
+}
+ALLE_SPALTEN = (SPALTEN_V2, SPALTEN_V3, SPALTEN_V4, SPALTEN_V6, SPALTEN_V8, SPALTEN_V9)
 
 
 def verbinden(pfad: str | Path, nur_lesen: bool = False) -> sqlite3.Connection:
@@ -126,7 +133,7 @@ def fehlende_spalten(con) -> list[str]:
 
 
 def migrieren(con) -> list[str]:
-    """Bringt eine Datenbank der Version 1 bis 7 auf Version 8. Wiederholbar: Vorhandenes bleibt, wie es ist.
+    """Bringt eine Datenbank der Version 1 bis 8 auf Version 9. Wiederholbar: Vorhandenes bleibt, wie es ist.
 
     Gibt die ausgeführten Schritte zurück (leer, wenn nichts zu tun war). Daten werden nicht
     verändert; neue Spalten bekommen ihren Standardwert (Fotos: Quelle „import", Seiten: Art „foto",

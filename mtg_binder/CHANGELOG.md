@@ -1,5 +1,14 @@
 # Änderungen
 
+## 0.14.0
+- Bulk-Scan: je Durchgang „Alle Karten Foil“ und „Sets wählen“. Foil-Karten werden wie gewohnt zu Posten
+  zusammengefasst und nach Foil-Preis bewertet.
+- Sets wählen: Suche nach Name oder Code; zu einem Set schlägt die App die zugehörigen Codes vor (Hauptset,
+  Commander, Bonus-Reihen und Special Guests vom selben Tag, z. B. bei Reality Fracture FRA, FRC und SPG).
+- Die Karte erkennt die App wie bisher; nur der Druck wird unter den gewählten Sets gesucht. Liegt eine Karte in
+  keinem davon, kommt sie als „unsicher“ zur Prüfung. Ein neuer Durchgang beginnt ohne Foil und ohne Auswahl.
+- Datenbank Version 9 (zwei neue Spalten je Durchgang; die Sicherung entsteht beim Update wie immer).
+
 ## 0.13.0
 - Farbrad für Binder und Kisten: Neben den festen Farben lässt sich jede Farbe wählen (Farbkreis, Helligkeit,
   Farbcode). Gilt beim Anlegen eines Binders, unter „Binder bearbeiten“, bei „Neue Kiste“ und bei „Kiste
