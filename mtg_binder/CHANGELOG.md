@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.11.0
+- Neue Karten von Scryfall: Das Add-on gleicht seinen Kartenkatalog täglich selbst mit Scryfall ab und holt nur,
+  was neu ist (alle Sprachen). Junge Drucke ohne Cardmarket-Produkt werden bis zu 120 Tage lang nachgefragt,
+  danach haben sie Preise. Nichts wird gelöscht.
+- Die Erkennung am PC gleicht ihren Katalog ebenso ab, wenn keine Fotos warten, und nimmt neue Karten in das
+  Namensverzeichnis und den Bildindex auf (nur fertige Scans, keine Vorschaubilder).
+
 ## 0.10.0
 - Deckbau: Ein Deck ist jetzt ein eigener Ort wie eine Kiste.
   - „Deck bauen“ zeigt eine Entnahmeliste nach Ort (Kisten nach Fach, Binder nach Seite und Platz). Die App schlägt

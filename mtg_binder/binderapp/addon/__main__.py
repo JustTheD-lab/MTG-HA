@@ -5,7 +5,8 @@ startet den Server für Ingress (nur der Supervisor darf anfragen, siehe `server
 
     /data/binder.sqlite        Datenbank (lokal, in den Backups von Home Assistant; nie auf dem Netzlaufwerk)
     /data/sicherung/           Sicherungen, die jüngsten 10 bleiben
-    /data/katalog.sqlite       Kartenkatalog (schickt der PC, web/pc.py)
+    /data/katalog.sqlite       Kartenkatalog (schickt der PC, web/pc.py; täglich mit Scryfall abgeglichen,
+                               katalog/abgleich.py)
     /data/pc_schluessel        Hash des Schlüssels für die PC-Schnittstelle (Port 8099)
     /data/preise/              Price Guide von Cardmarket (täglich geladen, preise/zeitplan.py)
     <speicherort>/fotos/       Original-Fotos (Upload)            ┐ Netzlaufwerk, in den Einstellungen
@@ -161,6 +162,9 @@ def main() -> int:
     app = Verteiler(server.app, pc.app, PC_PORT)
     # Preise täglich selbst holen (Entscheidung des Nutzers, 31.10.2026); die Datei bleibt lokal in /data/preise
     Preisabruf(DATEN / "binder.sqlite", DATEN / "preise", DATEN / "katalog.sqlite").start()
+    # Katalog täglich mit Scryfall abgleichen, nur Neues (Wunsch des Nutzers, 04.11.2026)
+    from binderapp.katalog.abgleich import Katalogabgleich
+    Katalogabgleich(DATEN / "katalog.sqlite", DATEN / "binder.sqlite").start()
     # Werte an Home Assistant per MQTT (Entscheidung des Nutzers, 02.11.2026); abschaltbar in den Einstellungen
     sender = None
     if optionen(DATEN / "options.json").get("mqtt", True) is not False:

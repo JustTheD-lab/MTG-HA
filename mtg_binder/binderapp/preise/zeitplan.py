@@ -52,10 +52,13 @@ def was_tun(con, datei: Path) -> str | None:
 _NACHGETRAGEN: dict[str, tuple] = {}   # Datenbank → Stand beim letzten Nachtragen
 
 
-def _stand(con, tag: str | None) -> tuple:
-    """Kennzeichen für „schon nachgetragen“: Tag und Zahl der Produkte (Sammlung und Decks). Produkte, die in der
-    Preisdatei nie vorkommen, lösen so kein stündliches Lesen der großen Datei aus, neue Karten aber schon."""
-    teile = [tag, con.execute("SELECT COUNT(*) FROM kartendaten WHERE cardmarket_id IS NOT NULL").fetchone()[0],
+def _stand(con, tag: str | None, katalog: Path | None = None) -> tuple:
+    """Kennzeichen für „schon nachgetragen“: Tag und Zahl der Produkte (Sammlung und Decks), dazu der letzte
+    Scryfall-Abgleich des Katalogs (neue Cardmarket-Produkte). Produkte, die in der Preisdatei nie vorkommen,
+    lösen so kein stündliches Lesen der großen Datei aus, neue Karten und ein neuer Abgleich aber schon."""
+    from binderapp.katalog.abgleich import letzter_abgleich
+    teile = [tag, letzter_abgleich(katalog) if katalog else None,
+             con.execute("SELECT COUNT(*) FROM kartendaten WHERE cardmarket_id IS NOT NULL").fetchone()[0],
              con.execute("SELECT COUNT(*) FROM kartendaten WHERE cardmarket_id IS NULL").fetchone()[0]]
     if version(con) >= 8:
         teile += [con.execute("SELECT COUNT(*) FROM deck_produkt").fetchone()[0],
@@ -68,7 +71,7 @@ def einmal(datenbank: Path, ordner: Path, katalog: Path | None) -> dict | None:
     with closing(verbinden(datenbank, nur_lesen=True)) as con:
         aufgabe = was_tun(con, datei)
         neuester = con.execute("SELECT MAX(tag) FROM preisabruf").fetchone()[0] if aufgabe == "nachtragen" else None
-        stand = _stand(con, neuester) if aufgabe == "nachtragen" else None
+        stand = _stand(con, neuester, katalog) if aufgabe == "nachtragen" else None
     if aufgabe is None:
         return None
     if aufgabe == "nachtragen" and _NACHGETRAGEN.get(str(datenbank)) == stand:
@@ -80,7 +83,7 @@ def einmal(datenbank: Path, ordner: Path, katalog: Path | None) -> dict | None:
             return None   # die gespeicherte Datei gehört zu einem anderen Tag: auf den nächsten Abruf warten
         ergebnis = abruf.abrufen(datenbank, ordner, katalog, datei=datei, nachtragen=True)
         with closing(verbinden(datenbank, nur_lesen=True)) as con:   # Stand nach dem Nachtragen merken
-            _NACHGETRAGEN[str(datenbank)] = _stand(con, neuester)
+            _NACHGETRAGEN[str(datenbank)] = _stand(con, neuester, katalog)
     else:
         ergebnis = abruf.abrufen(datenbank, ordner, katalog)
     ergebnis["aufgabe"] = aufgabe

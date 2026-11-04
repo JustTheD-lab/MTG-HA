@@ -18,6 +18,20 @@ PC sie über Port 8099 abholt (nur im Heimnetz, nur mit Schlüssel).
 4. Beim Start schickt die Erkennung den Kartenkatalog (etwa 126 MB), wenn das Add-on keinen oder einen älteren
    hat. Damit funktionieren „Karte hinzufügen“ und „Druck ändern“ auch, wenn der PC aus ist.
 
+## Neue Karten von Scryfall (täglich)
+
+Das Add-on gleicht seinen Kartenkatalog einmal täglich selbst mit Scryfall ab, auch wenn der PC aus ist. Es holt
+**nur Neues**: Scryfall listet alle Karten in einer Änderungsliste (das dauert wegen der Grenzen von Scryfall
+einige Minuten im Hintergrund); vollständig geladen werden nur Karten, die der Katalog noch nicht kennt, in allen
+Sprachen. Junge Drucke ohne Cardmarket-Produkt fragt das Add-on bis zu 120 Tage lang täglich nach, denn Scryfall
+trägt das Produkt bei neuen Sets oft erst später nach; danach bekommen die Karten ihren Preis.
+Ohne Katalog im Add-on gibt es keinen Abgleich (den ersten schickt die Erkennung am PC). Fehler, etwa ohne
+Internet, stehen im Protokoll; der nächste Versuch folgt nach einer Stunde.
+
+Die Erkennung am PC macht dasselbe mit ihrem eigenen Katalog, wenn keine Fotos warten. Dazu lädt sie die Bilder
+neuer Karten und hängt sie an den Bildindex an. Neue Karten werden so auch auf Fotos erkannt. Bilder aus der
+Vorschauzeit eines Sets nimmt sie nicht, sondern erst den fertigen Scan.
+
 ## Einbau (über das Add-on-Repository)
 
 1. Am PC das Repository füllen: `python -m binderapp.addon.paket --repo <Ordner des Repositorys>`, dann in
