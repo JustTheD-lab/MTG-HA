@@ -29,7 +29,7 @@ Regeln
 - Karten der Quelle ``manabox`` werden nie mit Scan-Karten zusammengezählt; der Import ändert
   keine Scan-Karte, keine Tasche und keinen Binder. Mögliche Doppel (gleiche Karte als Scan-Karte
   in einer Tasche und in einer Kiste) stehen nur im Bericht.
-- Preis, Misprint, Altered, Signed und Proxy werden nicht übernommen (Preise: Phase 6).
+- Der Kaufpreis wird übernommen (ab Version 11). Misprint, Altered, Signed und Proxy werden nicht übernommen.
 
 Der Import ist ein PC-Werkzeug (der Katalog liegt nur am PC); auf dem Raspberry Pi läuft er nicht.
 Nur Standardbibliothek, Python 3.11 kompatibel.
@@ -107,7 +107,9 @@ class Posten:
     zustand: str
     sprache: str         # wie in der CSV (de, en, ja)
     hinzugefuegt: str    # Spalte „Added“, ISO-Zeit mit Z
-    angaben: tuple[str, ...] = ()  # nicht übernommene Angaben: preis, misprint, altered, signed, proxy
+    angaben: tuple[str, ...] = ()  # besondere Angaben (Bericht): preis, misprint, altered, signed, proxy
+    kaufpreis: float | None = None   # Spalte „Purchase price“; leer oder unlesbar: None
+    waehrung: str | None = None      # Spalte „Purchase price currency“
 
     @property
     def extern_id(self) -> str:
@@ -186,8 +188,18 @@ def _lese(f, name: str, pflicht: tuple[str, ...]) -> tuple[list[Posten], list[st
             set_code=wert("Set code"), nummer=wert("Collector number"), foil=wert("Foil"), anzahl=anzahl,
             manabox_id=wert("ManaBox ID"), scryfall_id=wert("Scryfall ID"), zustand=wert("Condition"),
             sprache=wert("Language"), hinzugefuegt=wert("Added"), angaben=angaben,
+            kaufpreis=_preis(wert("Purchase price")), waehrung=wert("Purchase price currency") or None,
         ))
     return posten, list(leser.fieldnames or [])
+
+
+def _preis(text: str) -> float | None:
+    """Kaufpreis aus der CSV. Ein unlesbarer Wert ist kein Grund, den Import abzubrechen."""
+    try:
+        wert = float(text)
+    except ValueError:
+        return None
+    return wert if 0 <= wert < 1_000_000 else None
 
 
 def lese_export(pfad: str | Path) -> list[Posten]:
@@ -415,15 +427,16 @@ def _kisten_bereitstellen(con, nid: int, auswahl: list[tuple[BinderInfo, Eintrag
 def _nutzer_aenderungen(con) -> tuple[dict[int, set[str]], set[str]]:
     """Felder je Karte, die der Nutzer in der App geändert hat, und die extern_id der vom Nutzer gelöschten Posten."""
     felder: dict[int, set[str]] = defaultdict(set)
+    # Rückgängig ist keine Entscheidung gegen den Posten: Ein zurückgenommener Import lässt sich neu einlesen.
     for z in con.execute("SELECT datensatz, neu FROM historie WHERE tabelle = 'karte' AND quelle = ? "
-                         "AND aktion = 'geaendert'", (NUTZER_QUELLE,)):
+                         "AND aktion = 'geaendert' AND rueckgaengig_von IS NULL", (NUTZER_QUELLE,)):
         try:
             felder[z["datensatz"]].update(json.loads(z["neu"] or "{}"))
         except (ValueError, TypeError):
             continue
     geloescht: set[str] = set()
-    for z in con.execute("SELECT alt FROM historie WHERE tabelle = 'karte' AND quelle = ? AND aktion = 'geloescht'",
-                         (NUTZER_QUELLE,)):
+    for z in con.execute("SELECT alt FROM historie WHERE tabelle = 'karte' AND quelle = ? AND aktion = 'geloescht' "
+                         "AND rueckgaengig_von IS NULL", (NUTZER_QUELLE,)):
         try:
             alt = json.loads(z["alt"] or "{}")
         except (ValueError, TypeError):
@@ -463,9 +476,10 @@ def _doppel(con, nid: int, kisten_ids: list[int]) -> list[dict]:
 
 def _posten_uebernehmen(con, nid: int, p: Posten, k: KistenZahlen, kat: sqlite3.Connection | None,
                         cache: dict, bestand: dict[str, dict], nutzer_felder: dict[int, set[str]],
-                        nutzer_geloescht: set[str], erg: Ergebnis) -> None:
+                        nutzer_geloescht: set[str], erg: Ergebnis, *, schritt: str | None = None) -> int | None:
     """Ein Posten der CSV: neu anlegen (in Kiste `k`), Felder angleichen oder als vom Nutzer gelöscht melden.
-    Gemeinsam für den Sammlungsimport und den Listen-Import (listen_import.py)."""
+    Gemeinsam für Sammlungsimport, Listen-Import (listen_import.py) und den Import in der App (manabox_app.py, mit
+    `schritt` für Rückgängig). Gibt die ID eines neu angelegten Postens zurück, sonst None."""
     k.posten += 1
     k.karten += p.anzahl
     if not p.scryfall_id:
@@ -483,12 +497,15 @@ def _posten_uebernehmen(con, nid: int, p: Posten, k: KistenZahlen, kat: sqlite3.
     if kat is not None:
         felder["oracle_id"] = daten["oracle_id"] if daten else None
         felder["bild"] = ((daten["bild"] if daten else None) or p.scryfall_id) or None
+    # eine CSV ohne Preis löscht keinen vorhandenen
+    if p.kaufpreis is not None and datenbank.version(con) >= 11:
+        felder.update(kaufpreis=p.kaufpreis, kaufpreis_waehrung=p.waehrung)
     alt = bestand.get(p.extern_id)
     if alt is None:
         if p.extern_id in nutzer_geloescht:
             k.nutzer_geloescht += 1
             erg.nutzer_geloescht.append(p)
-            return
+            return None
         neu = {
             "nutzer_id": nid, "tasche_id": None, "kiste_id": k.id, "quelle": QUELLE, "extern_id": p.extern_id,
             "scryfall_id": felder["scryfall_id"], "oracle_id": felder.get("oracle_id"), "name": p.name,
@@ -496,22 +513,39 @@ def _posten_uebernehmen(con, nid: int, p: Posten, k: KistenZahlen, kat: sqlite3.
             "foil": p.ist_foil, "anzahl": p.anzahl, "status": "sicher", "geprueft": 0,
             "bild": felder["bild"] if kat is not None else (p.scryfall_id or None), "zustand": p.zustand or None,
         }
+        for f in ("kaufpreis", "kaufpreis_waehrung"):
+            if f in felder:
+                neu[f] = felder[f]
         angelegt = angelegt_aus(p.hinzugefuegt)
         if angelegt:
             neu["angelegt"] = angelegt
-        datenbank.einfuegen(con, nid, QUELLE, "karte", neu)
+        karte_id = datenbank.einfuegen(con, nid, QUELLE, "karte", neu, schritt=schritt)
         k.neu += 1
-        return
+        return karte_id
     geschuetzt = {f for f in felder if f in nutzer_felder.get(alt["id"], ())}
     if geschuetzt:
         erg.geschuetzt.append({"karte": alt["id"], "kiste": k.name, "name": p.name, "felder": sorted(geschuetzt)})
     soll = {f: v for f, v in felder.items() if f not in geschuetzt}
-    geaendert = datenbank.aendern(con, nid, QUELLE, "karte", alt["id"], soll)
+    geaendert = datenbank.aendern(con, nid, QUELLE, "karte", alt["id"], soll, schritt=schritt)
     if geaendert:
         k.geaendert += 1
         erg.geaenderte_felder.update(geaendert.keys())
     else:
         k.unveraendert += 1
+    return None
+
+
+def schluessel_pruefen(importiert: list[Posten]) -> None:
+    """Doppelte Schlüssel würden Posten stillschweigend verschmelzen: lieber abbrechen."""
+    zaehler = Counter(p.extern_id for p in importiert)
+    if any(c > 1 for c in zaehler.values()):
+        zeilen: dict[str, list[int]] = defaultdict(list)
+        for p in importiert:
+            if zaehler[p.extern_id] > 1:
+                zeilen[p.extern_id].append(p.zeile)
+        raise ImportFehler("Schlüssel (Binder, ManaBox ID, Foil, Sprache, Zustand) kommt mehrfach vor, ein "
+                           "Zusammenzählen findet nicht statt:\n  "
+                           + "\n  ".join(f"{s!r} in den Zeilen {z}" for s, z in list(zeilen.items())[:10]))
 
 
 def _lauf(con, nid: int, posten: list[Posten], infos: list[BinderInfo], zuordnung: dict[tuple[str, str], Eintrag],
@@ -523,17 +557,7 @@ def _lauf(con, nid: int, posten: list[Posten], infos: list[BinderInfo], zuordnun
     auswahl = _auswahl(infos, zuordnung)
     importiert = [p for p in posten if zuordnung[(p.binder, p.typ)].aktion == "kiste"]
 
-    # Doppelte Schlüssel würden Posten stillschweigend verschmelzen: lieber abbrechen.
-    zaehler = Counter(p.extern_id for p in importiert)
-    if any(c > 1 for c in zaehler.values()):
-        zeilen: dict[str, list[int]] = defaultdict(list)
-        for p in importiert:
-            if zaehler[p.extern_id] > 1:
-                zeilen[p.extern_id].append(p.zeile)
-        raise ImportFehler("Schlüssel (Binder, ManaBox ID, Foil, Sprache, Zustand) kommt mehrfach vor, ein "
-                           "Zusammenzählen findet nicht statt:\n  "
-                           + "\n  ".join(f"{s!r} in den Zeilen {z}" for s, z in list(zeilen.items())[:10]))
-
+    schluessel_pruefen(importiert)
     kisten = _kisten_bereitstellen(con, nid, auswahl)
     erg.kisten = kisten
     kiste_von = {k.extern_name: k for k in kisten}

@@ -123,7 +123,10 @@ CREATE TABLE IF NOT EXISTS karte (
     -- ist); die Herkunft merkt sich, woher eine Karte ins Deck kam (Zerlegen legt sie dorthin zurück)
     deck_id      INTEGER REFERENCES deck(id),
     herkunft_tasche_id INTEGER REFERENCES tasche(id) ON DELETE SET NULL,
-    herkunft_kiste_id  INTEGER REFERENCES kiste(id) ON DELETE SET NULL
+    herkunft_kiste_id  INTEGER REFERENCES kiste(id) ON DELETE SET NULL,
+    -- ab Version 11 (ManaBox-Import in der App): Kaufpreis je Exemplar laut Quelle, damit ein Export ihn zurückgibt
+    kaufpreis    REAL,
+    kaufpreis_waehrung TEXT
 );
 
 -- Kartendaten je Druck (ab Version 3), abgeleitet aus dem Scryfall-Katalog (binderapp.katalog),
@@ -377,4 +380,4 @@ CREATE INDEX IF NOT EXISTS i_karte_deck       ON karte(deck_id) WHERE deck_id IS
 CREATE INDEX IF NOT EXISTS i_deck_produkt_cm  ON deck_produkt(cardmarket_id);
 CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 
-PRAGMA user_version = 10;
+PRAGMA user_version = 11;

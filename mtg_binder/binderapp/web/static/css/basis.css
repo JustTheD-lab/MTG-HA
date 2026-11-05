@@ -133,6 +133,19 @@ body {
 /* Add-on: Verwaltung (verwaltung.js) */
 .verwaltung-wahl { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; border: 0; }
 .verwaltung-wahl label { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.verwaltung-knopf { margin: 10px 0 16px; }
+
+/* Add-on: ManaBox-Import (manabox.js) */
+.manabox-liste { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.manabox-zeile { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px 14px; align-items: center;
+  padding: 10px 12px; background: var(--flaeche-1); border: 1px solid var(--linie); border-radius: var(--radius); }
+.manabox-aus { opacity: 0.6; }
+.manabox-name { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.manabox-name span { color: var(--text-3); font-size: 0.84rem; }
+.manabox-wahl { display: grid; gap: 6px; min-width: 0; }
+.manabox-wahl .feld { width: 100%; min-width: 0; }
+.manabox-wahl [hidden] { display: none; }
+@media (max-width: 560px) { .manabox-zeile { grid-template-columns: minmax(0, 1fr); } }
 
 h1, h2, h3, .titel { font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin: 0; }
 

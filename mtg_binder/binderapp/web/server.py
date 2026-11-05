@@ -60,8 +60,8 @@ from binderapp.db import leeren, seiten
 from binderapp.db.datenbank import MINDEST, aendern, einfuegen, schreiben, verbinden, version
 from binderapp.db.seiten import Fehler
 from binderapp.preise import werte
-from binderapp.web import (abzug, bearbeiten, decks, hochladen, kisten, kistenschreiben, pc, pruefen, regeln, sammlung,
-                           scan, sets, verwaltung)
+from binderapp.web import (abzug, bearbeiten, decks, hochladen, kisten, kistenschreiben, manabox, pc, pruefen, regeln,
+                           sammlung, scan, sets, verwaltung)
 from binderapp.web.anmeldung import COOKIE, DAUER, Anmeldung
 from binderapp.web.helfer import Helfer
 from binderapp.web.speicher import MELDUNG as MELDUNG_SPEICHER
@@ -655,7 +655,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         Route("/verarbeiter", verarbeiter),
         Route("/speicher", speicherstand),
         *([Route("/pc/verbindung", pc_verbindung), Route("/pc/schluessel", pc_schluessel, methods=["POST"]),
-           *verwaltung.routen(h)] if ha else []),
+           *verwaltung.routen(h), *manabox.routen(h)] if ha else []),
         Route("/anmelden", anmelden, methods=["POST"]),
         Route("/abmelden", abmelden, methods=["POST"]),
         *pruefen.routen(h),

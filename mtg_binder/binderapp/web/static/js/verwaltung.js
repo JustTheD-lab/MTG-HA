@@ -103,6 +103,9 @@ export async function oeffnen() {
   const v = await holen('/api/verwaltung');
   const inhalt = document.createElement('div');
   inhalt.innerHTML = `<h3 class="etikett">Sicherungen</h3>${sicherungHtml(v.sicherung)}`
+    + '<h3 class="etikett">ManaBox</h3>'
+    + '<p class="dialog-text">Sammlung oder Liste aus einem ManaBox-Export einlesen. Du entscheidest je Eintrag, was wohin geht.</p>'
+    + '<p class="verwaltung-knopf"><button type="button" class="knopf manabox-start">Export wählen …</button></p>'
     + '<h3 class="etikett">Neubeginn</h3>'
     + '<p class="dialog-text">Löscht die ganze Sammlung und beginnt mit einer leeren Datenbank.</p>'
     + (v.hindernis ? `<p class="meldung" role="alert">${esc(v.hindernis)}</p>` : '');
@@ -110,6 +113,18 @@ export async function oeffnen() {
   const zu = knopf('Schließen');
   const los = Object.assign(knopf('Datenbank löschen …', 'knopf knopf-gefahr'), { disabled: Boolean(v.hindernis) });
   zu.addEventListener('click', () => d.schliessen());
+  // Das Dateifeld muss im offenen Dialog liegen, sonst öffnet Safari die Auswahl nicht
+  const eingabe = Object.assign(document.createElement('input'), { type: 'file', accept: '.csv,text/csv', hidden: true });
+  eingabe.setAttribute('aria-label', 'ManaBox-Export (CSV) wählen');
+  inhalt.append(eingabe);
+  inhalt.querySelector('.manabox-start').addEventListener('click', () => eingabe.click());
+  eingabe.addEventListener('change', async () => {
+    const datei = eingabe.files?.[0];
+    if (!datei) return;
+    d.schliessen();
+    const { oeffnen: importOeffnen } = await import('./manabox.js');
+    await importOeffnen(datei);
+  });
   los.addEventListener('click', async () => {
     const r = await loeschen(v);
     if (!r) return;

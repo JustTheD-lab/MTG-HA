@@ -154,6 +154,20 @@ Hochladen ist dann gesperrt, oben steht ein Hinweis.
 
 Der Knopf **„Verwaltung“** im Regal zeigt, wann zuletzt gesichert wurde, und meldet Fehler dabei.
 
+**ManaBox-Import:** In ManaBox die Sammlung (oder eine Liste) als CSV exportieren, unter „Verwaltung“ → „Export wählen“
+einlesen und je Eintrag das Ziel wählen:
+
+- **Neue Kiste** oder **Vorhandene Kiste:** Die Karten kommen in diese Kiste.
+- **Nach Sortierregeln:** Die Regeln verteilen die Karten. Was keine Regel trifft, bleibt im Scan-Eingang. Fehlt ein
+  Wert, meist der Preis, wartet die Karte, bis er da ist.
+- **Überspringen:** Für Listen und Decks vorgewählt, weil sie die Karten der Binder doppelt enthalten.
+
+Der Probelauf zeigt das Ergebnis, ohne etwas zu schreiben. Ein späterer Export aktualisiert vorhandene Karten in ihrer
+Kiste. Karten, die im Export fehlen, bleiben liegen und werden nur gemeldet; was du in der App geändert oder gelöscht
+hast, bleibt so. „Rückgängig“ im Bericht nimmt den ganzen Import zurück, solange die Karten unverändert sind. Mit
+gescannten Karten wird nichts zusammengezählt, mögliche Doppel stehen im Bericht. Für den Import braucht das Add-on den
+Kartenkatalog.
+
 **Sicherung zurückholen:** Eine Datei aus `sicherung/` (oder `archiv/<Zeit>/binder.sqlite`) als
 `einspielen/binder.sqlite` in den Speicherort kopieren und das Add-on neu starten, siehe „Testkopie einspielen“.
 

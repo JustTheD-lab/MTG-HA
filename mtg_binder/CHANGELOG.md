@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.21.0
+- ManaBox-Import in der App: Unter „Verwaltung“ einen ManaBox-Export wählen und je Binder, Liste und Deck entscheiden:
+  neue Kiste, vorhandene Kiste, nach Sortierregeln oder überspringen. Listen und Decks sind zum Überspringen vorgewählt.
+- Ein Probelauf zeigt das Ergebnis, bevor etwas geschrieben wird. Vorher entsteht eine Sicherung, und der ganze Import
+  lässt sich mit einem Tipp zurücknehmen. Ein neuerer Export aktualisiert vorhandene Karten, löscht aber nie welche.
+- Kaufpreise aus ManaBox werden jetzt mit gespeichert (Datenbank Version 11, die Sicherung entsteht beim Update wie immer).
+
 ## 0.20.0
 - Tägliche Sicherung: Das Add-on sichert die Datenbank jetzt jeden Tag von selbst und prüft jede Sicherung. Die letzten 7
   bleiben im Add-on, die letzten 30 auf dem Netzlaufwerk unter `sicherung/`.

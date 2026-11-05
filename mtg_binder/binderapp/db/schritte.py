@@ -19,7 +19,9 @@ from binderapp.db.seiten import Fehler
 QUELLE = "nutzer"
 # Schritte, die die Sortierregeln von selbst ausführen (binderapp.sortieren), lassen sich genauso zurücknehmen.
 QUELLE_REGEL = "sortierregel"
-QUELLEN = (QUELLE, QUELLE_REGEL)
+# Der ManaBox-Import in der App (db/manabox_app.py) ist ein Schritt; seine Zeilen behalten die Quelle „manabox“.
+QUELLE_IMPORT = "manabox"
+QUELLEN = (QUELLE, QUELLE_REGEL, QUELLE_IMPORT)
 TABELLEN = ("karte", "tasche", "kiste", "scan_foto")
 KONFLIKT = "Das lässt sich nicht mehr zurücknehmen: Die Karten wurden inzwischen geändert."
 MUSTER = re.compile(r"^[0-9a-f]{32}$")
@@ -92,7 +94,7 @@ def loeschen(con, nutzer: int, tabelle: str, datensatz: int, *, schritt: str,
 
 
 def zeilen(con, nutzer: int, schritt: str) -> list:
-    return con.execute("SELECT * FROM historie WHERE schritt = ? AND nutzer_id = ? AND quelle IN (?, ?) ORDER BY id",
+    return con.execute("SELECT * FROM historie WHERE schritt = ? AND nutzer_id = ? AND quelle IN (?, ?, ?) ORDER BY id",
                        (schritt, nutzer, *QUELLEN)).fetchall()
 
 
