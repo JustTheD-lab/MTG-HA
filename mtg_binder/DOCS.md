@@ -122,11 +122,33 @@ gehört, zum Beispiel „Preis (Ø 7 Tage) ab 5 € → Spezial“ oder „Farbe
 - Preise je Deck: Wert der Liste, Kosten der Fehlt-Liste und Wert im Deck (Cardmarket Ø 7 Tage, bei Karten ohne
   angegebenen Druck der günstigste Druck).
 
+## Secret Lair
+
+Der Knopf **„Secret Lair“** im Regal (neben „Sets“) zeigt kommende Drops und die der letzten 12 Monate. Die Werte sind
+Summen aus Cardmarket (Ø 7 Tage, sonst Low, ohne Foil) und keine Kaufempfehlung.
+
+- **Teuerste Reprints:** je Karte der teuerste andere Nonfoil-Druck, zusammengezählt. **Günstigste Reprints** entsprechend.
+- **Dieser Drop heute:** der neue Druck selbst, sobald er bei Cardmarket einen Preis hat.
+- **Basic Lands** zählen nur gegen andere Secret Lairs, sonst stünden Sammlerdrucke im Vergleich.
+- **Kosten:** Oben stellst du ein, was ein Drop dich mit Versand kostet; je Drop lässt sich das ändern. Wizards nennt
+  nur Dollarpreise.
+
+Das Add-on gleicht einmal täglich ab und braucht dafür den Kartenkatalog. **Kurz vor dem Verkauf ist die Liste oft
+unvollständig:** Scryfall kennt dann nur einen Teil der Karten und keinen Namen des Drops. Die App gruppiert die Karten
+dann nach Tag und Nummer, nebeneinanderliegende Drops können dabei verschmelzen. Mit **„Drop einfügen“** gibst du Name,
+Verkaufstag und die Karten aus der Ankündigung von Wizards ein, je Zeile eine, gern mit „2x“ oder einem Zusatz wie
+`Eerie Interlude as "Beam Us Up"`. Sobald Scryfall die Drucke kennt, verbindet die App sie.
+
+Die Preise dieser Drops speichert das Add-on täglich, auch wenn du die Karten nicht besitzt. Nach einigen Tagen zeigt ein
+Drop darum seinen Verlauf seit dem Verkauf.
+
 ## Werte in Home Assistant (MQTT)
 
 - Mit laufendem **Mosquitto-Broker** und eingerichteter MQTT-Integration erscheinen die Sensoren von selbst unter
   dem Gerät **„MTG“**, z. B. `sensor.mtg_gesamtwert`, `sensor.mtg_karten_zur_prufung` oder
   `binary_sensor.mtg_pc_verbunden`. Je Binder und Kiste gibt es einen Wert- und einen Kartensensor.
+- `sensor.mtg_secret_lair_kommend` zählt die kommenden Drops, `sensor.mtg_secret_lair_neuester_drop` nennt den zuletzt
+  gefundenen. Sein Wert wechselt bei jedem neuen Drop und eignet sich als Auslöser einer Benachrichtigung.
 - Den Zugang zum Broker holt das Add-on selbst beim Supervisor. Es liest die Datenbank nur und öffnet keinen Port.
 - Status, Warteschlange und Prüfung kommen jede Minute. Werte und die Top-5-Listen kommen stündlich und sofort
   nach einem neuen Preistag.

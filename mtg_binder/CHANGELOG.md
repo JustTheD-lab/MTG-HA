@@ -1,5 +1,15 @@
 # Änderungen
 
+## 0.22.0
+- Secret Lair: Der neue Knopf im Regal zeigt kommende Drops und die der letzten 12 Monate. Je Karte stehen der teuerste
+  und der günstigste Nonfoil-Reprint, je Drop die Summen und das Verhältnis zu deinen Kosten. Das sind Zahlen zum
+  Vergleich, keine Kaufempfehlung.
+- Die App findet Drops täglich selbst (Scryfall, Namen von MTGJSON). Fehlende Karten fügst du als Text aus der
+  Ankündigung ein. Die Kosten je Drop sind einstellbar.
+- Für diese Drops speichert das Add-on jetzt täglich die Preise, auch wenn du die Karten nicht besitzt.
+- Home Assistant: neue Sensoren `sensor.mtg_secret_lair_kommend` und `sensor.mtg_secret_lair_neuester_drop`.
+- Datenbank Version 12 (die Sicherung entsteht beim Update wie immer).
+
 ## 0.21.0
 - ManaBox-Import in der App: Unter „Verwaltung“ einen ManaBox-Export wählen und je Binder, Liste und Deck entscheiden:
   neue Kiste, vorhandene Kiste, nach Sortierregeln oder überspringen. Listen und Decks sind zum Überspringen vorgewählt.

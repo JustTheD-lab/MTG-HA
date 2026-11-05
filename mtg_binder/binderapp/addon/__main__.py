@@ -169,6 +169,9 @@ def main() -> int:
     # Katalog täglich mit Scryfall abgleichen, nur Neues (Wunsch des Nutzers, 04.11.2026)
     from binderapp.katalog.abgleich import Katalogabgleich
     Katalogabgleich(DATEN / "katalog.sqlite", DATEN / "binder.sqlite").start()
+    # Secret-Lair-Drops finden und bewerten (Wunsch des Nutzers, 05.11.2026)
+    from binderapp.secretlair.drops import Secretabgleich
+    Secretabgleich(DATEN / "binder.sqlite", DATEN / "katalog.sqlite", DATEN / "preise" / "price_guide_1.json").start()
     # Täglich sichern, auch aufs Netzlaufwerk (Wunsch des Nutzers, 05.11.2026)
     from binderapp.db.sicherung import Tagessicherung
     ort = speicherort(optionen(DATEN / "options.json"))

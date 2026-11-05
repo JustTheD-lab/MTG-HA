@@ -343,6 +343,43 @@ CREATE TABLE IF NOT EXISTS dienst (
     info       TEXT                        -- JSON, z. B. {"pid": 1234, "zustand": "wartet"}
 );
 
+-- Secret-Lair-Drops (ab Version 12, secretlair/drops.py): keine Sammlung, sondern Marktdaten, deshalb ohne Historie.
+-- Die App bewertet Drops der letzten 12 Monate und kommende; ihre Preise landen zusätzlich im Verlauf `preis`.
+CREATE TABLE IF NOT EXISTS secret_drop (
+    id         INTEGER PRIMARY KEY,
+    schluessel TEXT NOT NULL UNIQUE,       -- mtgjson:<Name>, scryfall:<Tag>:<erste Nummer>, hand:<Kennung>
+    name       TEXT NOT NULL,
+    quelle     TEXT NOT NULL CHECK (quelle IN ('mtgjson', 'scryfall', 'hand')),
+    verkauf    TEXT,                       -- Verkaufstag JJJJ-MM-TT (aus Scryfall oder vom Nutzer)
+    kosten     REAL,                       -- eigene Kosten dieses Drops in Euro, NULL = Standard
+    umbenannt  INTEGER NOT NULL DEFAULT 0 CHECK (umbenannt IN (0, 1)),   -- Name vom Nutzer: der Abgleich lässt ihn
+    angelegt   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS secret_karte (
+    id            INTEGER PRIMARY KEY,
+    drop_id       INTEGER NOT NULL REFERENCES secret_drop(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    oracle_id     TEXT,                    -- NULL: Name nicht im Katalog gefunden
+    scryfall_id   TEXT,                    -- der neue Druck, sobald der Katalog ihn kennt
+    nummer        TEXT,
+    cardmarket_id INTEGER,
+    anzahl        INTEGER NOT NULL DEFAULT 1 CHECK (anzahl >= 1),
+    preis         REAL,                    -- dieser Druck, Ø 7 Tage, sonst Low
+    teuer         REAL,                    -- teuerster Nonfoil-Reprint (Wunsch des Nutzers)
+    teuer_set     TEXT,
+    teuer_nummer  TEXT,
+    guenstig      REAL,                    -- günstigster Nonfoil-Reprint
+    guenstig_set  TEXT,
+    nur_sld       INTEGER NOT NULL DEFAULT 0 CHECK (nur_sld IN (0, 1))   -- Basic Land: nur andere Secret Lairs zählen
+);
+
+CREATE TABLE IF NOT EXISTS secret_wert (
+    name  TEXT PRIMARY KEY,                -- kosten (Standard in Euro), abgleich, bewertet, fehler
+    wert  TEXT
+);
+
+CREATE INDEX IF NOT EXISTS i_secret_karte_drop ON secret_karte(drop_id);
 CREATE INDEX IF NOT EXISTS i_seite_binder   ON seite(binder_id, nummer);
 CREATE INDEX IF NOT EXISTS i_tasche_seite   ON tasche(seite_id);
 CREATE INDEX IF NOT EXISTS i_karte_tasche   ON karte(tasche_id);
@@ -380,4 +417,4 @@ CREATE INDEX IF NOT EXISTS i_karte_deck       ON karte(deck_id) WHERE deck_id IS
 CREATE INDEX IF NOT EXISTS i_deck_produkt_cm  ON deck_produkt(cardmarket_id);
 CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 
-PRAGMA user_version = 11;
+PRAGMA user_version = 12;

@@ -80,6 +80,11 @@ FEST = [
     ("sensor", "letzter_scan", "Letzter Scan", THEMA_STATUS, _wert("letzter_scan"), {"device_class": "timestamp"}),
     ("sensor", "letzter_preisabruf", "Letzter Preisabruf", THEMA_STATUS, _wert("letzter_preisabruf"),
      {"device_class": "timestamp"}),
+    ("sensor", "secret_lair_kommend", "Secret Lair kommend", THEMA_STATUS, _wert("secret_kommend"),
+     {**ANZAHL, "unit_of_measurement": "Drops", "icon": "mdi:treasure-chest"}),
+    # Der Name wechselt, sobald die App einen neuen Drop findet: gut als Auslöser einer Benachrichtigung
+    ("sensor", "secret_lair_neuester", "Secret Lair neuester Drop", THEMA_STATUS, _wert("secret_neuester"),
+     {"icon": "mdi:treasure-chest-outline"}),
     ("sensor", "gesamtwert", "Gesamtwert", THEMA_WERTE, _wert("gesamtwert"),
      {**EURO, "json_attributes_topic": THEMA_WERTE,
       "json_attributes_template": _liste("preisart", "preistag", "ohne_preis", "binder", "kisten", "decks")}),

@@ -28,6 +28,8 @@ Die Entitäts-IDs entstehen aus „MTG“ und dem Namen. Wer eine ID in Home Ass
 | `sensor.mtg_scan_zur_prufung` | davon im Scan-Eingang | 1 min |
 | `sensor.mtg_letzter_scan` | Zeitpunkt des letzten Scan-Fotos | 1 min |
 | `sensor.mtg_letzter_preisabruf` | Zeitpunkt des letzten Preisabrufs | 1 min |
+| `sensor.mtg_secret_lair_kommend` | Kommende Secret-Lair-Drops | 1 min |
+| `sensor.mtg_secret_lair_neuester_drop` | Zuletzt gefundener Drop; wechselt bei jedem neuen Drop | 1 min |
 | `sensor.mtg_gesamtwert` | Wert der Sammlung in € (Attribute: Preisart, Preistag, Karten ohne Preis, Liste der Binder und Kisten) | 1 h |
 | `sensor.mtg_veranderung_vortag` (`_3_tage`, `_30_tage`) | Veränderung in € | 1 h |
 | `sensor.mtg_veranderung_vortag_prozent` (`_3_tage_prozent`, `_30_tage_prozent`) | Veränderung in % | 1 h |

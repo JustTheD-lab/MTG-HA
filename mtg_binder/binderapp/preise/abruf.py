@@ -57,11 +57,14 @@ def herunterladen(ziel: Path, url: str = URL, oeffnen=urllib.request.urlopen) ->
 
 
 def sammlung_ids(con) -> set[int]:
-    """Produkte, deren Preise gespeichert werden: die Sammlung und (ab Version 8) die Decklisten, auch fehlende Karten
-    (bei Zeilen ohne Druck alle Drucke der Karte, für den günstigsten Preis)."""
+    """Produkte, deren Preise gespeichert werden: die Sammlung, (ab Version 8) die Decklisten, auch fehlende Karten
+    (bei Zeilen ohne Druck alle Drucke der Karte, für den günstigsten Preis), und (ab Version 12) die Secret-Lair-Drops
+    der letzten 12 Monate, damit ab dem Verkaufsstart ein echter Verlauf entsteht."""
     ids = {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM kartendaten WHERE cardmarket_id IS NOT NULL")}
     if version(con) >= 8:
         ids |= {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM deck_produkt")}
+    if version(con) >= 12:
+        ids |= {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM secret_karte WHERE cardmarket_id IS NOT NULL")}
     return ids
 
 

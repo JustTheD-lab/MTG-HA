@@ -12,6 +12,7 @@ from __future__ import annotations
 from binderapp.db import erkennung
 from binderapp.db.datenbank import version
 from binderapp.preise import werte as preise
+from binderapp.secretlair import drops as secret_drops
 
 NUTZER = 1
 TOP = 5
@@ -76,7 +77,9 @@ def status(con, nutzer: int = NUTZER) -> dict:
     else:
         pruefen = None
     preisstand = preise.stand(con)
+    secret = secret_drops.fuer_home_assistant(con) if version(con) >= 12 else {}
     return {
+        **secret,
         "pc_verbunden": "ON" if pc_verbunden else "OFF",
         "pc_zuletzt": _zeit(con.execute("SELECT zeitpunkt FROM dienst WHERE name = ?",
                                         (erkennung.DIENST,)).fetchone()[0]) if z is not None else None,
