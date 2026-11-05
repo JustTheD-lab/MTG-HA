@@ -59,7 +59,10 @@ async function pumpe() {
       try {
         if (!e.id) {
           // Der Server nimmt Fotos auch nach dem Beenden des Durchgangs an und erkennt Wiederholungen (gleiche Datei)
-          const r = await senden(`/api/scan/durchgang/${e.durchgang}/foto`, { datei: e.blob, typ: 'image/jpeg' });
+          const start = performance.now();
+          const messung = `aufnahme=${Math.round(e.bereit - e.ausgeloest)}&wartete=${Math.round(start - e.bereit)}`;
+          const r = await senden(`/api/scan/durchgang/${e.durchgang}/foto?${messung}`, { datei: e.blob, typ: 'image/jpeg' });
+          e.hochladenMs = Math.round(performance.now() - start);
           e.id = r.id; e.nummer = r.nummer;
           e.blob = null;                    // liegt jetzt im Add-on: Speicher am Handy freigeben
         }
@@ -185,6 +188,7 @@ function blitz(a) {
 /* ---------- Aufnahme ---------- */
 
 async function aufnehmen(a, grund, quelle = a.video, z = zone()) {
+  const ausgeloest = performance.now();
   const voll = document.createElement('canvas');
   voll.width = a.video.videoWidth; voll.height = a.video.videoHeight;
   voll.getContext('2d').drawImage(quelle, 0, 0, voll.width, voll.height);
@@ -195,7 +199,8 @@ async function aufnehmen(a, grund, quelle = a.video, z = zone()) {
   const [blob, vorschau] = await Promise.all([alsBlob(voll, 'image/jpeg', 0.92), alsBlob(klein, 'image/jpeg', 0.8)]);
   if (!blob) { a.meldung = 'Das Standbild ließ sich nicht aufnehmen.'; return; }
   const eintrag = { durchgang: a.durchgang, blob, vorschau, id: null, nummer: null, vorschauOk: false, vorschauVersuche: 0,
-    versuche: 0, verwerfen: false, laeuft: false, vorschauUrl: vorschau ? URL.createObjectURL(vorschau) : null };
+    versuche: 0, verwerfen: false, laeuft: false, vorschauUrl: vorschau ? URL.createObjectURL(vorschau) : null,
+    ausgeloest, bereit: performance.now(), hochladenMs: null };
   a.aufnahmen.push(eintrag);
   while (a.aufnahmen.length > AUFNAHMEN_MERKEN) {
     const alt = a.aufnahmen.shift();
@@ -492,7 +497,6 @@ function aufraeumen() {
   const a = ansicht;
   if (!a) return;
   a.laufend = false;
-  clearInterval(a.erkennUhr);
   try { a.bitmap?.close(); } catch { /* egal */ }
   a.strom?.getTracks().forEach((t) => t.stop());
   a.video.srcObject = null;
@@ -582,24 +586,42 @@ async function starten(a) {
   document.addEventListener('visibilitychange', a.sichtbar);
   anzeigen();
   schleife(a);
-  erkennungZeigen(a);
-  a.erkennUhr = setInterval(() => erkennungZeigen(a), 8000);
+  erkennungFolgen(a);
 }
 
-/** Läuft der PC, erkennt er die Fotos nach und nach: Zahl und zuletzt erkannte Karte dieses Durchgangs zeigen. */
-async function erkennungZeigen(a) {
-  if (document.hidden || !a.durchgang) return;
-  try {
-    const d = await holen(`/api/scan/durchgang/${a.durchgang}`);
-    if (ansicht !== a) return;
-    const erkannt = (d.fotos || []).filter((f) => f.karte);
-    const pruefen = erkannt.filter((f) => f.karte.status !== 'sicher' && !f.karte.geprueft).length;
-    const letzte = erkannt.sort((x, y) => y.nummer - x.nummer)[0];
-    a.el.erkannt.hidden = !erkannt.length;
-    a.el.erkannt.textContent = erkannt.length
-      ? `${erkannt.length} erkannt${pruefen ? ` (${pruefen} zu prüfen)` : ''} · zuletzt: ${letzte.karte.name}`
-      : '';
-  } catch { /* nur eine Anzeige */ }
+/** Läuft der PC, erkennt er die Fotos nach und nach: Zahl und zuletzt erkannte Karte dieses Durchgangs zeigen.
+    Die Anfrage bleibt beim Add-on offen, bis ein Foto fertig ist; der Name erscheint so ohne Verzögerung. */
+async function erkennungFolgen(a) {
+  let bis = 0;   // Nummer des letzten fertigen Fotos
+  while (ansicht === a) {
+    if (document.hidden || !a.durchgang) { await warte(1000); continue; }
+    try {
+      const d = await holen(`/api/scan/durchgang/${a.durchgang}/stand?ab=${bis}&warten=18`);
+      if (ansicht !== a) return;
+      a.el.erkannt.hidden = !d.erkannt;
+      a.el.erkannt.textContent = d.erkannt
+        ? `${d.erkannt} erkannt${d.pruefen ? ` (${d.pruefen} zu prüfen)` : ''} · zuletzt: ${d.zuletzt}`
+        : '';
+      if (d.neu.length) {
+        bis = Math.max(bis, ...d.neu.map((f) => f.nummer));
+        zeitenMelden(a, d.neu);
+      }
+    } catch { await warte(3000); /* nur eine Anzeige */ }
+  }
+}
+
+/** Messwerte für die Statistik am PC: Dauer des Hochladens und Zeit vom Auslösen bis zum sichtbaren Namen. */
+function zeitenMelden(a, fertig) {
+  const jetzt = performance.now();
+  const zeiten = [];
+  for (const f of fertig) {
+    const e = a.aufnahmen.find((x) => x.id === f.id);
+    if (e && !e.gemeldet) {
+      e.gemeldet = true;
+      zeiten.push({ id: f.id, hochladen_ms: e.hochladenMs, name_ms: Math.round(jetzt - e.ausgeloest) });
+    }
+  }
+  if (zeiten.length) senden('/api/scan/zeiten', { daten: { zeiten: zeiten.slice(-50) } }).catch(() => {});
 }
 
 async function fertig(a) {

@@ -214,6 +214,18 @@ CREATE TABLE IF NOT EXISTS scan_foto (
     UNIQUE (durchgang_id, nummer)
 );
 
+-- Messwerte je Scan-Foto (ab Version 10, Bulk-Scan schneller): keine Sammlungsdaten, deshalb ohne Historie.
+-- Zeiten in Sekunden seit 1970 auf der Uhr des Add-ons; die _ms-Werte misst das Handy mit seiner eigenen Uhr.
+CREATE TABLE IF NOT EXISTS scan_zeit (
+    scan_foto_id  INTEGER PRIMARY KEY REFERENCES scan_foto(id),
+    ausgeloest    REAL,      -- Add-on hat ausgelöst
+    angekommen    REAL,      -- Foto vollständig im Add-on
+    aufnahme_ms   INTEGER,   -- Handy: Auslösen bis JPEG fertig
+    warte_ms      INTEGER,   -- Handy: JPEG fertig bis Beginn des Hochladens (Warteschlange)
+    hochladen_ms  INTEGER,   -- Handy: Dauer des Hochladens
+    name_ms       INTEGER    -- Handy: Auslösen bis Name auf der Scan-Seite
+);
+
 -- Sortierregeln (ab Version 6): geordnete Liste je Nutzer, die erste passende aktive Regel bestimmt das Ziel
 -- (binderapp.sortieren). Bedingungen als JSON aus festen Feldern; Ziel ist eine Kiste oder ein Binder (Vormerkung).
 CREATE TABLE IF NOT EXISTS sortierregel (
@@ -365,4 +377,4 @@ CREATE INDEX IF NOT EXISTS i_karte_deck       ON karte(deck_id) WHERE deck_id IS
 CREATE INDEX IF NOT EXISTS i_deck_produkt_cm  ON deck_produkt(cardmarket_id);
 CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 
-PRAGMA user_version = 9;
+PRAGMA user_version = 10;

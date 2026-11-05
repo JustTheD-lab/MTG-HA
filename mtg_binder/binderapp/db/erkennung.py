@@ -105,9 +105,10 @@ SCAN_KISTE = "Scan-Eingang"
 SCAN_MARKE = "@scan-eingang"   # kiste.extern_name: findet die Kiste auch nach dem Umbenennen
 
 SQL_SCAN_NEUE = (
-    "SELECT f.id AS scan_id, f.datei, f.durchgang_id, f.nummer, f.sha256{sets}"
-    " FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id"
+    "SELECT f.id AS scan_id, f.datei, f.durchgang_id, f.nummer, f.sha256, f.groesse{sets}{zeit}"
+    " FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id{zeit_tabelle}"
     " WHERE f.status = 'neu' AND d.nutzer_id = ? ORDER BY f.id LIMIT ?")
+ZEIT_FELDER = ("ausgeloest", "angekommen", "aufnahme_ms", "warte_ms", "hochladen_ms", "name_ms")
 SET_CODE = re.compile(r"[a-z0-9]{2,8}")
 SETS_HOECHSTENS = 30
 
@@ -129,11 +130,46 @@ def scan_holen(con, nutzer: int, hoechstens: int) -> list[dict]:
     Ab Version 9 mit den erlaubten Sets des Durchgangs (`sets`, Liste; leer = alle)."""
     if version(con) < 5:
         return []
-    v9 = version(con) >= 9
-    zeilen = con.execute(SQL_SCAN_NEUE.format(sets=", d.sets" if v9 else ""), (nutzer, hoechstens)).fetchall()
+    v9, v10 = version(con) >= 9, version(con) >= 10
+    zeilen = con.execute(SQL_SCAN_NEUE.format(
+        sets=", d.sets" if v9 else "", zeit=", z.ausgeloest, z.angekommen" if v10 else "",
+        zeit_tabelle=" LEFT JOIN scan_zeit z ON z.scan_foto_id = f.id" if v10 else ""), (nutzer, hoechstens)).fetchall()
     for z in zeilen:
         aendern(con, nutzer, QUELLE, "scan_foto", z["scan_id"], {"status": "in_verarbeitung", "fehler": None})
     return [{**dict(z), "sets": list(sets_lesen(z["sets"] if v9 else None))} for z in zeilen]
+
+
+def scan_zeit_setzen(con, scan_id: int, werte: dict) -> None:
+    """Messwerte eines Scan-Fotos ergänzen (ab Version 10). Nur bekannte Felder, ohne Historie: Das sind keine
+    Sammlungsdaten. Vorhandene Werte bleiben, wenn der neue Wert fehlt."""
+    felder = {k: v for k, v in werte.items() if k in ZEIT_FELDER and v is not None}
+    if not felder or version(con) < 10:
+        return
+    spalten = ", ".join(felder)
+    platz = ", ".join("?" for _ in felder)
+    neu = ", ".join(f"{k} = excluded.{k}" for k in felder)
+    con.execute(f"INSERT INTO scan_zeit (scan_foto_id, {spalten}) VALUES (?, {platz})"   # Namen aus ZEIT_FELDER
+                f" ON CONFLICT (scan_foto_id) DO UPDATE SET {neu}", (scan_id, *felder.values()))
+
+
+def scan_zeiten(con, nutzer: int, grenze: int = 200) -> list[dict]:
+    """Die neuesten Messwerte des Handys (für die Statistik am PC, der sich merkt, was er schon hat)."""
+    if version(con) < 10:
+        return []
+    return [dict(z) for z in con.execute(
+        "SELECT z.scan_foto_id AS scan_id, z.aufnahme_ms, z.warte_ms, z.hochladen_ms, z.name_ms FROM scan_zeit z"
+        " JOIN scan_foto f ON f.id = z.scan_foto_id JOIN scan_durchgang d ON d.id = f.durchgang_id"
+        " WHERE d.nutzer_id = ? AND z.name_ms IS NOT NULL ORDER BY z.scan_foto_id DESC LIMIT ?", (nutzer, grenze))]
+
+
+def wartend(con, nutzer: int) -> dict:
+    """Wie viele Binderseiten und Scan-Fotos auf die Erkennung warten (Status „neu“)."""
+    neu = con.execute("SELECT COUNT(*) FROM foto WHERE nutzer_id = ? AND status = 'neu'", (nutzer,)).fetchone()[0]
+    scan = 0
+    if version(con) >= 5:
+        scan = con.execute("SELECT COUNT(*) FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id"
+                           " WHERE d.nutzer_id = ? AND f.status = 'neu'", (nutzer,)).fetchone()[0]
+    return {"neu": neu, "scan": scan}
 
 
 def scan_kiste(con, nutzer: int) -> int:

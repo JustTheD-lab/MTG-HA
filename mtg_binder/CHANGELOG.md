@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.15.0
+- Bulk-Scan schneller: Der PC erfährt sofort von neuen Fotos, statt alle 30 Sekunden nachzusehen. Sobald die Scan-Seite
+  Bilder schickt, lädt er schon die Modelle. Die Scan-Seite zeigt den Namen, sobald die Karte erkannt ist.
+- Messwerte je Scan-Foto (Datenbank Version 10, beim Start mit Sicherung): Sie zeigen, wo die Zeit bleibt. Die
+  Erkennung am PC zeigt sie im neuen Statistikfenster.
+- Die Erkennung am PC muss dazu neu gebaut werden. Mit der alten exe läuft das Add-on weiter, nur ohne diese Vorteile.
+
 ## 0.14.2
 - Preisverlauf begrenzt: Die Preise bleiben Tag für Tag gespeichert. Erreichen sie etwa 200 MB, löscht das Add-on
   beim täglichen Abruf die ältesten Tage; die letzten 40 Tage bleiben immer.

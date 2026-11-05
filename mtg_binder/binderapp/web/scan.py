@@ -14,9 +14,11 @@ neuen Grundbild.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import os
+import time
 from contextlib import closing
 
 from starlette.concurrency import run_in_threadpool
@@ -36,6 +38,25 @@ from binderapp.web.speicher import MELDUNG as MELDUNG_SPEICHER
 MAX_VORSCHAU = 512 * 1024
 MAX_BILD = GROESSTE_SEITE * GROESSTE_SEITE
 QUELLE = "scan"
+STAND_WARTEN = 20     # Sekunden, die /scan/durchgang/{id}/stand höchstens offen bleibt
+STAND_TAKT = 0.25     # Sekunden zwischen zwei Blicken in die Datenbank während des Wartens
+ZEITEN_HOECHSTENS = 50
+AKTIV = 30            # so viele Sekunden nach dem letzten Bild gilt die Scan-Seite als aktiv
+_letztes_bild = 0.0   # time.monotonic() des letzten Bildes; gilt für den einen Server-Prozess
+
+
+def scan_aktiv() -> bool:
+    """Schickt die Scan-Seite gerade Bilder? Der PC lädt dann schon die Modelle (siehe `/pc/warten`)."""
+    return _letztes_bild > 0 and time.monotonic() - _letztes_bild < AKTIV
+
+
+def _ms(wert) -> int | None:
+    """Messwert des Handys: ganze Millisekunden von 0 bis 24 Stunden, sonst nichts."""
+    try:
+        z = int(float(wert))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return z if 0 <= z <= 86_400_000 else None
 
 
 def _zahl(wert: str | None, name: str, ganz: bool = True):
@@ -168,6 +189,37 @@ def routen(h: Helfer) -> list[Route]:
                              "sets": list(erkennung.sets_lesen(d["sets"])) if v9 else None,
                              "fotos": antwort})
 
+    async def stand(request):
+        """Langes Warten der Scan-Seite: Antwortet, sobald ein Foto nach Nummer `ab` fertig ist, spätestens nach
+        `warten` Sekunden. Klein gehalten, weil das Handy über das Internet fragt (Nabu Casa)."""
+        did = request.path_params["id"]
+        q = request.query_params
+        try:
+            ab = _zahl(q.get("ab", "0"), "Nummer")
+            ende = time.monotonic() + min(max(_zahl(q.get("warten", "0"), "Wartezeit", ganz=False), 0), STAND_WARTEN)
+
+            def lesen():
+                with closing(h.db()) as con:
+                    con.execute("BEGIN")
+                    durchgang_holen(con, did)
+                    neu = con.execute("SELECT id, nummer FROM scan_foto WHERE durchgang_id = ? AND nummer > ?"
+                                      " AND status IN ('erkannt', 'fehler') ORDER BY nummer", (did, ab)).fetchall()
+                    z = con.execute("SELECT COUNT(*) AS erkannt, SUM(k.status != 'sicher' AND k.geprueft = 0) AS pruefen"
+                                    " FROM scan_foto f JOIN karte k ON k.id = f.karte_id WHERE f.durchgang_id = ?",
+                                    (did,)).fetchone()
+                    letzte = con.execute("SELECT k.name FROM scan_foto f JOIN karte k ON k.id = f.karte_id"
+                                         " WHERE f.durchgang_id = ? ORDER BY f.nummer DESC LIMIT 1", (did,)).fetchone()
+                return {"neu": [dict(x) for x in neu], "erkannt": z["erkannt"], "pruefen": z["pruefen"] or 0,
+                        "zuletzt": letzte["name"] if letzte else None}
+
+            while True:
+                antwort = await run_in_threadpool(lesen)
+                if antwort["neu"] or time.monotonic() >= ende:
+                    return JSONResponse(antwort)
+                await asyncio.sleep(STAND_TAKT)
+        except Fehler as f:
+            return fehler(str(f), f.status)
+
     def original(request):
         with closing(h.db()) as con:
             f = foto_holen(con, request.path_params["id"])
@@ -286,6 +338,8 @@ def routen(h: Helfer) -> list[Route]:
 
     @h.schreibend
     async def bild(request):
+        global _letztes_bild
+        _letztes_bild = time.monotonic()
         did = request.path_params["id"]
         q = request.query_params
         b, hh = _zahl(q.get("b"), "Breite"), _zahl(q.get("h"), "Höhe")
@@ -311,6 +365,8 @@ def routen(h: Helfer) -> list[Route]:
         except ValueError as f:
             raise Fehler(f"Ungültiges Bild: {f}.")
         antwort = e.als_dict()
+        if e.ausloesen:
+            antwort["zeit"] = round(time.time(), 3)   # Messpunkt „Auslösen“ (Uhr des Add-ons)
         if lauf is not None:
             letzte_antwort[did] = (lauf, antwort)
         if e.ausloesen:
@@ -339,6 +395,7 @@ def routen(h: Helfer) -> list[Route]:
             return fehler(str(f), f.status)
         except ClientDisconnect:
             return Response(status_code=400)
+        angekommen = time.time()
         offen = ausloesungen.get(did)
         messung = offen[0] if offen else None   # Messwerte der Auslösung zu diesem Foto (in Reihenfolge)
         abgelegt: list = []
@@ -359,6 +416,10 @@ def routen(h: Helfer) -> list[Route]:
                 "durchgang_id": did, "nummer": nummer, "datei": datei, "sha256": empfang.sha256,
                 "groesse": empfang.groesse, "status": "neu",
                 "ausloeser": json.dumps(messung, ensure_ascii=False) if messung else None})
+            erkennung.scan_zeit_setzen(con, fid, {
+                "ausgeloest": (messung or {}).get("zeit"), "angekommen": round(angekommen, 3),
+                "aufnahme_ms": _ms(request.query_params.get("aufnahme")),
+                "warte_ms": _ms(request.query_params.get("wartete"))})
             os.replace(empfang.teil, h.fotos / datei)   # vor dem COMMIT; scheitert das COMMIT, wird sie entfernt
             abgelegt.append(h.fotos / datei)
             return fid, nummer, True
@@ -408,6 +469,26 @@ def routen(h: Helfer) -> list[Route]:
             empfang.teil.unlink(missing_ok=True)
         return JSONResponse({"vorschau": schluessel}, status_code=201)
 
+    @h.schreibend
+    async def zeiten(request):
+        """Messwerte des Handys je Foto: {"zeiten": [{"id", "hochladen_ms", "name_ms"}]}. Nur Statistik, deshalb
+        werden unbekannte Fotos und unsinnige Werte still übergangen."""
+        d = await h.json_daten(request)
+        liste = d.get("zeiten")
+        if not isinstance(liste, list) or len(liste) > ZEITEN_HOECHSTENS:
+            raise Fehler(f"Bitte „zeiten“ als Liste von höchstens {ZEITEN_HOECHSTENS} Einträgen angeben.")
+
+        def arbeit(con):
+            for z in liste:
+                if not isinstance(z, dict) or not isinstance(z.get("id"), int):
+                    continue
+                if con.execute("SELECT 1 FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id"
+                               " WHERE f.id = ? AND d.nutzer_id = ?", (z["id"], h.nutzer)).fetchone():
+                    erkennung.scan_zeit_setzen(con, z["id"], {"hochladen_ms": _ms(z.get("hochladen_ms")),
+                                                              "name_ms": _ms(z.get("name_ms"))})
+        await run_in_threadpool(h.schreibvorgang, arbeit)
+        return JSONResponse({"ok": True})
+
     def status_setzen(von: tuple[str, ...], nach: str, meldung: str):
         @h.schreibend
         async def handler(request):
@@ -428,6 +509,8 @@ def routen(h: Helfer) -> list[Route]:
         Route("/scan", _lesend(uebersicht)),
         Route("/scan/durchgang", beginnen, methods=["POST"]),
         Route("/scan/durchgang/{id:int}", _lesend(durchgang)),
+        Route("/scan/durchgang/{id:int}/stand", stand),
+        Route("/scan/zeiten", zeiten, methods=["POST"]),
         Route("/scan/durchgang/{id:int}/beenden", beenden, methods=["POST"]),
         Route("/scan/durchgang/{id:int}/einstellung", einstellen, methods=["POST"]),
         Route("/scan/sets", _lesend(sets_suchen)),

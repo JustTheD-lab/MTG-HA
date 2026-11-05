@@ -4,7 +4,9 @@ Läuft im Add-on als eigener Server auf Port 8099 (nur im Heimnetz, nicht über 
 den Schlüssel des PCs (`Authorization: Bearer …`); gespeichert ist im Add-on nur dessen SHA-256 (`pc_schluessel`
 im Datenordner). Erzeugt wird der Schlüssel in der Oberfläche (`/api/pc/schluessel`, nur Admins über Ingress).
 
-  GET  /pc/stand                      Version, Warteschlange, Katalogstand, Netzlaufwerk
+  GET  /pc/stand                      Version, Warteschlange, Katalogstand, Netzlaufwerk, Uhrzeit
+  GET  /pc/warten?sekunden=           antwortet, sobald Fotos warten (spätestens nach 25 s)
+  GET  /pc/scan/zeiten                neueste Messwerte des Handys für die Statistik am PC
   POST /pc/anmelden    {kennung}      ein Verarbeiter je Add-on; hängende Fotos zurück auf „neu“
   POST /pc/lebenszeichen {kennung, zustand, …}
   POST /pc/beenden     {kennung}      eigene Fotos zurück auf „neu“
@@ -28,6 +30,7 @@ import os
 import re
 import secrets
 import sqlite3
+import time
 from contextlib import closing
 from pathlib import Path
 
@@ -41,6 +44,7 @@ from binderapp.db import erkennung
 from binderapp.db.datenbank import schreiben, verbinden, version
 from binderapp.preise import zeitplan
 from binderapp.sortieren import einsortieren
+from binderapp.web.scan import scan_aktiv
 from binderapp.web.speicher import MELDUNG, Speicher
 
 NUTZER = 1
@@ -52,6 +56,8 @@ BILD_HOECHSTENS = 3 * 1024 * 1024
 JSON_HOECHSTENS = 4 * 1024 * 1024
 KATALOG_HOECHSTENS = 600 * 1024 * 1024
 HOLEN_HOECHSTENS = 16
+WARTEN_HOECHSTENS = 25   # Sekunden, die /pc/warten höchstens offen bleibt
+WARTEN_TAKT = 0.2        # Sekunden zwischen zwei Blicken in die Datenbank während des Wartens
 
 log = logging.getLogger("binderapp.pc")
 
@@ -235,8 +241,30 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
                                          " WHERE d.nutzer_id = ? AND f.status IN ('neu', 'in_verarbeitung')",
                                          (NUTZER,)).fetchone()[0]
                 return {"version": os.environ.get("BINDER_VERSION", "?"), "schema": version(con), "warteschlange": warte,
-                        "katalog": katalog_stand(katalog), "speicher": speicher.stand()}
+                        "katalog": katalog_stand(katalog), "speicher": speicher.stand(), "jetzt": time.time()}
         return JSONResponse(await run_in_threadpool(lesen))
+
+    async def warten(request):
+        """Langes Warten: Antwortet, sobald ein Foto auf die Erkennung wartet, spätestens nach `sekunden`. So erfährt
+        der PC ohne Verzögerung von neuen Fotos und muss nicht in festen Abständen nachsehen. `scan_aktiv`: Die
+        Scan-Seite schickt gerade Bilder; der PC lädt dann schon die Modelle."""
+        wert = request.query_params.get("sekunden", "0")
+        ende = time.monotonic() + min(float(wert) if wert.replace(".", "", 1).isdigit() else 0.0, WARTEN_HOECHSTENS)
+
+        def lesen():
+            with closing(verbinden(datenbank, nur_lesen=True)) as con:
+                return erkennung.wartend(con, NUTZER)
+        while True:
+            zahlen = await run_in_threadpool(lesen)
+            if zahlen["neu"] or zahlen["scan"] or time.monotonic() >= ende:
+                return JSONResponse({**zahlen, "scan_aktiv": scan_aktiv()})
+            await asyncio.sleep(WARTEN_TAKT)
+
+    async def scan_zeiten(request):
+        def lesen():
+            with closing(verbinden(datenbank, nur_lesen=True)) as con:
+                return erkennung.scan_zeiten(con, NUTZER)
+        return JSONResponse({"zeiten": await run_in_threadpool(lesen)})
 
     async def anmelden(request):
         kennung = _kennung(await _json(request))
@@ -495,6 +523,8 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
         Route("/pc/bilder/fehlend", geschuetzt(bilder_fehlend)),
         Route("/pc/katalog", geschuetzt(katalog_ersetzen), methods=["PUT"]),
         Route("/pc/katalog/neu", geschuetzt(katalog_neu)),
+        Route("/pc/warten", geschuetzt(warten)),
+        Route("/pc/scan/zeiten", geschuetzt(scan_zeiten)),
         Route("/pc/scan/fotos", geschuetzt(scan_liste)),
         Route("/pc/scan/foto/{id:int}", geschuetzt(scan_foto, braucht_speicher="fotos")),
         Route("/pc/scan/holen", geschuetzt(scan_holen, braucht_speicher="fotos"), methods=["POST"]),
