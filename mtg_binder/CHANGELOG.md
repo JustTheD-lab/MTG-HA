@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.22.2
+- Nach einem Update bietet die App oben „Neu laden“ an, wenn die geöffnete Seite noch den alten Stand zeigt. Das wirkt ab
+  dem nächsten Update; für dieses bitte die Seite einmal neu laden.
+
 ## 0.22.1
 - Secret Lair ist jetzt ein Untermenü der Sets: Der Knopf steht oben rechts in der Sets-Ansicht, nicht mehr im Regal.
 

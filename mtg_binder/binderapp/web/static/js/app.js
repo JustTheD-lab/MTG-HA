@@ -146,13 +146,27 @@ speicherHinweis.querySelector('.speicher-zu').addEventListener('click', () => {
   speicherAusgeblendet = true;
   speicherHinweis.hidden = true;
 });
+// Nach einem Update läuft eine offene Seite mit dem alten Code weiter, in der Home-Assistant-App oft lange. Meldet das
+// Add-on eine andere Version als beim Laden, bietet die Seite das Neuladen an (Befund 06.11.2026).
+const versionHinweis = Object.assign(document.createElement('div'), { className: 'speicher-hinweis', hidden: true });
+versionHinweis.setAttribute('role', 'status');
+versionHinweis.innerHTML = '<p class="speicher-text">Eine neue Version der App ist da.</p>'
+  + '<button type="button" class="knopf version-neu">Neu laden</button>';
+document.body.prepend(versionHinweis);
+versionHinweis.querySelector('.version-neu').addEventListener('click', () => location.reload());
+let geladeneVersion = null;
+
 async function speicherPruefen() {
   try {
     const s = await holen('/api/speicher');
     if (!s.meldung) speicherAusgeblendet = false;
     speicherHinweis.querySelector('.speicher-text').textContent = s.meldung ?? '';
     speicherHinweis.hidden = !s.meldung || speicherAusgeblendet;
+    geladeneVersion ??= s.version ?? null;
+    versionHinweis.hidden = !s.version || s.version === geladeneVersion;
   } catch { /* Server nicht erreichbar: das zeigen die Ansichten selbst */ }
 }
 speicherPruefen();
 setInterval(speicherPruefen, 60000);
+// Zurück in die App: gleich nachsehen, statt bis zu einer Minute zu warten
+document.addEventListener('visibilitychange', () => { if (!document.hidden) speicherPruefen(); });

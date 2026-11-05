@@ -415,7 +415,8 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
             return JSONResponse(verarbeiter_status(con))
 
     def speicherstand(request):
-        return JSONResponse(speicher.stand())
+        # Version des Add-ons (am PC keine): Die Oberfläche merkt so, dass ein Update eingespielt wurde
+        return JSONResponse({**speicher.stand(), "version": os.environ.get("BINDER_VERSION")})
 
     # Add-on: Verbindung zum PC (Schlüssel für die PC-Schnittstelle, web/pc.py)
     def pc_verbindung(request):

@@ -212,4 +212,5 @@ Die vorhandene Datenbank wird vorher gesichert, die eingespielte Datei danach um
 
 Repository neu füllen (`--repo …`) und pushen. Home Assistant zeigt „Update verfügbar“, sobald die Version in
 `config.yaml` gestiegen ist (sofort über „Nach Updates suchen“ im Store-Menü), mit den Änderungen aus
-`CHANGELOG.md`. Beim ersten Start einer neuen Version wird die Datenbank gesichert.
+`CHANGELOG.md`. Beim ersten Start einer neuen Version wird die Datenbank gesichert. Eine schon geöffnete Seite läuft
+mit dem alten Stand weiter; die App bietet dann oben „Neu laden“ an.
