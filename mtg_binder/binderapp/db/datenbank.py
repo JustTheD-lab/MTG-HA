@@ -22,6 +22,7 @@ VERSION = 10         # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5:
                      # 10: Messwerte je Scan-Foto (05.11.2026)
 MINDEST = 2          # ältester Stand, mit dem Server und Verarbeiter noch laufen (ohne Kisten)
 WARTEZEIT = 10       # Sekunden Wartezeit, wenn ein anderer Prozess gerade schreibt
+ANZAHL_MAX = 999     # so viele Exemplare höchstens in einem Posten
 
 # Spalten, die Version 2 an bestehende Tabellen anhängt (Reihenfolge wie in schema.sql)
 SPALTEN_V2 = {
@@ -282,6 +283,14 @@ def aendern(con, nutzer_id: int, quelle: str, tabelle: str, datensatz: int, feld
     return neu
 
 
+def scan_fotos_von(con, karte_id: int) -> list[int]:
+    """Scan-Fotos einer Karte. Wer die Karte löscht, löst sie vorher mit Historie: Sonst leert ON DELETE SET NULL die
+    Verbindung unbemerkt, und ein Rückgängig stellt sie nicht wieder her."""
+    if version(con) < 5:
+        return []
+    return [z[0] for z in con.execute("SELECT id FROM scan_foto WHERE karte_id = ?", (karte_id,)).fetchall()]
+
+
 def loeschen(con, nutzer_id: int, quelle: str, tabelle: str, datensatz: int, *,
              schritt: str | None = None, rueckgaengig_von: str | None = None) -> dict:
     """Löscht einen Datensatz; die Historie behält alle Felder als „alt"."""
@@ -290,6 +299,10 @@ def loeschen(con, nutzer_id: int, quelle: str, tabelle: str, datensatz: int, *,
     if zeile is None:
         raise KeyError(f"{tabelle} {datensatz} fehlt")
     alt = dict(zeile)
+    if tabelle == "karte":
+        for foto in scan_fotos_von(con, datensatz):
+            aendern(con, nutzer_id, quelle, "scan_foto", foto, {"karte_id": None}, schritt=schritt,
+                    rueckgaengig_von=rueckgaengig_von)
     con.execute(f"DELETE FROM {tabelle} WHERE id = ?", (datensatz,))
     _protokoll(con, nutzer_id, quelle, tabelle, datensatz, "geloescht", alt, None, schritt, rueckgaengig_von)
     return alt

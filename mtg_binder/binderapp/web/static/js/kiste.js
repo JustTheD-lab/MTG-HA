@@ -855,6 +855,11 @@ async function fachkastenLaden() {
   const s = S;
   const gen = ++s.gen;
   alleAbbrechen(s);
+  // Eine abgebrochene Kartenanfrage räumt nicht selbst auf: Sonst bliebe die Kiste gedimmt und ließe sich nicht antippen
+  s.neuLaedt = false;
+  const huelle = s.wurzel.querySelector('.kiste-huelle');
+  huelle.classList.remove('kiste-laedt');
+  huelle.removeAttribute('aria-busy');
   const steuer = new AbortController();
   s.anfragen.add(steuer);
   if (s.fachkasten) fachkastenZeichnen();   // sofort der letzte Stand, die Zahlen kommen gleich nach
@@ -1458,7 +1463,8 @@ async function neuAufbauen({ wahlBehalten = false } = {}) {
   alt.wurzel.classList.add('kiste-umbau');
   alt.wurzel.inert = true;
   const neu = await aufbauen(eltern, alt.parameter, {
-    still: true, wahlModus: wahlBehalten && alt.wahlModus, foilModus: wahlBehalten && alt.foilModus, offen });
+    still: true, wahlModus: wahlBehalten && alt.wahlModus, foilModus: wahlBehalten && alt.foilModus, offen,
+    fachModus: alt.hatFaecher ? alt.fachModus : null });   // auch die Wahl, die nur für diesen Besuch gilt
   if (!neu) return;   // Fehler: aufbauen hat die Ansicht schon ersetzt
   await neu.erstes;
   if (S !== neu) return;
@@ -2204,7 +2210,8 @@ function fehlerAnzeigen(wurzel, text) {
 /** Baut die Ansicht auf: eine Kiste (`parameter.kiste`) oder die Gesamtsammlung (`parameter.sammlung`).
     `still`: ohne Einblendung und zunächst verborgen (Neuaufbau nach einer Änderung, siehe neuAufbauen);
     `wahlModus`: Auswahlmodus gleich wieder einschalten. Gibt den Zustand zurück (`erstes` = erste Seite geladen). */
-async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, foilModus = false, offen = null } = {}) {
+async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, foilModus = false, offen = null,
+  fachModus = null } = {}) {
   abraeumen();
   const sammlung = Boolean(parameter.sammlung);
   const id = sammlung ? null : parameter.kiste;
@@ -2233,7 +2240,7 @@ async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, f
     id, sammlung, schluessel, parameter,
     basis: sammlung ? '#/sammlung' : `#/kiste/${id}`,
     hatFaecher,
-    fachModus: hatFaecher && gespeichert('fachmodus') !== 'alle' ? 'faecher' : 'alle',
+    fachModus: hatFaecher ? fachModus ?? (gespeichert('fachmodus') === 'alle' ? 'alle' : 'faecher') : 'alle',
     fach: null, fachkasten: null, fachZieht: false, fachY: 0,
     kopf,
     optionen,

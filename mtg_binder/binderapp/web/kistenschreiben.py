@@ -38,7 +38,7 @@ from binderapp.web.pruefen import KEIN_KATALOG, SPRACHEN, _kennung
 __all__ = ["routen", "datei_lesen", "dateiname", "summe"]
 
 DATEINAME_MAX = 120
-ANZAHL_MAX = 999
+ANZAHL_MAX = datenbank.ANZAHL_MAX
 AUSWAHL_MAX = 20000      # so viele Karten höchstens in einem Schritt (die ganze Sammlung hat rund 9.600)
 ABFRAGE_MAX = 2000       # Länge des Filtertexts
 ZUSTAENDE = ("mint", "near_mint", "excellent", "good", "light_played", "played", "poor")  # wie ManaBox

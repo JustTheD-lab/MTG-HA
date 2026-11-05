@@ -52,7 +52,7 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
 from binderapp import katalog as katalog_paket
-from binderapp.db.datenbank import aendern, einfuegen, loeschen, version
+from binderapp.db.datenbank import ANZAHL_MAX, aendern, einfuegen, loeschen, version
 from binderapp.katalog import kartendaten, suche
 from binderapp.preise import zeitplan
 from binderapp.sortieren import einsortieren
@@ -62,7 +62,6 @@ QUELLE = "nutzer"
 MIN_VERSION = 3          # Schema mit historie.schritt und kartendaten
 SPRACHEN = ("en", "de", "fr", "it", "es", "pt", "ja", "ko", "ru", "zhs", "zht", "la", "he", "ar", "grc", "ph")
 INHALTE = ("leer", "rueckseite")
-ANZAHL_MAX = 999
 WARTESCHLANGE_MAX = 2000
 NAMEN_MAX = 20
 SUCHTEXT_MAX = 80
@@ -347,7 +346,7 @@ def _zuruecknehmen(con, nutzer: int, alter_schritt: str, zeilen) -> str:
     neuer = _neuer_schritt()
     for z in reversed(zeilen):
         tabelle = z["tabelle"]
-        if tabelle not in ("karte", "tasche"):
+        if tabelle not in ("karte", "tasche", "scan_foto"):   # scan_foto: Verbindung einer gelöschten Karte
             raise Fehler(KONFLIKT, 409)
         spalten = _spalten(con, tabelle)
         alt, neu = _json(z["alt"]), _json(z["neu"])

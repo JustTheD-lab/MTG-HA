@@ -671,19 +671,15 @@ def _ab_version_8(con) -> None:
 
 def kiste_mit_karten_loeschen(con, nutzer: int, kiste_id: int) -> dict:
     """Löscht die Kiste mit ihren Karten und Fächern, alles mit Historie (Wunsch des Nutzers, 01.11.2026). Scan-Fotos
-    verlieren den Verweis auf ihre Karte (sichtbar mit Historie), die Fotos selbst bleiben. Eine Kiste, in die eine
-    Sortierregel einsortiert, bleibt stehen. Der Scan-Eingang entsteht beim nächsten Scan neu."""
+    verlieren den Verweis auf ihre Karte (`datenbank.loeschen`, sichtbar mit Historie), die Fotos selbst bleiben. Eine
+    Kiste, in die eine Sortierregel einsortiert, bleibt stehen. Der Scan-Eingang entsteht beim nächsten Scan neu."""
     regeln = einsortieren.kiste_benutzt(con, nutzer, kiste_id)
     if regeln:
         raise Fehler("Diese Kiste ist Ziel der Sortierregel „" + "“, „".join(regeln[:3]) + "“. "
                      "Erst die Regel ändern oder löschen.", 409)
     zahl = {"posten": 0, "karten": 0}
-    hat_scan = version(con) >= 5
     for k in con.execute("SELECT id, anzahl FROM karte WHERE nutzer_id = ? AND kiste_id = ? ORDER BY id",
                          (nutzer, kiste_id)).fetchall():
-        if hat_scan:
-            for f in con.execute("SELECT id FROM scan_foto WHERE karte_id = ?", (k["id"],)).fetchall():
-                aendern(con, nutzer, QUELLE, "scan_foto", f["id"], {"karte_id": None})
         loeschen(con, nutzer, QUELLE, "karte", k["id"])
         zahl["posten"] += 1
         zahl["karten"] += k["anzahl"]

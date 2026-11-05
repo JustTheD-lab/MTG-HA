@@ -48,7 +48,7 @@ __all__ = ["routen", "foil_umschalten", "seite_foil", "tasche_verschieben", "kar
 
 GROSS = 2 ** 62
 NICHT_KOPIEREN = ("id", "angelegt", "geaendert")
-ZURUECK_LISTE_MAX = 500
+ZURUECK_LISTE_MAX = 2000
 
 
 def _foil(wert) -> bool:
@@ -222,10 +222,10 @@ def _tasche_fuer_karte(con, nutzer: int, seite_id: int, zeile: int, spalte: int,
     if t is None:
         return schritte.einfuegen(con, nutzer, "tasche", {"seite_id": seite_id, "zeile": zeile, "spalte": spalte,
                                                           "inhalt": "karte", "ausschnitt": None}, schritt=schritt)
-    if t["inhalt"] != "karte":
-        # Rückseite: Der Foto-Ausschnitt zeigt die Rückseite, nicht die neue Karte (Rückgängig stellt ihn wieder her)
-        felder = {"inhalt": "karte", **({"ausschnitt": None} if t["inhalt"] == "rueckseite" else {})}
-        schritte.aendern_genau(con, nutzer, "tasche", t["id"], felder, schritt=schritt)
+    # Der Foto-Ausschnitt zeigt eine Rückseite, eine leere Tasche oder eine Karte, die nicht mehr hier liegt, also nie
+    # die neue Karte (Rückgängig stellt ihn wieder her). Nur eine unklare Tasche zeigt, was jetzt bestimmt wird.
+    felder = {"inhalt": "karte", **({} if t["inhalt"] == "unsicher" else {"ausschnitt": None})}
+    schritte.aendern_genau(con, nutzer, "tasche", t["id"], felder, schritt=schritt)
     return t["id"]
 
 
@@ -267,16 +267,17 @@ def zurueckstellen(con, nutzer: int, ids: list[int]) -> dict:
     return {**karten_verschieben(con, nutzer, erlaubt, ziel), "uebersprungen": uebersprungen, "kiste_id": ziel}
 
 
-def zurueckgestellte(con, nutzer: int) -> list[dict]:
-    """Karten aus „Zurückgestellt“, die sich in eine Tasche legen lassen (nur sicher oder geprüft)."""
+def zurueckgestellte(con, nutzer: int) -> dict:
+    """Karten aus „Zurückgestellt“, die sich in eine Tasche legen lassen (nur sicher oder geprüft). `weitere`: so viele
+    Posten passen nicht mehr in die Liste, die Oberfläche sagt das dazu."""
     kiste = erkennung.zurueck_kiste_id(con, nutzer)
     if kiste is None:
-        return []
-    zeilen = con.execute(
-        "SELECT id, name, set_code, nummer, sprache, foil, anzahl FROM karte WHERE nutzer_id = ? AND kiste_id = ?"
-        " AND (status = 'sicher' OR geprueft = 1) ORDER BY name COLLATE NOCASE, id LIMIT ?",
-        (nutzer, kiste, ZURUECK_LISTE_MAX)).fetchall()
-    return [{**dict(z), "foil": bool(z["foil"])} for z in zeilen]
+        return {"karten": [], "weitere": 0}
+    von = "FROM karte WHERE nutzer_id = ? AND kiste_id = ? AND (status = 'sicher' OR geprueft = 1)"
+    zeilen = con.execute(f"SELECT id, name, set_code, nummer, sprache, foil, anzahl {von}"
+                         " ORDER BY name COLLATE NOCASE, id LIMIT ?", (nutzer, kiste, ZURUECK_LISTE_MAX)).fetchall()
+    gesamt = con.execute(f"SELECT COUNT(*) {von}", (nutzer, kiste)).fetchone()[0]
+    return {"karten": [{**dict(z), "foil": bool(z["foil"])} for z in zeilen], "weitere": gesamt - len(zeilen)}
 
 
 def zurueckgestellte_einlegen(con, nutzer: int, seite_id: int, zeile, spalte, karte_id: int) -> dict:
@@ -395,7 +396,7 @@ def routen(h) -> list[Route]:
         try:
             with closing(h.db()) as con:
                 _ab_version_3(con, 404)
-                return JSONResponse({"karten": zurueckgestellte(con, h.nutzer)})
+                return JSONResponse(zurueckgestellte(con, h.nutzer))
         except Fehler as f:
             return fehler(str(f), f.status)
 

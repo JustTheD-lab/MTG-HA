@@ -11,7 +11,7 @@ import json
 import re
 from collections import defaultdict
 
-from binderapp.db.datenbank import aendern, einfuegen, version
+from binderapp.db.datenbank import ANZAHL_MAX, aendern, einfuegen, version
 from binderapp.db.importieren import Tasche, karte_felder, schreibe_taschen
 from binderapp.db.seiten import raster_masse
 
@@ -235,8 +235,9 @@ def scan_ergebnis_schreiben(con, nutzer: int, scan_id: int, tasche: Tasche | Non
     if e.get("status") == "sicher" and e.get("scryfall_id"):
         z = con.execute(
             "SELECT id, anzahl FROM karte WHERE nutzer_id = ? AND kiste_id = ? AND quelle = 'scan' AND scryfall_id = ?"
-            " AND COALESCE(sprache, '') = ? AND foil = ? AND status = 'sicher' AND geprueft = 0 ORDER BY id LIMIT 1",
-            (nutzer, kiste, e["scryfall_id"], e.get("sprache") or "", foil)).fetchone()
+            " AND COALESCE(sprache, '') = ? AND foil = ? AND zustand IS NULL AND status = 'sicher' AND geprueft = 0"
+            " AND anzahl < ? ORDER BY id LIMIT 1",
+            (nutzer, kiste, e["scryfall_id"], e.get("sprache") or "", foil, ANZAHL_MAX)).fetchone()
         if z is not None:
             aendern(con, nutzer, QUELLE, "karte", z["id"], {"anzahl": z["anzahl"] + 1, **offen})
             kid, zusammen = z["id"], True

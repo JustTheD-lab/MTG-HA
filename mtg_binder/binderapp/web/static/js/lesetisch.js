@@ -1721,11 +1721,13 @@ async function inEineKiste() {
 }
 
 /** Dialog „Zurückgestellt“: gibt die gewählte Karte zurück, 'suchen' für die Katalogsuche oder undefined. */
-function zurueckgestellteWaehlen(karten) {
+function zurueckgestellteWaehlen(karten, weitere = 0) {
   const inhalt = el('div', 'tisch-ziele-wrap');
   const info = (k) => [`${String(k.set_code ?? '').toUpperCase()} ${k.nummer ?? ''}`.trim(), String(k.sprache ?? '').toUpperCase(),
     k.foil ? 'Foil' : '', k.anzahl > 1 ? `${k.anzahl}×` : ''].filter(Boolean).join(' · ');
   inhalt.innerHTML = '<p class="dialog-text">Welche zurückgestellte Karte soll in diese Tasche?</p>'
+    + (weitere > 0 ? `<p class="dialog-text">Die Liste zeigt die ersten ${karten.length} Posten nach Name, ${weitere} weitere`
+      + ' liegen nur in der Kiste „Zurückgestellt“.</p>' : '')
     + (karten.length > 8
       ? '<input class="feld tisch-ziele-suche" type="search" placeholder="Name suchen" aria-label="Zurückgestellte Karten nach Name suchen"'
         + ' autocomplete="off" spellcheck="false">' : '')
@@ -1759,9 +1761,10 @@ async function karteFuerTasche(ort) {
   const zustand = z;
   let suchen = false;
   await bearbAktion(async () => {
-    const liste = (await holen('/api/zurueckgestellt')).karten ?? [];
+    const antwort = await holen('/api/zurueckgestellt');
+    const liste = antwort.karten ?? [];
     if (z !== zustand) return;
-    const wahl = liste.length ? await zurueckgestellteWaehlen(liste) : 'suchen';
+    const wahl = liste.length ? await zurueckgestellteWaehlen(liste, antwort.weitere) : 'suchen';
     if (wahl === 'suchen') { suchen = true; return; }
     if (!wahl || z !== zustand) return;
     const r = await senden(`/api/seite/${ort.seiteId}/zurueckgestellt`,

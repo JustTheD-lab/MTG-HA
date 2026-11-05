@@ -17,7 +17,7 @@ import json
 import logging
 
 from binderapp.db import schritte
-from binderapp.db.datenbank import aendern, einfuegen, loeschen, version
+from binderapp.db.datenbank import ANZAHL_MAX, aendern, einfuegen, loeschen, version
 from binderapp.db.erkennung import SCAN_MARKE
 from binderapp.db.seiten import Fehler
 from binderapp.preise.werte import neuester_tag
@@ -307,13 +307,15 @@ def sortierbar(k) -> bool:
 def _verschieben(con, nutzer: int, k, ziel: int, *, schritt: str | None = None, quelle: str = QUELLE) -> tuple[str, int]:
     """Zusammenfassen oder verschieben, ohne `schritt` als eigener Schritt. Gibt (Schritt, Karte) zurück."""
     schritt = schritt or schritte.neuer_schritt()
-    # gleiche Foil-Angabe fasst zusammen (Foil-Durchgänge seit Version 9, 04.11.2026)
+    # gleiche Foil-Angabe fasst zusammen (Foil-Durchgänge seit Version 9, 04.11.2026); passt die Summe nicht mehr in
+    # einen Posten, bleibt die Karte ein eigener
     if k["status"] == "sicher" and not k["geprueft"] and k["scryfall_id"] and k["quelle"] == "scan":
         z = con.execute(
             "SELECT id, anzahl FROM karte WHERE nutzer_id = ? AND kiste_id = ? AND quelle = 'scan' AND scryfall_id = ?"
-            " AND COALESCE(sprache, '') = ? AND foil = ? AND status = 'sicher' AND geprueft = 0 AND id <> ?"
-            " ORDER BY id LIMIT 1", (nutzer, ziel, k["scryfall_id"], k["sprache"] or "", 1 if k["foil"] else 0,
-                                     k["id"])).fetchone()
+            " AND COALESCE(sprache, '') = ? AND foil = ? AND zustand IS ? AND status = 'sicher' AND geprueft = 0"
+            " AND id <> ? AND anzahl + ? <= ? ORDER BY id LIMIT 1",
+            (nutzer, ziel, k["scryfall_id"], k["sprache"] or "", 1 if k["foil"] else 0, k["zustand"], k["id"],
+             k["anzahl"], ANZAHL_MAX)).fetchone()
         if z is not None:
             schritte.aendern_genau(con, nutzer, "karte", z["id"], {"anzahl": z["anzahl"] + k["anzahl"]},
                                    schritt=schritt, quelle=quelle)

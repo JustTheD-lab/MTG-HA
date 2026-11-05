@@ -13,7 +13,7 @@ import re
 import sqlite3
 import uuid
 
-from binderapp.db.datenbank import _protokoll, version
+from binderapp.db.datenbank import _protokoll, scan_fotos_von, version
 from binderapp.db.seiten import Fehler
 
 QUELLE = "nutzer"
@@ -83,6 +83,9 @@ def loeschen(con, nutzer: int, tabelle: str, datensatz: int, *, schritt: str,
     if zeile is None:
         raise KeyError(f"{tabelle} {datensatz} fehlt")
     alt = dict(zeile)
+    if tabelle == "karte":
+        for foto in scan_fotos_von(con, datensatz):
+            aendern_genau(con, nutzer, "scan_foto", foto, {"karte_id": None}, schritt=schritt, quelle=quelle)
     con.execute(f"DELETE FROM {tabelle} WHERE id = ?", (datensatz,))
     _protokoll(con, nutzer, quelle, tabelle, datensatz, "geloescht", alt, None, schritt, rueckgaengig_von)
     return alt

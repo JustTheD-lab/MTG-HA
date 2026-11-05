@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.19.1
+- Die Kiste bleibt bedienbar, wenn man ein Fach einsteckt, während seine Karten noch laden.
+- Eine neue Karte in einer leeren Tasche zeigt nicht mehr das Foto, das dort vorher lag.
+- Rückgängig stellt beim Abzug und beim Entfernen einer Karte auch die Verbindung zum Scan-Foto wieder her.
+- Die Kiste bleibt nach einer Änderung in der Ansicht, die gerade zu sehen ist.
+- Beim Einsortieren werden nur Karten mit gleichem Zustand zusammengefasst, und ein Posten bleibt bei höchstens 999 Karten.
+- Die Auswahl für eine leere Tasche zeigt bis zu 2.000 zurückgestellte Posten und sagt, wenn weitere nicht hineinpassen.
+
 ## 0.19.0
 - Eine Kiste mit Fächern zeigt sich jetzt als echte Kiste: Jedes Fach steht als Trennkarte mit Reiter darin, dahinter
   ragen seine ersten Karten hervor. Dazu stehen Karten und Wert jedes Fachs, auch leere Fächer sind zu sehen.
