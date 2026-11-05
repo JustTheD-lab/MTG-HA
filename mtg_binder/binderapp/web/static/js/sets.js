@@ -9,6 +9,7 @@
 
 import { holen, esc, gehe, zurueck, euro, vorliebe, bewegungReduziert } from './gemeinsam.js';
 import { dialogOffen } from './dialog.js';
+import { laden as sitzungLaden } from './anmeldung.js';
 
 const sym = (d, g = 18) => `<svg viewBox="0 0 24 24" width="${g}" height="${g}" fill="none" stroke="currentColor"`
   + ` stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${d}</svg>`;
@@ -184,6 +185,14 @@ async function uebersichtZeigen(wurzel, vorher) {
   linksAnschliessen(bereich);
   const inhalt = bereich.querySelector('.sets-inhalt');
   inhalt.innerHTML = hinweis('Sets werden geladen …');
+  // Untermenü der Sets, nur im Add-on (Wunsch des Nutzers: nicht offen im Regal)
+  sitzungLaden().then((s) => {
+    if (!s.ha) return;
+    const knopf = el('button', 'knopf', 'Secret Lair');
+    knopf.type = 'button';
+    knopf.addEventListener('click', () => gehe('#/secretlair'));
+    bereich.querySelector('.sets-kopfzeile').append(knopf);
+  });
 
   let daten;
   try {

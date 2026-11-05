@@ -135,7 +135,7 @@ async function listeZeigen(wurzel) {
   const einzeln = (d) => d.quelle === 'scryfall' && d.karten <= 2;
   const verkauft = r.drops.filter((d) => !d.kommend && !einzeln(d));
   const ausgeblendet = r.drops.filter((d) => !d.kommend && einzeln(d)).length;
-  bereich.append(kopf('Secret Lair', `${kommend.length} kommend · ${verkauft.length} seit einem Jahr`, '#/'));
+  bereich.append(kopf('Secret Lair', `${kommend.length} kommend · ${verkauft.length} seit einem Jahr`, '#/sets'));
 
   const werkzeug = document.createElement('div');
   werkzeug.className = 'sl-werkzeug';

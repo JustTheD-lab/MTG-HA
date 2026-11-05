@@ -203,9 +203,7 @@ function sammlungHtml(s) {
 function setsHtml(s) {
   if (!s || typeof s.karten !== 'number') return '';
   return '<p class="regal-sets-zeile"><button type="button" class="knopf regal-sets"'
-    + ' aria-label="Sets öffnen: wie vollständig die Sammlung je Set ist">Sets</button>'
-    + ` <button type="button" class="knopf regal-secretlair"${sitzung().ha ? '' : ' hidden'}`
-    + ' aria-label="Secret Lair öffnen: Drops mit Vergleichswerten">Secret Lair</button></p>';
+    + ' aria-label="Sets öffnen: wie vollständig die Sammlung je Set ist">Sets</button></p>';
 }
 
 /** Platz „Scan-Eingang“ im Stil der Sammlung (Bulk-Scan). Ohne Schnittstelle (alte Datenbank) gibt es ihn nicht. */
@@ -728,7 +726,6 @@ export async function zeigen(wurzel, parameter, vorher) {
     sitzung: () => {
       neu.hidden = !angemeldet(); neueKiste.hidden = !(kistenDa && angemeldet()); pcKnopf.hidden = !sitzung().ha;
       verwaltungKnopf.hidden = !sitzung().ha;
-      szene.querySelector('.regal-secretlair')?.toggleAttribute('hidden', !sitzung().ha);
       scannen.hidden = !(scanDa && angemeldet());
       if (neuesDeck) neuesDeck.hidden = !angemeldet();
     },
@@ -759,7 +756,6 @@ export async function zeigen(wurzel, parameter, vorher) {
     if (ereignis.target.closest('.scan-platz')) { gehe('#/scan/eingang'); return; }
     if (ereignis.target.closest('.regal-regeln')) { gehe('#/regeln'); return; }
     if (ereignis.target.closest('.regal-sets')) { gehe('#/sets'); return; }
-    if (ereignis.target.closest('.regal-secretlair')) { gehe('#/secretlair'); return; }
     if (ereignis.target.closest('.regal-sammlung')) { gehe('#/sammlung'); return; }
     const knopf = ereignis.target.closest('.regal-ruecken');
     if (knopf) { gehe(`#/binder/${knopf.dataset.binder}`); return; }

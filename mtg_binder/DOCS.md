@@ -124,7 +124,7 @@ gehört, zum Beispiel „Preis (Ø 7 Tage) ab 5 € → Spezial“ oder „Farbe
 
 ## Secret Lair
 
-Der Knopf **„Secret Lair“** im Regal (neben „Sets“) zeigt kommende Drops und die der letzten 12 Monate. Die Werte sind
+Der Knopf **„Secret Lair“** oben rechts unter **„Sets“** zeigt kommende Drops und die der letzten 12 Monate. Die Werte sind
 Summen aus Cardmarket (Ø 7 Tage, sonst Low, ohne Foil) und keine Kaufempfehlung.
 
 - **Teuerste Reprints:** je Karte der teuerste andere Nonfoil-Druck, zusammengezählt. **Günstigste Reprints** entsprechend.

@@ -1,5 +1,8 @@
 # Änderungen
 
+## 0.22.1
+- Secret Lair ist jetzt ein Untermenü der Sets: Der Knopf steht oben rechts in der Sets-Ansicht, nicht mehr im Regal.
+
 ## 0.22.0
 - Secret Lair: Der neue Knopf im Regal zeigt kommende Drops und die der letzten 12 Monate. Je Karte stehen der teuerste
   und der günstigste Nonfoil-Reprint, je Drop die Summen und das Verhältnis zu deinen Kosten. Das sind Zahlen zum
