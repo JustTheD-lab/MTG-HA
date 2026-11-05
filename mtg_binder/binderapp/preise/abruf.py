@@ -17,7 +17,7 @@ import shutil
 import sys
 import urllib.request
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from binderapp.db.datenbank import schreiben, verbinden, version
@@ -28,7 +28,13 @@ EINTRAG = re.compile(rb"\{[^{}]*\}")
 ID = re.compile(rb'"idProduct"\s*:\s*(\d+)')
 ERSTELLT = re.compile(rb'"createdAt"\s*:\s*"([^"]{10,40})"')
 
-log = logging.getLogger("binderapp.preise")
+# Aufräumen (Entscheidung des Nutzers, 05.11.2026): Alles bleibt täglich, bis die Preise die Grenze erreichen; dann
+# fallen die ältesten Tage weg. Die Größe wird aus der Zeilenzahl geschätzt (dbstat fehlt in manchem SQLite).
+GRENZE_MB = 200
+BYTES_JE_ZEILE = 95    # gemessen am 05.11.2026 auf einer Kopie: Tabelle preis mit Primärschlüssel
+SCHUTZ_TAGE = 40       # nie löschen: Veränderung nach 30 Tagen (Toleranz 3) und verlauf_karte (40 Tage) brauchen sie
+
+log =logging.getLogger("binderapp.preise")
 
 
 class AbrufFehler(RuntimeError):
@@ -117,6 +123,27 @@ def speichern(con, erstellt: str, produkte: int, zeilen: list[tuple], nachtragen
     return {"tag": tag, "erstellt": erstellt, "produkte": produkte, "gespeichert": len(zeilen)}
 
 
+def aufraeumen(con, grenze_mb: float = GRENZE_MB, schutz_tage: int = SCHUTZ_TAGE) -> list[str]:
+    """Löscht ab der Grenze die ältesten Preistage (in der Transaktion des Aufrufers), nie die letzten `schutz_tage`
+    Tage. Gibt die gelöschten Tage zurück. Freie Seiten nutzt SQLite weiter, die Datei wächst dann nicht mehr."""
+    grenze = int(grenze_mb * 1_000_000 / BYTES_JE_ZEILE)
+    zeilen = con.execute("SELECT COUNT(*) FROM preis").fetchone()[0]
+    if zeilen <= grenze:
+        return []
+    neuester = con.execute("SELECT MAX(tag) FROM preisabruf").fetchone()[0]
+    schutz = (date.fromisoformat(neuester) - timedelta(days=schutz_tage)).isoformat()
+    geloescht = []
+    for tag, anzahl in con.execute("SELECT tag, COUNT(*) FROM preis WHERE tag < ? GROUP BY tag ORDER BY tag",
+                                   (schutz,)).fetchall():
+        if zeilen <= grenze:
+            break
+        con.execute("DELETE FROM preis WHERE tag = ?", (tag,))
+        con.execute("DELETE FROM preisabruf WHERE tag = ?", (tag,))
+        zeilen -= anzahl
+        geloescht.append(tag)
+    return geloescht
+
+
 def cardmarket_nachtragen(con, katalog: Path | None) -> int:
     """Kartendaten ohne Cardmarket-ID aus dem Katalog ergänzen (älterer Katalog oder Daten von vor Version 4)."""
     if katalog is None or not Path(katalog).is_file():
@@ -152,6 +179,7 @@ def abrufen(datenbank: Path, ordner: Path, katalog: Path | None = None, datei: P
     erstellt, produkte, zeilen = einlesen(Path(quelle).read_bytes(), ids)
     with closing(verbinden(datenbank)) as con, schreiben(con):
         ergebnis = speichern(con, erstellt, produkte, zeilen, nachtragen=nachtragen)
+        ergebnis["geloeschte_tage"] = [] if nachtragen else aufraeumen(con)
     ergebnis["cardmarket_ergaenzt"] = ergaenzt
     ergebnis["sammlung_produkte"] = len(ids)
     return ergebnis

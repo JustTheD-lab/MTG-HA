@@ -57,6 +57,8 @@ Sammlung **Low** und **Durchschnitt 7 Tage** (bei Foil-Karten die Foil-Preise). 
 Rand („ab … · Ø …“), Binder und Kisten ihren Gesamtwert (Durchschnitt 7 Tage). Die große Kartenansicht zeigt die
 Veränderung gegen Vortag, 3 und 30 Tage – erst, wenn genug Tage gesammelt sind, vorher „–“.
 Neue Karten bekommen ihren Preis etwa eine halbe Minute nach der Erkennung aus der Datei des Tages.
+Der Verlauf bleibt Tag für Tag in der Datenbank. Erreicht er etwa 200 MB, fallen die ältesten Tage weg; die letzten
+40 Tage bleiben immer.
 Damit die Karten ihrem Cardmarket-Produkt zugeordnet werden, braucht das Add-on den Katalog ab Version 2: Den
 schickt die Erkennung am PC beim nächsten Start automatisch.
 

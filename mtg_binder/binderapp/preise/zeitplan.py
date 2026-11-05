@@ -88,6 +88,8 @@ def einmal(datenbank: Path, ordner: Path, katalog: Path | None) -> dict | None:
         ergebnis = abruf.abrufen(datenbank, ordner, katalog)
     ergebnis["aufgabe"] = aufgabe
     log.info("Preise %s (%s): %s Produkte der Sammlung", ergebnis["tag"], aufgabe, ergebnis["gespeichert"])
+    if ergebnis["geloeschte_tage"]:
+        log.info("Preisgrenze erreicht, alte Tage gelöscht: %s", ", ".join(ergebnis["geloeschte_tage"]))
     return ergebnis
 
 

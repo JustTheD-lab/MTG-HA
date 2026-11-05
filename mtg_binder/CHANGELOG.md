@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.14.2
+- Preisverlauf begrenzt: Die Preise bleiben Tag für Tag gespeichert. Erreichen sie etwa 200 MB, löscht das Add-on
+  beim täglichen Abruf die ältesten Tage; die letzten 40 Tage bleiben immer.
+
 ## 0.14.1
 - Binder bearbeiten: Taschen mit Rückseite (und unklare Taschen ohne Karte) lassen sich jetzt bearbeiten.
   Antippen legt eine Karte hinein, das Werkzeug „Löschen“ markiert die Tasche als leer, beim Verschieben sind
