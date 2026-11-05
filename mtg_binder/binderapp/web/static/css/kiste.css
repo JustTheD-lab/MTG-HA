@@ -391,6 +391,91 @@
 .ks-ort { font-size: 0.7rem; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
 .kiste-gruppe-breit { grid-column: 1 / -1; }
 
+/* ---------- Fächer: die Kiste mit ihren Trennkarten ---------- */
+.kiste-fachwechsel { margin-top: 16px; }
+.kiste-fachblick :is(.kiste-bedienung, .kiste-aktiv, .kiste-filterfeld, .kiste-statistik, .kiste-listenkopf, .kiste-liste,
+  .kiste-hub, .kiste-oben, .kiste-unten, .kiste-sprung, .kiste-hoch) { display: none !important; }
+.kiste-fachblick .kiste-huelle { max-width: none; padding-right: 0; }
+
+.fachkasten { position: relative; max-width: 640px; margin: 6px auto 0; }
+/* Innenraum: nach hinten etwas schmaler, dadurch stehen die Fächer in der Tiefe */
+.fachkasten::before {
+  content: ""; position: absolute; inset: 22px 0 36px; background: var(--flaeche-1);
+  clip-path: polygon(22px 0, calc(100% - 22px) 0, 100% 100%, 0 100%);
+}
+.fachkasten-reihen { position: relative; list-style: none; margin: 0; padding: 0; }
+.fach { position: relative; z-index: calc(var(--i) + 1); padding: 0 calc(var(--rueck) + 6px); transition: opacity var(--dauer-kurz) linear; }
+.fach + .fach { margin-top: -5px; }
+.fach-knopf {
+  appearance: none; -webkit-appearance: none; display: block; width: 100%; margin: 0; padding: 0; border: 0; background: none;
+  color: var(--text); text-align: left; cursor: pointer; transition: transform var(--dauer-kurz) var(--kurve);
+}
+.fach-knopf:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; border-radius: 4px; }
+@media (hover: hover) { .fach-knopf:hover { transform: translateY(-6px); } }
+.fach-knopf:active { transform: translateY(-3px); }
+
+/* Die obersten Karten des Fachs ragen hinter der Trennkarte hervor */
+.fach-blick { position: relative; display: block; height: 66px; margin: 0 8px; overflow: hidden; }
+.fach-leer .fach-blick { height: 34px; }
+.fach-bild {
+  position: absolute; top: 10px; left: calc(5% + var(--j) * 31%); width: 28%; height: auto; aspect-ratio: 63 / 88;
+  border-radius: 4.75% / 3.4%; box-shadow: var(--schatten-karte);
+  transform: rotate(calc((var(--j) - 1) * 1.8deg)); transition: transform var(--dauer-kurz) var(--kurve);
+}
+@media (hover: hover) { .fach-knopf:hover .fach-bild { transform: translateY(-6px) rotate(calc((var(--j) - 1) * 1.8deg)); } }
+
+.fach-trenner { position: relative; display: block; }
+.fach-reiter {
+  position: absolute; bottom: 100%; left: calc(10px + var(--reiter) * 30%); max-width: calc(100% - 20px - var(--reiter) * 30%); height: 26px;
+  padding: 0 12px; overflow: hidden; border-radius: 6px 6px 0 0; background: var(--ek, var(--messing)); color: #17130b;
+  font-size: 0.86rem; font-weight: 600; letter-spacing: -0.01em; line-height: 26px; text-overflow: ellipsis; white-space: nowrap;
+}
+.fach-zeile {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 0 14px;
+  border: 1px solid var(--linie-stark); border-top: 2px solid var(--ek, var(--messing)); border-radius: 4px 4px 0 0;
+  background: var(--flaeche-3);
+}
+.fach-regel { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--text-3); font-size: 0.76rem; text-overflow: ellipsis; white-space: nowrap; }
+.fach-zahl { flex: none; font-size: 0.82rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.fach-leer .fach-zahl { color: var(--text-3); font-weight: 400; }
+.fach-ohne .fach-reiter { background: var(--flaeche-2); box-shadow: inset 0 0 0 1px var(--linie-stark); color: var(--text-2); }
+.fach-ohne .fach-zeile { border-style: dashed; border-top: 1px dashed var(--linie-stark); background: var(--flaeche-2); }
+
+.fachkasten-front {
+  position: relative; z-index: 60; display: flex; justify-content: center; margin-top: -8px; padding: 14px 16px;
+  border: 1px solid var(--linie-stark); border-radius: var(--radius-klein); background: var(--flaeche-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 -6px 14px rgba(0, 0, 0, 0.35);
+}
+.fachkasten.regal-kiste-farbig .fachkasten-front { border-color: var(--kf-kante); background: var(--kf); }
+.fachkasten-front .regal-kiste-etikett { min-width: 44%; max-width: 100%; text-align: center; }
+
+/* Herausziehen: Das Fach hebt sich, die anderen treten zurück (nur transform und opacity) */
+.fachkasten-zieht .fach:not(.fach-gezogen) { opacity: 0.35; }
+.fach-gezogen { z-index: 50; }
+.fach-gezogen .fach-knopf, .fach-gezogen .fach-knopf:hover { transform: translateY(-26px) scale(1.02); }
+
+/* Das herausgezogene Fach über seinen Karten */
+.kiste-fachkopf { margin-top: 18px; animation: fachkopf-heraus var(--dauer) var(--kurve) backwards; }
+@keyframes fachkopf-heraus { from { opacity: 0; transform: translateY(26px); } }
+.fachkopf-reiter {
+  display: block; width: fit-content; max-width: calc(100% - 24px); height: 28px; margin-left: 12px; padding: 0 14px; overflow: hidden;
+  border-radius: 6px 6px 0 0; background: var(--ek, var(--messing)); color: #17130b; font-size: 0.92rem; font-weight: 600;
+  line-height: 28px; text-overflow: ellipsis; white-space: nowrap;
+}
+.fachkopf-zeile {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-height: 54px; padding: 6px 8px 6px 14px;
+  border: 1px solid var(--linie-stark); border-top: 2px solid var(--ek, var(--messing)); border-radius: 4px;
+  background: var(--flaeche-3);
+}
+.fachkopf-regel { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; color: var(--text-3); font-size: 0.78rem; }
+.fachkopf-zahl { flex: none; font-size: 0.84rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.fachkopf-zu { flex: none; gap: 0.35em; padding-left: 0.7em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fach, .fach-knopf, .fach-bild { transition: none; }
+  .kiste-fachkopf { animation: none; }
+}
+
 /* ---------- Auswahlmodus ---------- */
 .kiste-wahl { padding-bottom: calc(230px + env(safe-area-inset-bottom)); }
 .kiste-wahl:has(.kiste-zurueckstellen:not([hidden])) { padding-bottom: calc(285px + env(safe-area-inset-bottom)); }

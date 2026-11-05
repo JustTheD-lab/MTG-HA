@@ -31,7 +31,8 @@ from binderapp.db.manabox_import import ImportFehler
 from binderapp.katalog import kartendaten
 from binderapp.preise import zeitplan
 from binderapp.web.helfer import Fehler
-from binderapp.web.kisten import GROSSE_ID, _ab_version_3, _kiste_holen, _kiste_id, anfrage_lesen, sql_ids
+from binderapp.web.kisten import (GROSSE_ID, _ab_version_3, _kiste_holen, _kiste_id, anfrage_lesen, fach_vorbereiten,
+                                  sql_ids)
 from binderapp.web.pruefen import KEIN_KATALOG, SPRACHEN, _kennung
 
 __all__ = ["routen", "datei_lesen", "dateiname", "summe"]
@@ -129,6 +130,8 @@ def auswahl_ids(con, nutzer: int, ids: list[int] | None, a) -> list[int]:
         return ids
     if a.kiste is not None:
         _kiste_holen(con, nutzer, a.kiste)
+    if a.fach is not None:   # „Alle gefilterten“ in einem geöffneten Fach
+        fach_vorbereiten(con, nutzer, a.kiste)
     gefunden = [z[0] for z in con.execute(sql_ids(a), a.args)]
     if not gefunden:
         raise Fehler("Die Auswahl ist leer.")

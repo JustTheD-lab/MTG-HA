@@ -3,6 +3,9 @@
 //
 //   #/kiste/5             Kiste 5
 //   #/kiste/5/karte/12    dazu Karte 12 groß (die Kartenebene öffnet app.js; hier wird nur navigiert)
+//   #/kiste/5/fach/2      Fach 2 herausgezogen: nur seine Karten („ohne“: Karten ohne Fach), dazu /karte/12
+//                         Eine Kiste mit Fächern zeigt zuerst sich selbst mit Trennkarten (Fachkasten); der
+//                         Umschalter „Alle Karten“ führt zur Gesamtansicht (gemerkt je Kiste).
 //   #/sammlung            Gesamtsammlung (Binder und Kisten): dieselbe Ansicht mit `parameter.sammlung`,
 //                         Kopf aus /api/sammlung, Karten aus /api/sammlung/karten, dazu Ort, Quelle, Doppel
 //   #/sammlung/karte/12   dazu Karte 12 groß
@@ -18,11 +21,11 @@
 // und späte Antworten verworfen (Zählung `gen`). Es werden nur transform und opacity animiert.
 
 import { esc, bildUrl, gehe, zurueck, senden, fehlerText, SchnittstellenFehler, vorliebe, bewegungReduziert,
-  adresse as serverAdresse, scryfallBild, euro, preisStreifen, preisText } from './gemeinsam.js';
+  adresse as serverAdresse, scryfallBild, euro, preisStreifen, preisText, warten } from './gemeinsam.js';
 import { knopf as anmeldeKnopf, angemeldet, sitzung } from './anmeldung.js';
 import { dialog, bestaetigen, dialogOffen } from './dialog.js';
 import { druckWaehlen } from './pruefen.js';
-import { KISTENFARBEN, farbwahl } from './farbrad.js';
+import { KISTENFARBEN, farbwahl, kistenAussehen } from './farbrad.js';
 
 const SEITE = 60;
 const ZUSTAENDE = [
@@ -262,7 +265,7 @@ const gewaehlt = (k) => (S.gewaehlt.has(k.id) ? ' kiste-gewaehlt' : '');
 const ortZeile = (k) => (S.sammlung ? k.ort?.text ?? '' : '');
 
 /** Fach der Karte als kleines Schild; nach Fach gruppiert sagt das schon die Trennkarte. */
-const fachSichtbar = (k) => Boolean(k.fach) && S.gruppe !== 'fach';
+const fachSichtbar = (k) => Boolean(k.fach) && S.gruppe !== 'fach' && S.fach === null;
 const fachHtml = (k) => (fachSichtbar(k) ? `<span class="kiste-fach" title="Fach ${esc(k.fach)}">${esc(k.fach)}</span>` : '');
 
 /** Kleines Kennzeichen „mögliches Doppel“ (nur in der Gesamtsammlung). */
@@ -404,6 +407,20 @@ function geruestHtml(s) {
       <p class="meldung kiste-meldung" role="alert"></p>
     </header>
     <div class="kiste-toast" role="status" aria-live="polite" hidden></div>
+    <div class="kiste-fachwechsel" hidden>
+      <div class="kiste-segmente" role="group" aria-label="Kiste mit Fächern oder alle Karten zeigen">
+        <button type="button" class="knopf kiste-segment" data-fachmodus="faecher" aria-pressed="false">${SYM.faecher}<span>Fächer</span></button>
+        <button type="button" class="knopf kiste-segment" data-fachmodus="alle" aria-pressed="false">${SYM.raster}<span>Alle Karten</span></button>
+      </div>
+    </div>
+    <div class="kiste-fachkopf" hidden>
+      <span class="fachkopf-reiter"></span>
+      <div class="fachkopf-zeile">
+        <span class="fachkopf-regel"></span>
+        <span class="fachkopf-zahl"></span>
+        <button type="button" class="knopf fachkopf-zu">${SYM.zurueck}<span>In die Kiste zurück</span></button>
+      </div>
+    </div>
     <div class="kiste-bedienung" role="toolbar" aria-label="Ansicht, Sortierung, Gruppierung und Filter">
       <div class="kiste-segmente" role="group" aria-label="Ansicht">${ansichten}</div>
       <div class="kiste-felder">
@@ -461,6 +478,7 @@ function geruestHtml(s) {
     </section>
     <section class="kiste-statistik" id="kiste-statistik" aria-label="Statistik dieser Kiste" hidden></section>
     <div class="kiste-huelle" aria-live="off">
+      <div class="fachkasten-platz" hidden></div>
       <div class="kiste-listenkopf" aria-hidden="true"><span>Anz.</span><span>Name</span>${s.sammlung ? '<span>Ort</span>' : ''}<span>Set</span><span class="lk-mw">MW</span>
         <span class="lk-typ">Typ</span><span class="lk-selt">Seltenheit</span><span>Spr.</span><span>Foil</span><span class="lk-preis">Ø 7 T.</span></div>
       <div class="kiste-oben" hidden></div>
@@ -499,7 +517,7 @@ function zahlenZeichnen() {
     t += ` · davon in Bindern ${zahl(k.binder.karten)} · davon in Kisten ${zahl(k.kisten.karten)}`;
     if (k.decks && k.decks.karten > 0) t += ` · davon in Decks ${zahl(k.decks.karten)}`;
   }
-  const gefiltert = aktiveFilter(S).length > 0;
+  const gefiltert = aktiveFilter(S).length > 0 || S.fach !== null;
   if (gefiltert && S.gesamt) t += S.sammlung ? ` · angezeigt: ${zahl(S.gesamt.posten)} Posten` : ` · davon ${zahl(S.gesamt.posten)} angezeigt`;
   const z = S.wurzel.querySelector('.kiste-zahlen');
   z.textContent = t;
@@ -511,6 +529,7 @@ function zahlenZeichnen() {
     z.append(w);
   }
   z.title = gefiltert && S.gesamt ? `${zahl(S.gesamt.posten)} Posten mit ${zahl(S.gesamt.karten)} Karten passen zu den Filtern` : '';
+  S.wurzel.querySelector('.fachkopf-zahl').textContent = S.fach !== null && S.gesamt ? karten(S.gesamt.karten) : '';
 }
 
 /** Gesamtsammlung: Quellen getrennt, mögliche Doppel (Tipp filtert), Karten ohne Ort. */
@@ -537,7 +556,7 @@ function meldung(text) {
 
 function obenSync() {
   const s = S;
-  s.wurzel.querySelectorAll('.kiste-segment').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ansicht === s.ansicht)));
+  s.wurzel.querySelectorAll('.kiste-segment[data-ansicht]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ansicht === s.ansicht)));
   s.wurzel.querySelector('#kiste-sort').value = s.sort;
   s.wurzel.querySelector('#kiste-gruppe').value = s.gruppe;
   const r = s.wurzel.querySelector('.kiste-richtung');
@@ -590,8 +609,15 @@ function speichern() {
 
 const kartenPfad = (s) => (s.sammlung ? '/api/sammlung/karten' : `/api/kiste/${s.id}/karten`);
 
-function abfrage(s, ab, anzahl) {
+/** Filter samt herausgezogenem Fach: für Karten, Statistik und „Alle gefilterten“. */
+function kartenFilter(s) {
   const p = filterParameter(s.filter, s.sammlung);
+  if (s.fach !== null) p.set('fach', s.fach);
+  return p;
+}
+
+function abfrage(s, ab, anzahl) {
+  const p = kartenFilter(s);
   p.set('sort', s.sort);
   p.set('richtung', s.richtung);
   if (s.gruppe) p.set('gruppe', s.gruppe);
@@ -643,12 +669,13 @@ function untenZeichnen() {
       + '<button type="button" class="knopf kiste-nochmal">Noch einmal versuchen</button>';
   } else if (s.gesamt && s.gesamt.posten === 0) {
     const gefiltert = aktiveFilter(s).length > 0;
-    box.innerHTML = `<p class="kiste-leer">${gefiltert ? 'Keine Karte passt zu diesen Filtern.' : 'Diese Kiste ist noch leer.'}</p>`
+    const leer = s.fach !== null ? 'In diesem Fach liegt keine Karte.' : 'Diese Kiste ist noch leer.';
+    box.innerHTML = `<p class="kiste-leer">${gefiltert ? 'Keine Karte passt zu diesen Filtern.' : leer}</p>`
       + (gefiltert ? '<button type="button" class="knopf kiste-chip-alle" data-loeschen="alle">Alle Filter löschen</button>' : '');
   } else if (s.laed.unten || s.laed.oben) {
     box.innerHTML = '<span class="kiste-status">Weitere Karten werden geladen …</span>';
   } else if (s.gesamt && ende(s) >= s.gesamt.posten && s.karten.length) {
-    box.innerHTML = '<span class="kiste-status kiste-ende">Ende der Kiste</span>';
+    box.innerHTML = `<span class="kiste-status kiste-ende">${s.fach !== null ? 'Ende des Fachs' : 'Ende der Kiste'}</span>`;
   } else {
     box.innerHTML = '';
   }
@@ -681,6 +708,7 @@ function allesZeichnen() {
 async function neuLaden({ ab = 0, ziel = null, anker = null } = {}) {
   const s = S;
   if (!s) return;
+  if (kistenBlick(s)) { await fachkastenLaden(); return; }
   const gen = ++s.gen;
   alleAbbrechen(s);
   s.laed = { oben: false, unten: false };
@@ -779,6 +807,145 @@ async function nachladen(richtung) {
       beobachten();
     }
   }
+}
+
+// ---------- Fächer: die Kiste mit ihren Trennkarten ----------
+
+/** Zeigt die Ansicht gerade die Kiste selbst (Trennkarten statt Karten)? */
+const kistenBlick = (s) => s.hatFaecher && s.fachModus === 'faecher' && s.fach === null;
+
+const fachPfad = (s, fach) => `#/kiste/${s.id}${fach === null ? '' : `/fach/${fach}`}`;
+
+/** Fach zu einem Wert aus der Adresse ({ name, texte }), null wenn es dieses Fach nicht gibt. */
+function fachLesen(s, wert) {
+  if (wert === 'ohne') return { name: 'Ohne Fach', texte: [] };
+  return s.kopf.faecher.filter((f) => f.gueltig)[Number(wert)] ?? null;
+}
+
+function fachReiheHtml(f, i, n) {
+  const ohne = f.fach === 'ohne';
+  const name = ohne ? 'Ohne Fach' : f.name;
+  const bilder = f.bilder.map((b, j) => `<img class="fach-bild" style="--j:${j}" src="${bildUrl('scryfall', b, 200)}"`
+    + ` srcset="${bildUrl('scryfall', b, 200)} 200w, ${bildUrl('scryfall', b, 400)} 400w" sizes="120px"`
+    + ' width="63" height="88" alt="" loading="lazy" decoding="async">').join('');
+  const regel = ohne ? 'Kein Fach passt' : (f.texte.join(' · ') || 'Alle übrigen Karten');
+  const zahlen = f.posten === 0 ? 'leer'
+    : karten(f.karten) + (f.wert != null ? ` · ${euro(f.wert)}` : '');
+  const klassen = `fach${f.posten === 0 ? ' fach-leer' : ''}${ohne ? ' fach-ohne' : ''}`;
+  return `<li class="${klassen}" style="--i:${i};--reiter:${i % 3};--rueck:${Math.min(22, (n - 1 - i) * 6)}px">`
+    + `<button type="button" class="fach-knopf" data-fach="${esc(f.fach)}" aria-label="Fach ${esc(name)} herausziehen: ${esc(zahlen)}">`
+    + `<span class="fach-blick" aria-hidden="true">${bilder}</span>`
+    + `<span class="fach-trenner"><span class="fach-reiter">${esc(name)}</span>`
+    + `<span class="fach-zeile"><span class="fach-regel">${esc(regel)}</span><span class="fach-zahl">${esc(zahlen)}</span></span>`
+    + '</span></button></li>';
+}
+
+function fachkastenZeichnen() {
+  const s = S;
+  const u = s.fachkasten;
+  const liste = u.ohne.posten > 0 ? [...u.faecher, u.ohne] : u.faecher;
+  const aussehen = kistenAussehen(s.kopf.etikettfarbe);
+  s.wurzel.querySelector('.fachkasten-platz').innerHTML = `<div class="fachkasten ${aussehen.klasse}" style="${aussehen.stil}">`
+    + `<ol class="fachkasten-reihen" aria-label="Fächer der Kiste">${liste.map((f, i) => fachReiheHtml(f, i, liste.length)).join('')}</ol>`
+    + `<div class="fachkasten-front" aria-hidden="true"><span class="regal-kiste-etikett"><span class="regal-kiste-name">${esc(s.kopf.name)}</span></span></div>`
+    + '</div>';
+}
+
+async function fachkastenLaden() {
+  const s = S;
+  const gen = ++s.gen;
+  alleAbbrechen(s);
+  const steuer = new AbortController();
+  s.anfragen.add(steuer);
+  if (s.fachkasten) fachkastenZeichnen();   // sofort der letzte Stand, die Zahlen kommen gleich nach
+  try {
+    const u = await anfordern(`/api/kiste/${s.id}/fachkasten`, steuer.signal);
+    if (S !== s || gen !== s.gen) return;
+    s.fachkasten = u;
+    fachkastenZeichnen();
+  } catch (f) {
+    if (f?.name === 'AbortError' || S !== s || gen !== s.gen) return;
+    s.wurzel.querySelector('.fachkasten-platz').innerHTML = `<p class="meldung" role="alert">${esc(f.message)}</p>`
+      + '<button type="button" class="knopf kiste-nochmal">Noch einmal versuchen</button>';
+  } finally {
+    s.anfragen.delete(steuer);
+  }
+}
+
+/** Stimmt Umschalter, Kopf des Fachs und den Weg zurück auf den Zustand ab. */
+function fachAnsichtSync() {
+  const s = S;
+  const w = s.wurzel;
+  const blick = kistenBlick(s);
+  w.classList.toggle('kiste-fachblick', blick);
+  w.querySelector('.fachkasten-platz').hidden = !blick;
+  w.querySelector('.kiste-fachwechsel').hidden = !s.hatFaecher;
+  w.querySelectorAll('[data-fachmodus]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.fachmodus === s.fachModus)));
+  const kopf = w.querySelector('.kiste-fachkopf');
+  const fach = s.fach === null ? null : fachLesen(s, s.fach);
+  kopf.hidden = !fach;
+  if (fach) {
+    kopf.className = `kiste-fachkopf ${kistenAussehen(s.kopf.etikettfarbe).klasse}`;
+    kopf.querySelector('.fachkopf-reiter').textContent = fach.name;
+    kopf.querySelector('.fachkopf-regel').textContent = s.fach === 'ohne' ? 'Kein Fach passt' : (fach.texte.join(' · ') || 'Alle übrigen Karten');
+  }
+  const text = s.fach === null ? 'Zurück ins Regal' : 'Zurück in die Kiste';
+  const zurueckKnopf = w.querySelector('.kiste-zurueck');
+  zurueckKnopf.setAttribute('aria-label', text);
+  zurueckKnopf.querySelector('.kiste-zurueck-text').textContent = text;
+}
+
+function kartenLeeren(s) {
+  s.karten = [];
+  s.start = 0;
+  s.gesamt = null;
+  gruppenSetzen(null);
+  s.wurzel.querySelector('.kiste-liste').innerHTML = '';
+}
+
+/** Ein Fach herausziehen: Es hebt sich aus der Kiste, dann folgt die Adresse (damit „Zurück“ es wieder einsteckt). */
+async function fachZiehen(knopf) {
+  const s = S;
+  if (s.fachZieht) return;
+  s.fachZieht = true;
+  if (!bewegungReduziert()) {
+    knopf.closest('.fachkasten').classList.add('fachkasten-zieht');
+    knopf.parentElement.classList.add('fach-gezogen');
+    await warten(220);
+  }
+  s.fachZieht = false;
+  if (S === s) gehe(fachPfad(s, knopf.dataset.fach));
+}
+
+/** Zeigt ein Fach (`neu`) oder wieder die Kiste (null); der Wegweiser ruft das über `aktualisieren`. */
+function fachAnzeigen(neu) {
+  const s = S;
+  if (s.wahlModus) wahlUmschalten(false);
+  if (s.foilModus) foilModusUmschalten(false);
+  const zurueckY = s.fachY;
+  if (neu !== null) { s.fachY = window.scrollY; s.fachModus = 'faecher'; }
+  s.fach = neu;
+  s.basis = fachPfad(s, neu);
+  kartenLeeren(s);
+  fachAnsichtSync();
+  zahlenZeichnen();
+  neuLaden();
+  window.scrollTo(0, neu === null && kistenBlick(s) ? zurueckY : 0);
+}
+
+/** Umschalter „Fächer“ und „Alle Karten“. `merken: false`: nur für diesen Besuch (Auswählen und Foil brauchen Karten). */
+function fachModusWechseln(neu, { merken = true } = {}) {
+  const s = S;
+  if (!s.hatFaecher) return;
+  const gleich = neu === s.fachModus;
+  s.fachModus = neu;
+  if (merken) vorliebe(`kiste.${s.schluessel}.fachmodus`, neu);
+  if (s.fach !== null) { zurueck(fachPfad(s, null)); return; }   // aktualisieren zeichnet dann neu
+  if (gleich) return;
+  kartenLeeren(s);
+  fachAnsichtSync();
+  zahlenZeichnen();
+  neuLaden();
 }
 
 // ---------- Springen und Scrollen ----------
@@ -967,7 +1134,7 @@ async function statistikLaden() {
   s.statAbbruch = steuer;
   box.setAttribute('aria-busy', 'true');
   const holen = (gruppe) => {
-    const p = filterParameter(s.filter, s.sammlung);
+    const p = kartenFilter(s);
     p.set('gruppe', gruppe);
     p.set('anzahl', '1');
     p.set('sort', 'name');
@@ -1090,8 +1257,7 @@ async function faecherOeffnen() {
   if (geaendert && S === s) {
     meldung('');
     await neuAufbauen();
-    hinweisZeigen(S?.kopf.faecher?.length
-      ? 'Fächer gespeichert. Unter „Gruppieren“ lässt sich die Kiste nach Fächern ansehen.' : 'Fächer gespeichert.');
+    hinweisZeigen('Fächer gespeichert.');
   }
 }
 
@@ -1333,6 +1499,7 @@ function wahlAnzeigen() {
 function wahlUmschalten(an = !S.wahlModus) {
   const s = S;
   if (Boolean(an) === s.wahlModus) return;
+  if (an && kistenBlick(s)) fachModusWechseln('alle', { merken: false });   // Auswählen braucht Karten
   if (an && s.foilModus) foilModusUmschalten(false);   // immer nur ein Modus
   s.wahlModus = Boolean(an);
   senken();
@@ -1431,7 +1598,7 @@ async function verschieben() {
   });
   if (!ja || S !== s) return;
   const daten = s.alleGefiltert
-    ? { ziel: ziel.id, auswahl: { kiste: s.sammlung ? null : s.id, abfrage: filterParameter(s.filter, s.sammlung).toString() } }
+    ? { ziel: ziel.id, auswahl: { kiste: s.sammlung ? null : s.id, abfrage: kartenFilter(s).toString() } }
     : { ziel: ziel.id, karten: [...s.gewaehlt.keys()] };
   const knopf = s.wurzel.querySelector('.kiste-verschieben');
   knopf.disabled = true;
@@ -1463,7 +1630,7 @@ async function zurueckstellen() {
   const s = S;
   if (!wahlZahl().posten) return;
   const daten = s.alleGefiltert
-    ? { auswahl: { kiste: s.id, abfrage: filterParameter(s.filter, s.sammlung).toString() } }
+    ? { auswahl: { kiste: s.id, abfrage: kartenFilter(s).toString() } }
     : { karten: [...s.gewaehlt.keys()] };
   const knopf = s.wurzel.querySelector('.kiste-zurueckstellen');
   knopf.disabled = true;
@@ -1632,6 +1799,7 @@ async function importDialog(datei) {
 function foilModusUmschalten(an = !S.foilModus) {
   const s = S;
   if (!s || Boolean(an) === s.foilModus) return;
+  if (an && kistenBlick(s)) fachModusWechseln('alle', { merken: false });   // Foil braucht Karten
   if (an && s.wahlModus) wahlUmschalten(false);   // immer nur ein Modus
   s.foilModus = Boolean(an);
   senken();
@@ -1740,7 +1908,7 @@ function verdrahten(s) {
   // Bilder, die fehlen: schlichte Kartenfläche mit Namen (das Ereignis „error“ steigt nicht auf, daher Erfassung)
   huelle.addEventListener('error', (e) => {
     const bild = e.target;
-    if (!(bild instanceof HTMLImageElement) || !bild.classList.contains('kiste-bild')) return;
+    if (!(bild instanceof HTMLImageElement) || !bild.matches('.kiste-bild, .fach-bild')) return;
     // Neu hinzugefügte Karten haben noch kein Vorschaubild: am PC mit Katalog das lokale Scryfall-Bild nehmen,
     // im Add-on (oder wenn auch das fehlt) das Bild direkt von Scryfall, bis der PC die Vorschau nachliefert
     const m = /(?:^|\/)bilder\/scryfall\/([^/]+)_\d+\.webp$/.exec(bild.getAttribute('src') ?? '');
@@ -1771,6 +1939,8 @@ function verdrahten(s) {
   }, true);
 
   huelle.addEventListener('click', (e) => {
+    const fachKnopf = e.target.closest('[data-fach]');
+    if (fachKnopf) { fachZiehen(fachKnopf); return; }
     const nochmal = e.target.closest('.kiste-nochmal');
     if (nochmal) {
       s.neuFehler = null;
@@ -1838,9 +2008,14 @@ function verdrahten(s) {
     if (li) { e.preventDefault(); li.querySelector('a').focus(); }
   });
 
-  w.querySelector('.kiste-zurueck').addEventListener('click', () => zurueck('#/'));
+  w.querySelector('.kiste-zurueck').addEventListener('click', () => zurueck(s.fach === null ? '#/' : fachPfad(s, null)));
+  w.querySelector('.fachkopf-zu').addEventListener('click', () => zurueck(fachPfad(s, null)));
+  w.querySelector('.kiste-fachwechsel').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fachmodus]');
+    if (b) fachModusWechseln(b.dataset.fachmodus);
+  });
 
-  w.querySelector('.kiste-segmente').addEventListener('click', (e) => {
+  w.querySelector('.kiste-bedienung .kiste-segmente').addEventListener('click', (e) => {
     const b = e.target.closest('[data-ansicht]');
     if (b) ansichtWechseln(b.dataset.ansicht);
   });
@@ -2050,13 +2225,16 @@ async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, f
   const schluessel = sammlung ? 'sammlung' : String(id);
   const gespeichert = (name) => vorliebe(`kiste.${schluessel}.${name}`);
   // „Fach“ gibt es nur in einer Kiste mit Fächern (nie in der Gesamtsammlung)
-  const hatFaecher = !sammlung && Array.isArray(kopf.faecher) && kopf.faecher.length > 0;
+  const hatFaecher = !sammlung && Array.isArray(kopf.faecher) && kopf.faecher.some((f) => f.gueltig);
   const gruppierungen = (sammlung ? kopf.gruppierungen : optionen.gruppierungen).filter((x) => x.wert !== 'fach' || hatFaecher);
   const sortWert = optionen.sortierungen.some((x) => x.wert === gespeichert('sort')) ? gespeichert('sort') : 'name';
   const standardRichtung = optionen.sortierungen.find((x) => x.wert === sortWert).richtung;
   const s = {
     id, sammlung, schluessel, parameter,
     basis: sammlung ? '#/sammlung' : `#/kiste/${id}`,
+    hatFaecher,
+    fachModus: hatFaecher && gespeichert('fachmodus') !== 'alle' ? 'faecher' : 'alle',
+    fach: null, fachkasten: null, fachZieht: false, fachY: 0,
     kopf,
     optionen,
     gruppierungen,
@@ -2077,6 +2255,15 @@ async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, f
     neuLaedt: false, neuFehler: null, gehoben: null, statistikOffen: false, aufraeumen: [], io: null,
   };
   S = s;
+  // Fach aus der Adresse; gibt es das Fach nicht (mehr), bleibt die Kiste
+  const fachWert = hatFaecher ? parameter.fach ?? null : null;
+  if (fachWert !== null && fachLesen(s, fachWert)) {
+    s.fach = fachWert;
+    s.fachModus = 'faecher';
+    s.basis = fachPfad(s, fachWert);
+  } else if (parameter.fach != null) {
+    gehe(fachPfad(s, null), { ersetzen: true });
+  }
   s.wurzel.innerHTML = geruestHtml(s);
   s.wurzel.setAttribute('role', 'region');
   s.wurzel.classList.toggle('kiste-sammlung', sammlung);
@@ -2100,6 +2287,7 @@ async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, f
   sammlungInfoZeichnen();
   obenSync();
   filterSync();
+  fachAnsichtSync();
   adminZeichnen();
   verdrahten(s);
   if (wahlModus) wahlUmschalten(true);
@@ -2121,8 +2309,15 @@ export async function zeigen(wurzel, parameter) {
   await aufbauen(wurzel, parameter);
 }
 
-/** Gleiche Kiste, nur die große Karte kommt oder geht: nichts neu aufbauen. */
-export function aktualisieren() {}
+/** Gleiche Kiste: Die große Karte kommt oder geht (nichts neu aufbauen), oder ein Fach wird herausgezogen oder eingesteckt. */
+export function aktualisieren(parameter) {
+  const s = S;
+  if (!s?.wurzel || s.sammlung) return;
+  s.parameter = parameter;
+  const neu = s.hatFaecher ? parameter.fach ?? null : null;
+  if (neu !== null && !fachLesen(s, neu)) gehe(fachPfad(s, null), { ersetzen: true });   // das Fach gibt es nicht (mehr)
+  else if (neu !== s.fach) fachAnzeigen(neu);
+}
 
 export function verlassen() {
   abraeumen();

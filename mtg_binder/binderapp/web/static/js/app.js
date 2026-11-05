@@ -6,6 +6,7 @@
 //   #/binder/3/5/karte/12      dazu Karte 12 groß
 //   #/kiste/4                  Bulkkiste 4 (Karteikasten, Raster oder Liste)
 //   #/kiste/4/karte/12         dazu Karte 12 groß
+//   #/kiste/4/fach/2           Fach 2 der Kiste herausgezogen („ohne“: Karten ohne Fach), dazu /karte/12
 //   #/sammlung                 Gesamtsammlung (Binder und Kisten): dieselbe Ansicht wie die Kiste (kiste.js)
 //                              mit `sammlung: true` und `kiste: null`
 //   #/sammlung/karte/12        dazu Karte 12 groß
@@ -60,8 +61,10 @@ export function lesen(hash) {
     };
   }
   if (teile[0] === 'kiste' && zahl(teile[1]) !== null) {
-    return { ansicht: 'kiste', binder: null, kiste: zahl(teile[1]), sammlung: false, seite: null,
-             karte: teile[2] === 'karte' ? zahl(teile[3]) : null };
+    const fach = teile[2] === 'fach' && /^(\d{1,3}|ohne)$/.test(teile[3] ?? '') ? teile[3] : null;
+    const rest = fach === null ? 2 : 4;
+    return { ansicht: 'kiste', binder: null, kiste: zahl(teile[1]), sammlung: false, seite: null, fach,
+             karte: teile[rest] === 'karte' ? zahl(teile[rest + 1]) : null };
   }
   if (teile[0] === 'sammlung') {
     return { ansicht: 'kiste', binder: null, kiste: null, sammlung: true, seite: null,

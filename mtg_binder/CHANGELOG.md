@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.19.0
+- Eine Kiste mit Fächern zeigt sich jetzt als echte Kiste: Jedes Fach steht als Trennkarte mit Reiter darin, dahinter
+  ragen seine ersten Karten hervor. Dazu stehen Karten und Wert jedes Fachs, auch leere Fächer sind zu sehen.
+- Ein Tipp zieht das Fach heraus und zeigt nur seine Karten, mit Sortieren, Filtern, Auswählen und Statistik wie
+  gewohnt. „Zurück“ steckt es wieder ein.
+- „Alle Karten“ zeigt die bisherige Gesamtansicht; die Kiste merkt sich die Wahl. Kisten ohne Fächer bleiben unverändert.
+
 ## 0.18.1
 - Kisten mit Fächern zeigen das Fach jetzt an jeder Karte, in allen drei Ansichten. Unter „Gruppieren“ → „Fach“ lässt
   sich die Kiste weiter nach Fächern ordnen.

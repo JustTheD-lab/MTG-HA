@@ -10,7 +10,8 @@ Lesen:
   GET    /api/kisten                    Kisten mit Posten und Karten ({"verfuegbar": false}, wenn Version < 3)
   GET    /api/kisten/optionen           feste Listen: Sortierungen, Gruppierungen, Farben, Seltenheiten, Typen
   GET    /api/kiste/{id}                Kopf einer Kiste und vorhandene Werte für die Filterpillen
-  GET    /api/kiste/{id}/karten?sort=&richtung=&gruppe=&ab=&anzahl=&<filter>   Karten, sortiert und gefiltert
+  GET    /api/kiste/{id}/karten?sort=&richtung=&gruppe=&ab=&anzahl=&fach=&<filter>   Karten, sortiert und gefiltert
+  GET    /api/kiste/{id}/fachkasten     Fächer mit Zahlen, Wert und Beispielbildern (Kiste mit Trennkarten)
 
 Schreiben (nur angemeldet, Quelle „nutzer“, mit Historie):
   POST   /api/kisten                    {"name", "etikettfarbe"?} → 201 {"id"}
@@ -176,6 +177,11 @@ GRUPPIERUNGEN = {
     "fach": Gruppierung("Fach", (f"COALESCE(fw.platz, {10 ** 6})",), f"COALESCE(fw.platz, {10 ** 6})", "fw.name"),
 }
 FACH_JOIN = " LEFT JOIN temp.fachwahl fw ON fw.karte_id = k.id"
+# Filter „fach“: ein Fach (Platz ab 0) oder „ohne“; beides braucht `fach_vorbereiten`
+FACH_EINES = "k.id IN (SELECT karte_id FROM temp.fachwahl WHERE platz = ?)"
+FACH_OHNE = "k.id NOT IN (SELECT karte_id FROM temp.fachwahl)"
+FACH_OHNE_WERT = "ohne"
+FACH_BILDER = 3   # Beispielbilder je Fach im Fachkasten
 
 # Gesamtsammlung (Paket L): Bereich „alles“ statt einer Kiste; dazu Ort und Quelle. Die Tabellen ki (Kiste),
 # t, se, b (Tasche, Seite, Binder) gibt es nur in dieser Abfrage (VON_SAMMLUNG).
@@ -232,6 +238,7 @@ def gruppentext(gruppe: str, schluessel: str, extra) -> str:
 SKALARE = ("sort", "richtung", "gruppe", "ab", "anzahl", "foil", "mw_von", "mw_bis", "anzahl_min", "q")
 LISTEN = ("farbe", "seltenheit", "typ", "sprache", "set")
 SAMMLUNG_SKALARE = ("doppel",)
+KISTEN_SKALARE = ("fach",)
 SAMMLUNG_LISTEN = ("ort", "quelle")
 ORT_MUSTER = re.compile(r"[kbd][0-9]{1,9}")
 ZAHL = re.compile(r"[0-9]{1,9}")
@@ -289,13 +296,14 @@ class Anfrage(NamedTuple):
     where: tuple[str, ...]
     args: tuple
     kiste: int | None = 0   # Bereich: eine Kiste oder None für die ganze Sammlung (Binder und Kisten)
+    fach: str | None = None   # Filter auf ein Fach: Dann muss vorher `fach_vorbereiten` laufen
 
 
 def anfrage_lesen(query_params, kiste_id: int | None, nutzer: int) -> Anfrage:
     """Prüft alle Parameter und baut die WHERE-Bedingungen (nur mit `?`-Platzhaltern).
     `kiste_id` None: Bereich ganze Sammlung, dann sind auch Ort, Quelle, Doppel und deren Gruppen erlaubt."""
     sammlung = kiste_id is None
-    skalare = (*SKALARE, *SAMMLUNG_SKALARE) if sammlung else SKALARE
+    skalare = (*SKALARE, *(SAMMLUNG_SKALARE if sammlung else KISTEN_SKALARE))
     listen = (*LISTEN, *SAMMLUNG_LISTEN) if sammlung else LISTEN
     gruppierungen = SAMMLUNG_GRUPPIERUNGEN if sammlung else GRUPPIERUNGEN
     roh: dict[str, list[str]] = {}
@@ -349,6 +357,12 @@ def anfrage_lesen(query_params, kiste_id: int | None, nutzer: int) -> Anfrage:
     else:
         where = ["k.nutzer_id = ?", "k.kiste_id = ?"]
         args = [nutzer, kiste_id]
+    fach = _skalar(roh, "fach")
+    if fach == FACH_OHNE_WERT:
+        where.append(FACH_OHNE)
+    elif fach is not None:
+        where.append(FACH_EINES)
+        args.append(_zahl(roh, "fach", 0, 999))
 
     farben = _liste(roh, "farbe", erlaubt={f for f, _ in FARBEN}, gross=True,
                     hinweis="Möglich: " + _auswahl(f for f, _ in FARBEN) + ".")
@@ -399,7 +413,7 @@ def anfrage_lesen(query_params, kiste_id: int | None, nutzer: int) -> Anfrage:
         muster = "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         where.append("(k.name LIKE ? ESCAPE '\\' OR kd.name LIKE ? ESCAPE '\\')")
         args += [muster, muster]
-    return Anfrage(sort, richtung, gruppe, ab, anzahl, tuple(where), tuple(args), kiste_id)
+    return Anfrage(sort, richtung, gruppe, ab, anzahl, tuple(where), tuple(args), kiste_id, fach)
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -441,6 +455,45 @@ def fach_vorbereiten(con, nutzer: int, kiste_id: int) -> None:
     zeilen = [(kid, faecher.index(name), name)
               for kid, name in einsortieren.faecher_von(con, nutzer, kiste_id, ids).items() if name is not None]
     con.executemany("INSERT INTO temp.fachwahl VALUES (?, ?, ?)", zeilen)
+
+
+SQL_FACH_ZAHLEN = """
+SELECT COALESCE(fw.platz, -1) AS platz, COUNT(*) AS posten, SUM(k.anzahl) AS karten
+FROM karte k LEFT JOIN temp.fachwahl fw ON fw.karte_id = k.id
+WHERE k.nutzer_id = ? AND k.kiste_id = ? GROUP BY 1
+"""
+# Je Fach die ersten verschiedenen Bilder nach Name (dieselbe Karte mehrfach zeigt nichts Neues)
+SQL_FACH_BILDER = """
+SELECT platz, bild FROM (
+  SELECT platz, bild, ROW_NUMBER() OVER (PARTITION BY platz ORDER BY name, bild) AS nr FROM (
+    SELECT COALESCE(fw.platz, -1) AS platz, COALESCE(k.bild, kd.bild) AS bild, MIN(k.name COLLATE NOCASE) AS name
+    FROM karte k LEFT JOIN kartendaten kd ON kd.scryfall_id = k.scryfall_id
+    LEFT JOIN temp.fachwahl fw ON fw.karte_id = k.id
+    WHERE k.nutzer_id = ? AND k.kiste_id = ? AND COALESCE(k.bild, kd.bild) IS NOT NULL
+    GROUP BY 1, 2))
+WHERE nr <= ? ORDER BY platz, nr
+"""
+
+
+def fachkasten_lesen(con, nutzer: int, kiste_id: int) -> dict:
+    """Die Fächer einer Kiste für die Ansicht als Kiste mit Trennkarten: auch leere Fächer, in der Reihenfolge der
+    Fächer; `ohne` sind Karten, zu denen kein Fach passt. Das Fach bleibt berechnet, gespeichert wird nichts."""
+    fach_vorbereiten(con, nutzer, kiste_id)
+    zahlen = {z["platz"]: z for z in con.execute(SQL_FACH_ZAHLEN, (nutzer, kiste_id))}
+    wert = werte.fach_werte(con, nutzer, kiste_id)
+    bilder: dict[int, list[str]] = {}
+    for z in con.execute(SQL_FACH_BILDER, (nutzer, kiste_id, FACH_BILDER)):
+        bilder.setdefault(z["platz"], []).append(z["bild"])
+
+    def eintrag(platz: int) -> dict:
+        z = zahlen.get(platz)
+        return {"posten": z["posten"] if z else 0, "karten": z["karten"] if z else 0,
+                "wert": wert.get(platz, {}).get("wert"), "bilder": bilder.get(platz, [])}
+
+    faecher = [f for f in einsortieren.faecher_lesen(con, nutzer, kiste_id) if f["gueltig"]]
+    return {"faecher": [{"fach": str(i), "name": f["name"], "texte": f["texte"], **eintrag(i)}
+                        for i, f in enumerate(faecher)],
+            "ohne": {"fach": FACH_OHNE_WERT, **eintrag(-1)}}
 
 
 def _wo(a: Anfrage, nach_index: bool = False) -> str:
@@ -756,7 +809,7 @@ def routen(h) -> list[Route]:
             con.execute("BEGIN")  # ein Stand für alle Abfragen dieser Antwort
             _ab_version_3(con, 404)
             _kiste_holen(con, h.nutzer, kiste_id)
-            if a.gruppe == "fach":
+            if a.gruppe == "fach" or a.fach is not None:
                 fach_vorbereiten(con, h.nutzer, kiste_id)
             antwort = seite_lesen(con, a)
             # Fach je Karte nur für diese Seite: Es wird berechnet, nicht gespeichert
@@ -764,6 +817,15 @@ def routen(h) -> list[Route]:
             for k in antwort["karten"]:
                 k["fach"] = faecher.get(k["id"])
             return JSONResponse(antwort)
+
+    @_lesen
+    def fachkasten(request):
+        kiste_id = _kiste_id(request)
+        with closing(h.db()) as con:
+            con.execute("BEGIN")  # ein Stand für alle Abfragen dieser Antwort
+            _ab_version_3(con, 404)
+            _kiste_holen(con, h.nutzer, kiste_id)
+            return JSONResponse(fachkasten_lesen(con, h.nutzer, kiste_id))
 
     # ------------------------------------------------------------------ Schreiben
 
@@ -860,4 +922,5 @@ def routen(h) -> list[Route]:
         Route("/kiste/{id:int}", kiste_loeschen, methods=["DELETE"]),
         Route("/kiste/{id:int}/loeschen", kiste_ganz_loeschen, methods=["POST"]),
         Route("/kiste/{id:int}/karten", karten),
+        Route("/kiste/{id:int}/fachkasten", fachkasten),
     ]

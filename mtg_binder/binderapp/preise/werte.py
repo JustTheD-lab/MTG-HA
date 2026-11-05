@@ -147,6 +147,17 @@ def werte(con, nutzer: int, art: str, preisart: str = PREISART) -> dict[int, dic
     return {z[0]: {"wert": round(z[1] or 0, 2), "ohne_preis": z[2]} for z in con.execute(sql, (tag, nutzer))}
 
 
+def fach_werte(con, nutzer: int, kiste_id: int, preisart: str = PREISART) -> dict[int, dict]:
+    """Wert je Fach einer Kiste aus der temporären Tabelle fachwahl (`web.kisten.fach_vorbereiten`):
+    {Platz des Fachs oder -1 für Karten ohne Fach: {"wert": Euro, "ohne_preis": Karten ohne Preis}}."""
+    tag = neuester_tag(con)
+    if tag is None:
+        return {}
+    sql = SQL_WERT.format(gruppe="COALESCE(fw.platz, -1)", preis=preis_ausdruck(preisart),
+                          verbindung="LEFT JOIN temp.fachwahl fw ON fw.karte_id = k.id", bedingung="AND k.kiste_id = ?")
+    return {z[0]: {"wert": round(z[1] or 0, 2), "ohne_preis": z[2]} for z in con.execute(sql, (tag, nutzer, kiste_id))}
+
+
 def gesamtwert(con, nutzer: int, preisart: str = PREISART) -> dict | None:
     tag = neuester_tag(con)
     if tag is None:
