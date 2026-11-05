@@ -231,9 +231,9 @@ function kistenbodenHtml(kisten) {
     + '</section>';
 }
 
-/** Dialog „Neue Kiste“: Name und Farbe (feste Farben oder Farbrad). Gibt `{id}` der neuen Kiste zurück, sonst
-    `undefined`. */
-async function neueKisteFragen() {
+/** Dialog „Neue Kiste“: Name, Farbe (feste Farben oder Farbrad) und wahlweise eine Kiste, deren Farbe und Fächer die
+    neue übernimmt. Gibt `{id}` der neuen Kiste zurück, sonst `undefined`. */
+async function neueKisteFragen(kisten = []) {
   const form = document.createElement('form');
   form.id = 'kiste-neu-form';
   form.noValidate = true;
@@ -242,9 +242,20 @@ async function neueKisteFragen() {
     + `<input id="kiste-neu-name" class="feld" type="text" name="name" maxlength="${NAME_MAX}" autocomplete="off"`
     + ' autocapitalize="sentences" spellcheck="false" enterkeyhint="done" required'
     + ' aria-describedby="kiste-neu-meldung">'
+    + (kisten.length
+      ? '<label class="etikett feld-etikett" for="kiste-neu-vorlage">Einstellungen übernehmen von</label>'
+        + '<select id="kiste-neu-vorlage" class="feld"><option value="">Keiner Kiste</option>'
+        + kisten.map((k) => `<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('') + '</select>'
+      : '')
     + '<p class="meldung" id="kiste-neu-meldung" role="alert" aria-live="assertive"></p>';
   const wahl = farbwahl({ farben: KISTENFARBEN, wert: 'messing' });
   form.querySelector('.meldung').before(wahl);
+  // Vorlage gewählt: Ihre Farbe erscheint in der Farbwahl und lässt sich dort noch ändern; die Fächer kopiert der Server
+  const vorlage = form.querySelector('#kiste-neu-vorlage');
+  vorlage?.addEventListener('change', () => {
+    const k = kisten.find((x) => String(x.id) === vorlage.value);
+    if (k) wahl.wert = k.etikettfarbe;
+  });
 
   const d = dialog({ titel: 'Neue Kiste', klasse: 'dialog-klein', inhalt: form });
   const feld = form.querySelector('#kiste-neu-name');
@@ -271,7 +282,9 @@ async function neueKisteFragen() {
     los.disabled = true;
     meldung.textContent = '';
     try {
-      const antwort = await senden('/api/kisten', { daten: { name, etikettfarbe: farbe } });
+      const daten = { name, etikettfarbe: farbe };
+      if (vorlage?.value) daten.vorlage = Number(vorlage.value);
+      const antwort = await senden('/api/kisten', { daten });
       d.schliessen({ id: antwort?.id ?? null });
     } catch (fehler) {
       meldung.textContent = fehler.message;   // zum Beispiel: Eine Kiste „X“ gibt es schon.
@@ -646,7 +659,7 @@ export async function zeigen(wurzel, parameter, vorher) {
   neueKiste.innerHTML = `${PLUS}<span>Neue Kiste</span>`;
   neueKiste.hidden = !(kistenDa && angemeldet());
   neueKiste.addEventListener('click', async () => {
-    const r = await neueKisteFragen();
+    const r = await neueKisteFragen(kisten);
     if (r) neuLaden(wurzel, szene, r.id);
   });
   // Add-on: „PC verbinden“ (Schlüssel für die Erkennung am PC); am PC selbst gibt es das nicht

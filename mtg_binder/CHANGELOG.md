@@ -1,5 +1,15 @@
 # Änderungen
 
+## 0.17.0
+- Scan-Eingang: Der neue Knopf „Jetzt einsortieren“ wendet die Sortierregeln auf alle Karten im Eingang an, auch auf
+  solche, zu denen beim Scan keine Regel passte. Vorher zeigt die App, wie viele Karten wohin gehen und was bleibt.
+- Unsichere Karten bleiben im Eingang, bis sie geprüft sind. Das Einsortieren lässt sich als Ganzes rückgängig machen.
+
+## 0.16.0
+- Kisten kopieren: Der neue Knopf „Kopieren“ in der Kiste legt eine leere Kiste mit derselben Farbe und denselben
+  Fächern an. Im Dialog „Neue Kiste“ lässt sich dafür eine Kiste unter „Einstellungen übernehmen von“ wählen.
+- Karten bleiben in der alten Kiste, Sortierregeln zeigen weiter auf sie.
+
 ## 0.15.0
 - Bulk-Scan schneller: Der PC erfährt sofort von neuen Fotos, statt alle 30 Sekunden nachzusehen. Sobald die Scan-Seite
   Bilder schickt, lädt er schon die Modelle. Die Scan-Seite zeigt den Namen, sobald die Karte erkannt ist.

@@ -35,6 +35,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from binderapp.db.datenbank import einfuegen, aendern, loeschen, version
+from binderapp.db.erkennung import SCAN_MARKE
 from binderapp.db.seiten import EIGENE_FARBE
 from binderapp.preise import werte
 from binderapp.sortieren import einsortieren
@@ -730,9 +731,11 @@ def routen(h) -> list[Route]:
             sprachen = con.execute(SQL_SPRACHEN, (h.nutzer, kiste_id)).fetchall()
             wert = werte.werte(con, h.nutzer, "kiste").get(kiste_id)
             faecher = einsortieren.faecher_lesen(con, h.nutzer, kiste_id)
+            scan_eingang = einsortieren.aktiv(con) and k["extern_name"] == SCAN_MARKE
         maximum = kopf["manawert_max"]
         return JSONResponse({
             "faecher": faecher,   # ab Version 6: Fächer der Kiste (Sortierregeln), sonst leer
+            "scan_eingang": scan_eingang,   # zeigt den Knopf „Jetzt einsortieren“
             "id": k["id"], "name": k["name"], "etikettfarbe": k["etikettfarbe"], "regalplatz": k["regalplatz"],
             "posten": kopf["posten"], "karten": kopf["karten"],
             "wert": wert,   # {"wert": Euro (Durchschnitt 7 Tage), "ohne_preis": Karten} oder None
@@ -762,21 +765,27 @@ def routen(h) -> list[Route]:
     @h.schreibend
     async def kiste_neu(request):
         d = await h.json_daten(request)
-        unbekannt = set(d) - {"name", "etikettfarbe"}
+        unbekannt = set(d) - {"name", "etikettfarbe", "vorlage"}
         if unbekannt:
-            raise Fehler("Unbekannte Angabe. Erlaubt: name, etikettfarbe.")
+            raise Fehler("Unbekannte Angabe. Erlaubt: name, etikettfarbe, vorlage.")
         name = _name_pruefen(d.get("name"))
-        farbe = _etikettfarbe_pruefen(d["etikettfarbe"]) if d.get("etikettfarbe") is not None else "messing"
+        farbe = _etikettfarbe_pruefen(d["etikettfarbe"]) if d.get("etikettfarbe") is not None else None
+        vorlage = d.get("vorlage")   # Kiste, deren Farbe und Fächer die neue übernimmt; Karten bleiben, wo sie sind
+        if vorlage is not None and (isinstance(vorlage, bool) or not isinstance(vorlage, int)
+                                    or not 0 < vorlage < GROSSE_ID):
+            raise Fehler("Die Vorlage muss eine Kiste sein.")
 
         def arbeit(con):
             _ab_version_3(con, 409)
+            quelle = _kiste_holen(con, h.nutzer, vorlage) if vorlage is not None else None
             _name_frei(con, h.nutzer, name)
             platz = con.execute("SELECT COALESCE(MAX(regalplatz), 0) + 1 FROM kiste WHERE nutzer_id = ?",
                                 (h.nutzer,)).fetchone()[0]
-            return einfuegen(con, h.nutzer, QUELLE, "kiste", {
-                "nutzer_id": h.nutzer, "name": name, "etikettfarbe": farbe, "regalplatz": platz})
-        kiste_id = await run_in_threadpool(h.schreibvorgang, arbeit)
-        return JSONResponse({"id": kiste_id}, status_code=201)
+            neu = einfuegen(con, h.nutzer, QUELLE, "kiste", {
+                "nutzer_id": h.nutzer, "name": name, "regalplatz": platz,
+                "etikettfarbe": farbe or (quelle["etikettfarbe"] if quelle else "messing")})
+            return {"id": neu, "faecher": einsortieren.faecher_kopieren(con, h.nutzer, vorlage, neu)} if quelle else {"id": neu}
+        return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit), status_code=201)
 
     @h.schreibend
     async def kiste_aendern(request):

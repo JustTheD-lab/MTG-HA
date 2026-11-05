@@ -9,6 +9,8 @@
     PUT    /api/kiste/{id}/faecher        {faecher: [{name, bedingungen}]} ersetzt die Fächer
     GET    /api/regeln/suche?q=           Karten der Sammlung für die Probe (Name enthält)
     GET    /api/regeln/probe?karte=ID     welche Regel greift für diese Karte und warum
+    GET    /api/regeln/einsortieren       was „Jetzt einsortieren“ mit dem Scan-Eingang täte
+    POST   /api/regeln/einsortieren       Regeln auf den ganzen Scan-Eingang anwenden (ein Schritt mit Rückgängig)
 
 Schreiben mit Historie (Quelle „nutzer“). Bedingungen nur aus festen Feldern, Werte als Parameter.
 """
@@ -103,7 +105,16 @@ def routen(h) -> list[Route]:
             raise Fehler("Bitte eine Karte wählen.")
         return einsortieren.probe(con, h.nutzer, int(wert))
 
+    @lesend
+    def eingang_vorschau(con, request):
+        _version(con, 404)
+        return einsortieren.eingang_vorschau(con, h.nutzer)
+
     # ------------------------------------------------------------ Schreiben
+
+    @h.schreibend
+    async def eingang_einsortieren(request):
+        return await schreiben(lambda con: einsortieren.eingang_einsortieren(con, h.nutzer))
 
     @h.schreibend
     async def anlegen(request):
@@ -154,6 +165,8 @@ def routen(h) -> list[Route]:
         Route("/regeln/reihenfolge", reihenfolge, methods=["POST"]),
         Route("/regeln/suche", suche),
         Route("/regeln/probe", probe),
+        Route("/regeln/einsortieren", eingang_vorschau),
+        Route("/regeln/einsortieren", eingang_einsortieren, methods=["POST"]),
         Route("/regel/{id:int}", aendern, methods=["PUT"]),
         Route("/regel/{id:int}", loeschen, methods=["DELETE"]),
         Route("/kiste/{id:int}/faecher", faecher),

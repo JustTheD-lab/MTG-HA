@@ -270,7 +270,10 @@ export function farbwahl({ farben, wert, beschriftung = 'Farbe' }) {
   });
   hexFeld.addEventListener('blur', () => { hexFeld.value = istEigen(aktuell) ? aktuell : ''; });
 
-  Object.defineProperty(wurzel, 'wert', { get: () => aktuell });
+  Object.defineProperty(wurzel, 'wert', {
+    get: () => aktuell,
+    set: (neu) => { if (istEigen(neu)) hsv = hexZuHsv(neu); setzen(neu, false); },
+  });
   // Erst zeichnen, wenn das Element sichtbar ist (die Breite des Kreises kommt aus dem CSS)
   requestAnimationFrame(anzeigen);
   anzeigen();

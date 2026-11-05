@@ -200,6 +200,19 @@ def faecher_setzen(con, nutzer: int, kiste_id: int, liste) -> None:
         loeschen(con, nutzer, QUELLE_NUTZER, "sortierfach", z["id"])
 
 
+def faecher_kopieren(con, nutzer: int, von: int, nach: int) -> int:
+    """Kopiert die Fächer einer Kiste in eine neue Kiste (Wunsch des Nutzers, 05.11.2026), Zeile für Zeile mit Historie.
+    Gibt die Zahl der Fächer zurück. Ohne Sortierregeln: Die zeigen weiter auf die alte Kiste."""
+    if not aktiv(con):
+        return 0
+    zeilen = con.execute("SELECT name, bedingungen FROM sortierfach WHERE nutzer_id = ? AND kiste_id = ? "
+                         "ORDER BY platz, id", (nutzer, von)).fetchall()
+    for platz, z in enumerate(zeilen, 1):
+        einfuegen(con, nutzer, QUELLE_NUTZER, "sortierfach", {"nutzer_id": nutzer, "kiste_id": nach, "platz": platz,
+                                                              "name": z["name"], "bedingungen": z["bedingungen"]})
+    return len(zeilen)
+
+
 def kiste_benutzt(con, nutzer: int, kiste_id: int) -> list[str]:
     """Namen der Regeln, die in die Kiste sortieren (eine solche Kiste lässt sich nicht löschen)."""
     if not aktiv(con):
@@ -291,9 +304,9 @@ def _sortierbar(k) -> bool:
     return k["status"] == "sicher" or bool(k["geprueft"])
 
 
-def _verschieben(con, nutzer: int, k, ziel: int) -> tuple[str, int]:
-    """Eigener Schritt (Quelle „sortierregel“): zusammenfassen oder verschieben. Gibt (Schritt, Karte) zurück."""
-    schritt = schritte.neuer_schritt()
+def _verschieben(con, nutzer: int, k, ziel: int, *, schritt: str | None = None, quelle: str = QUELLE) -> tuple[str, int]:
+    """Zusammenfassen oder verschieben, ohne `schritt` als eigener Schritt. Gibt (Schritt, Karte) zurück."""
+    schritt = schritt or schritte.neuer_schritt()
     # gleiche Foil-Angabe fasst zusammen (Foil-Durchgänge seit Version 9, 04.11.2026)
     if k["status"] == "sicher" and not k["geprueft"] and k["scryfall_id"] and k["quelle"] == "scan":
         z = con.execute(
@@ -303,13 +316,13 @@ def _verschieben(con, nutzer: int, k, ziel: int) -> tuple[str, int]:
                                      k["id"])).fetchone()
         if z is not None:
             schritte.aendern_genau(con, nutzer, "karte", z["id"], {"anzahl": z["anzahl"] + k["anzahl"]},
-                                   schritt=schritt, quelle=QUELLE)
+                                   schritt=schritt, quelle=quelle)
             for f in con.execute("SELECT id FROM scan_foto WHERE karte_id = ?", (k["id"],)).fetchall():
                 schritte.aendern_genau(con, nutzer, "scan_foto", f[0], {"karte_id": z["id"]}, schritt=schritt,
-                                       quelle=QUELLE)
-            schritte.loeschen(con, nutzer, "karte", k["id"], schritt=schritt, quelle=QUELLE)
+                                       quelle=quelle)
+            schritte.loeschen(con, nutzer, "karte", k["id"], schritt=schritt, quelle=quelle)
             return schritt, z["id"]
-    schritte.aendern_genau(con, nutzer, "karte", k["id"], {"kiste_id": ziel}, schritt=schritt, quelle=QUELLE)
+    schritte.aendern_genau(con, nutzer, "karte", k["id"], {"kiste_id": ziel}, schritt=schritt, quelle=quelle)
     return schritt, k["id"]
 
 
@@ -364,6 +377,54 @@ def _offen_beenden(con, nutzer: int, karte_id: int, schritt: str | None) -> None
         aendern(con, nutzer, QUELLE, "karte", karte_id, {"sortieren": None})
     else:
         aendern(con, nutzer, QUELLE_NUTZER, "karte", karte_id, {"sortieren": None}, schritt=schritt)
+
+
+def _eingang_plan(con, nutzer: int) -> tuple[dict, list]:
+    """Was „Jetzt einsortieren“ täte: (Übersicht in Karten, [(Karte, Regel)]). Anders als `einsortieren` zählen alle
+    Karten im Scan-Eingang, nicht nur offene: auch solche, zu denen beim Scan keine Regel passte."""
+    plan = {"kisten": [], "posten": 0, "karten": 0, "keine": 0, "wartet": 0, "pruefen": 0}
+    eingang = scan_kiste_id(con, nutzer)
+    if eingang is None:
+        return plan, []
+    karten = con.execute("SELECT * FROM karte WHERE nutzer_id = ? AND kiste_id = ? ORDER BY id", (nutzer, eingang)).fetchall()
+    ergebnis = auswerten(con, nutzer, [k["id"] for k in karten if _sortierbar(k)])
+    wege, ziele = [], {}
+    for k in karten:
+        if not _sortierbar(k):
+            plan["pruefen"] += k["anzahl"]
+            continue
+        e = ergebnis.get(k["id"], {"regel": None, "fehlt": ["Kartendaten"]})
+        if e["fehlt"]:
+            plan["wartet"] += k["anzahl"]
+        elif e["regel"] is None:
+            plan["keine"] += k["anzahl"]
+        else:
+            wege.append((k, e["regel"]))
+            ziel = ziele.setdefault(e["regel"]["kiste_id"], {"kiste_id": e["regel"]["kiste_id"],
+                                                             "kiste": e["regel"]["ziel"], "posten": 0, "karten": 0})
+            ziel["posten"] += 1
+            ziel["karten"] += k["anzahl"]
+            plan["posten"] += 1
+            plan["karten"] += k["anzahl"]
+    plan["kisten"] = list(ziele.values())
+    return plan, wege
+
+
+def eingang_vorschau(con, nutzer: int) -> dict:
+    return _eingang_plan(con, nutzer)[0]
+
+
+def eingang_einsortieren(con, nutzer: int) -> dict:
+    """„Jetzt einsortieren“ (Wunsch des Nutzers, 05.11.2026): die Regeln auf den ganzen Scan-Eingang anwenden, als ein
+    Schritt des Nutzers mit Rückgängig. Das Warten endet außerhalb des Schritts, sonst räumte das nächste Einsortieren
+    die zurückgenommenen Karten gleich wieder weg."""
+    plan, wege = _eingang_plan(con, nutzer)
+    schritt = schritte.neuer_schritt() if wege else None
+    for k, regel in wege:
+        if k["sortieren"] == "offen":
+            _offen_beenden(con, nutzer, k["id"], None)
+        _verschieben(con, nutzer, k, regel["kiste_id"], schritt=schritt, quelle=QUELLE_NUTZER)
+    return {**plan, "schritt": schritt}
 
 
 def nach_erkennung(con, nutzer: int) -> list[dict]:

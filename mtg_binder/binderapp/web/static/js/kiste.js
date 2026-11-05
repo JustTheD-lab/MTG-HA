@@ -72,6 +72,7 @@ const SYM = {
   weiter: sym('<path d="M4 12h14M13 7l5 5-5 5"/>'),
   stern: sym('<path d="M12 4l2.4 5 5.4.7-4 3.8 1 5.4L12 16.2 7.2 18.9l1-5.4-4-3.8 5.4-.7z"/>'),
   faecher: sym('<rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/>'),
+  kopie: sym('<rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M15 9V5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15H9"/>'),
 };
 const ANSICHT_TEXT = { kasten: 'Karteikasten', raster: 'Raster', liste: 'Liste' };
 
@@ -1031,6 +1032,10 @@ function adminZeichnen() {
     neu('kiste-abzugknopf', SYM.abzug, 'Liste abziehen', 'Liste von der Sammlung abziehen', abziehenOeffnen);
     return;
   }
+  if (s.kopf.scan_eingang) {
+    neu('kiste-einsortierknopf', SYM.weiter, 'Jetzt einsortieren', 'Karten des Scan-Eingangs nach den Sortierregeln einsortieren',
+      jetztEinsortieren);
+  }
   neu('kiste-importknopf', SYM.hochladen, 'Liste importieren', 'Kartenliste (CSV) in diese Kiste importieren', listeImportieren);
   const plus = neu('kiste-plusknopf', SYM.plus, 'Karte hinzufügen', 'Karte zu dieser Kiste hinzufügen', karteHinzufuegen);
   const hinweis = el('span', 'kiste-katalog-hinweis');
@@ -1046,6 +1051,7 @@ function adminZeichnen() {
   });
   neu('kiste-faecherknopf', SYM.faecher, 'Fächer', 'Fächer dieser Kiste bearbeiten', faecherOeffnen);
   neu('kiste-umbenennen', SYM.stift, 'Bearbeiten', 'Name und Farbe der Kiste ändern', umbenennen);
+  neu('kiste-kopierknopf', SYM.kopie, 'Kopieren', 'Neue Kiste mit Farbe und Fächern dieser Kiste anlegen', kopieren);
   neu('kiste-loeschen', SYM.muell, 'Löschen', s.kopf.posten === 0 ? 'Leere Kiste löschen' : 'Kiste mit allen Karten löschen',
     loeschen);
 }
@@ -1132,6 +1138,53 @@ async function umbenennen() {
   feld.focus();
   feld.select();
   await d.fertig;
+}
+
+/** Neue, leere Kiste mit Farbe und Fächern dieser Kiste. Karten gibt es nur einmal, darum bleiben sie hier liegen. */
+async function kopieren() {
+  const s = S;
+  const faecher = s.kopf.faecher?.length ?? 0;
+  const form = el('form');
+  form.id = 'kiste-kopieren-form';
+  form.noValidate = true;
+  form.innerHTML = '<label class="etikett feld-etikett" for="kiste-kopie-name">Name der neuen Kiste</label>'
+    + `<input id="kiste-kopie-name" class="feld" type="text" maxlength="60" value="${esc(`${s.kopf.name.slice(0, 52)} (Kopie)`)}"`
+    + ' autocomplete="off" enterkeyhint="done" spellcheck="false">'
+    + '<p class="dialog-text">'
+    + (faecher ? `Übernommen werden die Farbe und ${faecher === 1 ? '1 Fach' : `${esc(zahl(faecher))} Fächer`}.`
+      : 'Übernommen wird die Farbe.')
+    + ' Die neue Kiste ist leer, die Karten bleiben hier.</p>'
+    + '<p class="meldung" role="alert" aria-live="assertive"></p>';
+  const d = dialog({ titel: 'Kiste kopieren', klasse: 'dialog-klein', inhalt: form });
+  const feld = form.querySelector('input');
+  const text = form.querySelector('.meldung');
+  const abbrechen = el('button', 'knopf', 'Abbrechen');
+  abbrechen.type = 'button';
+  abbrechen.addEventListener('click', () => d.schliessen(null));
+  const los = el('button', 'knopf knopf-haupt', 'Kopieren');
+  los.type = 'submit';
+  los.setAttribute('form', form.id);
+  d.fuss.append(abbrechen, los);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = feld.value.trim();
+    if (!name) { text.textContent = 'Bitte einen Namen für die Kiste eingeben.'; feld.focus(); return; }
+    los.disabled = true;
+    text.textContent = '';
+    try {
+      const antwort = await senden('/api/kisten', { daten: { name, vorlage: s.id } });
+      d.schliessen(antwort.id);
+    } catch (f) {
+      text.textContent = f.message;   // zum Beispiel: Eine Kiste „X“ gibt es schon.
+      feld.focus();
+    } finally {
+      los.disabled = false;
+    }
+  });
+  feld.focus();
+  feld.select();
+  const neueId = await d.fertig;
+  if (neueId && S === s) gehe(`#/kiste/${neueId}`);
 }
 
 async function loeschen() {
@@ -1389,6 +1442,50 @@ async function verschieben() {
   const dort = a.schon_dort ? `, ${zahl(a.schon_dort)} lagen schon dort` : '';
   hinweisZeigen(`${zahl(a.karten)} ${a.karten === 1 ? 'Karte' : 'Karten'} (${zahl(a.verschoben)} Posten) nach „${ziel.name}“`
     + ` verschoben${leer}${dort}.`, { schritt: a.schritt });
+}
+
+// ---------- Jetzt einsortieren (Scan-Eingang) ----------
+
+const karten = (n) => `${zahl(n)} ${n === 1 ? 'Karte' : 'Karten'}`;
+
+/** Sortierregeln auf den ganzen Scan-Eingang anwenden: erst zeigen, was geschieht, dann als ein Schritt ausführen. */
+async function jetztEinsortieren() {
+  const s = S;
+  let plan;
+  try {
+    plan = await senden('/api/regeln/einsortieren', { methode: 'GET' });
+  } catch (f) {
+    if (S === s) hinweisZeigen(f.message, { art: 'fehler' });
+    return;
+  }
+  if (S !== s) return;
+  const bleiben = [
+    plan.keine ? `${zahl(plan.keine)} ohne passende Regel` : '',
+    plan.wartet ? `${zahl(plan.wartet)} ohne Preis oder Kartendaten` : '',
+    plan.pruefen ? `${zahl(plan.pruefen)} erst prüfen` : '',
+  ].filter(Boolean).join(', ');
+  if (!plan.karten) {
+    hinweisZeigen(`Nichts einzusortieren${bleiben ? `: ${bleiben}` : ''}.`);
+    return;
+  }
+  const ziele = plan.kisten.map((k) => `${k.kiste} ${zahl(k.karten)}`).join(', ');
+  const ja = await bestaetigen({
+    titel: 'Jetzt einsortieren',
+    text: `${karten(plan.karten)} nach den Sortierregeln einsortieren: ${ziele}.`
+      + `${bleiben ? ` Im Scan-Eingang bleiben: ${bleiben}.` : ''} Danach kannst du das noch rückgängig machen.`,
+    ja: 'Einsortieren',
+  });
+  if (!ja || S !== s) return;
+  let a;
+  try {
+    a = await senden('/api/regeln/einsortieren');
+  } catch (f) {
+    if (S === s) hinweisZeigen(f.message, { art: 'fehler' });
+    return;
+  }
+  if (S !== s) return;
+  await neuAufbauen();
+  hinweisZeigen(a.schritt ? `${karten(a.karten)} einsortiert.` : 'Nichts einzusortieren.', { schritt: a.schritt });
 }
 
 // ---------- Liste importieren ----------
