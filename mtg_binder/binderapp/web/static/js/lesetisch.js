@@ -1542,7 +1542,7 @@ function bearbTasche(tasche) {
   if (!k) {
     // Rückseite oder unklare Tasche: „Löschen“ markiert sie als leer, sonst wie eine leere Tasche eine Karte einlegen
     if (b.werkzeug === 'loeschen' && tasche.dataset.typ !== 'leer' && t?.id != null) return void tascheLeeren(t, ort);
-    hinzufuegen(ort);
+    karteFuerTasche(ort);
     return;
   }
   if (b.werkzeug === 'foil') return void foilUmschalten(ort, k);
@@ -1718,6 +1718,60 @@ async function inEineKiste() {
     await laden(true);
     meldung(`„${w.name}“ in die Kiste „${ziel.name}“ verschoben.`, { schritte: r.schritt ? [r.schritt] : [] });
   });
+}
+
+/** Dialog „Zurückgestellt“: gibt die gewählte Karte zurück, 'suchen' für die Katalogsuche oder undefined. */
+function zurueckgestellteWaehlen(karten) {
+  const inhalt = el('div', 'tisch-ziele-wrap');
+  const info = (k) => [`${String(k.set_code ?? '').toUpperCase()} ${k.nummer ?? ''}`.trim(), String(k.sprache ?? '').toUpperCase(),
+    k.foil ? 'Foil' : '', k.anzahl > 1 ? `${k.anzahl}×` : ''].filter(Boolean).join(' · ');
+  inhalt.innerHTML = '<p class="dialog-text">Welche zurückgestellte Karte soll in diese Tasche?</p>'
+    + (karten.length > 8
+      ? '<input class="feld tisch-ziele-suche" type="search" placeholder="Name suchen" aria-label="Zurückgestellte Karten nach Name suchen"'
+        + ' autocomplete="off" spellcheck="false">' : '')
+    + '<ul class="tisch-ziele" role="list">'
+    + karten.map((k, i) => `<li data-name="${esc(k.name.toLowerCase())}"><button type="button" class="knopf tisch-ziel" data-i="${i}">`
+      + `<span class="tisch-ziel-name">${esc(k.name)}</span><span class="etikett">${esc(info(k))}</span></button></li>`).join('')
+    + '</ul>';
+  const d = dialog({ titel: 'Karte in diese Tasche legen', klasse: 'dialog-klein tisch-dialog', inhalt });
+  inhalt.addEventListener('click', (e) => {
+    const knopf = e.target.closest('.tisch-ziel');
+    if (knopf) d.schliessen(karten[Number(knopf.dataset.i)]);
+  });
+  const suche = inhalt.querySelector('.tisch-ziele-suche');
+  suche?.addEventListener('input', () => {
+    const text = suche.value.trim().toLowerCase();
+    inhalt.querySelectorAll('.tisch-ziele li').forEach((li) => { li.hidden = !li.dataset.name.includes(text); });
+  });
+  const abbrechen = el('button', 'knopf', 'Abbrechen');
+  abbrechen.type = 'button';
+  abbrechen.addEventListener('click', () => d.schliessen(undefined));
+  const andere = el('button', 'knopf', 'Andere Karte suchen');
+  andere.type = 'button';
+  andere.addEventListener('click', () => d.schliessen('suchen'));
+  d.fuss.append(abbrechen, andere);
+  (suche ?? inhalt.querySelector('.tisch-ziel'))?.focus();
+  return d.fertig;
+}
+
+/** Tipp auf eine Tasche ohne Karte: erst die zurückgestellten Karten anbieten, ohne solche gleich die Katalogsuche. */
+async function karteFuerTasche(ort) {
+  const zustand = z;
+  let suchen = false;
+  await bearbAktion(async () => {
+    const liste = (await holen('/api/zurueckgestellt')).karten ?? [];
+    if (z !== zustand) return;
+    const wahl = liste.length ? await zurueckgestellteWaehlen(liste) : 'suchen';
+    if (wahl === 'suchen') { suchen = true; return; }
+    if (!wahl || z !== zustand) return;
+    const r = await senden(`/api/seite/${ort.seiteId}/zurueckgestellt`,
+      { daten: { zeile: ort.zeile, spalte: ort.spalte, karte_id: wahl.id } });
+    if (z !== zustand) return;
+    await laden(true);
+    meldung(`„${r.name}“ in die Tasche gelegt (Seite ${ort.nr}, Reihe ${ort.zeile}, Platz ${ort.spalte}).`,
+      { schritte: [r.schritt] });
+  });
+  if (suchen && z === zustand) hinzufuegen(ort);
 }
 
 /** Leere Tasche: Karte aus dem Katalog suchen, Druck wählen (Sprache = zuletzt gewählte) und einlegen. */

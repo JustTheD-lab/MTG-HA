@@ -103,6 +103,8 @@ def fehlgeschlagen(con, nutzer: int, foto_id: int, grund: str) -> None:
 
 SCAN_KISTE = "Scan-Eingang"
 SCAN_MARKE = "@scan-eingang"   # kiste.extern_name: findet die Kiste auch nach dem Umbenennen
+ZURUECK_KISTE = "Zurückgestellt"
+ZURUECK_MARKE = "@zurueckgestellt"
 
 SQL_SCAN_NEUE = (
     "SELECT f.id AS scan_id, f.datei, f.durchgang_id, f.nummer, f.sha256, f.groesse{sets}{zeit}"
@@ -172,26 +174,42 @@ def wartend(con, nutzer: int) -> dict:
     return {"neu": neu, "scan": scan}
 
 
-def scan_kiste(con, nutzer: int) -> int:
-    """Die Kiste „Scan-Eingang“: über die Marke, sonst eine gleichnamige ohne Herkunft übernehmen, sonst neu anlegen.
+def _marken_kiste(con, nutzer: int, marke: str, grundname: str, quelle: str) -> int:
+    """Kiste mit fester Aufgabe: über die Marke, sonst eine gleichnamige ohne Herkunft übernehmen, sonst neu anlegen.
     Eine gleichnamige Kiste aus einem ManaBox-Import (extern_name gesetzt) bleibt unberührt, damit ihr Import
     wiederholbar bleibt; dann heißt die neue Kiste „Scan-Eingang 2“ usw."""
-    z = con.execute("SELECT id FROM kiste WHERE nutzer_id = ? AND extern_name = ?", (nutzer, SCAN_MARKE)).fetchone()
+    z = con.execute("SELECT id FROM kiste WHERE nutzer_id = ? AND extern_name = ?", (nutzer, marke)).fetchone()
     if z is not None:
         return z["id"]
     z = con.execute("SELECT id FROM kiste WHERE nutzer_id = ? AND name = ? AND extern_name IS NULL",
-                    (nutzer, SCAN_KISTE)).fetchone()
+                    (nutzer, grundname)).fetchone()
     if z is not None:
-        aendern(con, nutzer, QUELLE, "kiste", z["id"], {"extern_name": SCAN_MARKE})
+        aendern(con, nutzer, quelle, "kiste", z["id"], {"extern_name": marke})
         return z["id"]
     vergeben = {r["name"] for r in con.execute("SELECT name FROM kiste WHERE nutzer_id = ?", (nutzer,))}
-    name, n = SCAN_KISTE, 1
+    name, n = grundname, 1
     while name in vergeben:
         n += 1
-        name = f"{SCAN_KISTE} {n}"
+        name = f"{grundname} {n}"
     platz = con.execute("SELECT COALESCE(MAX(regalplatz), 0) + 1 FROM kiste WHERE nutzer_id = ?", (nutzer,)).fetchone()[0]
-    return einfuegen(con, nutzer, QUELLE, "kiste", {"nutzer_id": nutzer, "name": name, "regalplatz": platz,
-                                                    "extern_name": SCAN_MARKE})
+    return einfuegen(con, nutzer, quelle, "kiste", {"nutzer_id": nutzer, "name": name, "regalplatz": platz,
+                                                    "extern_name": marke})
+
+
+def scan_kiste(con, nutzer: int) -> int:
+    """Die Kiste „Scan-Eingang“."""
+    return _marken_kiste(con, nutzer, SCAN_MARKE, SCAN_KISTE, QUELLE)
+
+
+def zurueck_kiste(con, nutzer: int) -> int:
+    """Die Kiste „Zurückgestellt“: Karten, die der Nutzer im Binder in eine Tasche legen will (05.11.2026)."""
+    return _marken_kiste(con, nutzer, ZURUECK_MARKE, ZURUECK_KISTE, "nutzer")
+
+
+def zurueck_kiste_id(con, nutzer: int) -> int | None:
+    """Wie `zurueck_kiste`, legt aber nichts an (zum Lesen)."""
+    z = con.execute("SELECT id FROM kiste WHERE nutzer_id = ? AND extern_name = ?", (nutzer, ZURUECK_MARKE)).fetchone()
+    return z["id"] if z else None
 
 
 def scan_ergebnis_schreiben(con, nutzer: int, scan_id: int, tasche: Tasche | None) -> dict:

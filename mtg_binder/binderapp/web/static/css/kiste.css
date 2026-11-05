@@ -11,7 +11,8 @@
 .kiste [hidden] { display: none !important; }
 
 @media (prefers-reduced-motion: no-preference) {
-  .kiste { animation: kiste-ein var(--dauer) var(--kurve) both; }
+  /* nur rückwärts füllen: Ein bleibendes „transform“ würde die festen Leisten an die Kiste statt ans Fenster binden */
+  .kiste { animation: kiste-ein var(--dauer) var(--kurve) backwards; }
   @keyframes kiste-ein { from { opacity: 0; transform: translate3d(0, 10px, 0); } to { opacity: 1; transform: none; } }
 }
 
@@ -377,6 +378,11 @@
   letter-spacing: 0.03em; vertical-align: middle;
 }
 .z-name .kiste-doppel, .ks-name .kiste-doppel { margin-left: 2px; }
+.kiste-fach {
+  flex: 0 1 auto; min-width: 2.5em; max-width: 45%; padding: 0 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 1px solid var(--linie-stark); border-radius: 999px; color: var(--text-2); font-size: 0.68rem;
+  font-weight: 500; line-height: 1.6;
+}
 .kachel-unter { display: block; height: 22px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 0.72rem; line-height: 22px; color: var(--text-3); }
 .kiste-sammlung .kiste-liste-raster > li { contain-intrinsic-size: auto 176px; }
@@ -387,6 +393,7 @@
 
 /* ---------- Auswahlmodus ---------- */
 .kiste-wahl { padding-bottom: calc(230px + env(safe-area-inset-bottom)); }
+.kiste-wahl:has(.kiste-zurueckstellen:not([hidden])) { padding-bottom: calc(285px + env(safe-area-inset-bottom)); }
 .kiste-wahl .kiste-liste a[data-karte] { cursor: pointer; }
 .kiste-wahl .kiste-liste a[data-karte]::before {
   content: ""; position: absolute; z-index: 2; width: 24px; height: 24px; border-radius: 50%;
@@ -420,16 +427,17 @@
 .kiste-wahl-zahl { font-weight: 500; min-width: 0; }
 .kiste-wahl-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
 .kiste-wahl-knoepfe .knopf { flex: 1 1 auto; font-size: 0.88rem; }
-.kiste-verschieben { width: 100%; }
+.kiste-verschieben, .kiste-zurueckstellen { width: 100%; }
 @media (min-width: 700px) {
   .kiste-wahlleiste {
     left: 50%; right: auto; bottom: 16px; width: min(780px, calc(100vw - 32px)); transform: translate3d(-50%, 0, 0);
     padding: 12px 16px; border: 1px solid var(--messing-dunkel); border-radius: var(--radius-gross);
   }
-  .kiste-verschieben { width: auto; align-self: flex-end; }
-  .kiste-wahl { padding-bottom: 190px; }
+  .kiste-verschieben, .kiste-zurueckstellen { width: auto; align-self: flex-end; }
+  .kiste-wahl, .kiste-wahl:has(.kiste-zurueckstellen:not([hidden])) { padding-bottom: 240px; }
 }
 .kiste-wahl .kiste-hoch { bottom: 210px; }
+.kiste-wahl:has(.kiste-zurueckstellen:not([hidden])) .kiste-hoch { bottom: 265px; }
 .kiste-wahl .kiste-sprung { top: calc(50% - 100px); max-height: 56vh; }
 @media (min-width: 700px) { .kiste-wahl .kiste-hoch { bottom: 170px; } }
 

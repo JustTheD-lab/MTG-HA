@@ -103,6 +103,40 @@ def verschieben(con, nutzer: int, ids: list[int], ziel: int) -> dict:
             "schon_dort": schon_dort, "taschen_leer": leer, "summe": {"posten": nachher[0], "karten": nachher[1]}}
 
 
+def auswahl_lesen(d: dict, nutzer: int) -> tuple:
+    """Gewählte Karten aus der Anfrage: (IDs, None) bei „karten“, sonst (None, geprüfte Abfrage) bei „auswahl“."""
+    if "karten" in d:
+        liste = d["karten"]
+        if not isinstance(liste, list) or not liste or len(liste) > AUSWAHL_MAX:
+            raise Fehler(f"„karten“ muss eine Liste mit 1 bis {AUSWAHL_MAX} IDs sein.")
+        return list(dict.fromkeys(_ganzzahl(i, "karten", 1, 2 ** 62) for i in liste)), None
+    auswahl = d["auswahl"]
+    if not isinstance(auswahl, dict) or set(auswahl) - {"kiste", "abfrage"}:
+        raise Fehler("„auswahl“ braucht „kiste“ (ID oder null für die Sammlung) und „abfrage“.")
+    bereich = auswahl.get("kiste")
+    if bereich is not None:
+        bereich = _ganzzahl(bereich, "kiste", 1, GROSSE_ID - 1)
+    abfrage = auswahl.get("abfrage") or ""
+    if not isinstance(abfrage, str) or len(abfrage) > ABFRAGE_MAX:
+        raise Fehler("„abfrage“ ist ungültig.")
+    # dieselbe Prüfung wie beim Blättern; Sortierung, Seite und Gruppe ändern die Auswahl nicht
+    return None, anfrage_lesen(QueryParams(abfrage), bereich, nutzer)
+
+
+def auswahl_ids(con, nutzer: int, ids: list[int] | None, a) -> list[int]:
+    """IDs zu `auswahl_lesen`; eine Abfrage wird erst hier in der Transaktion ausgewertet."""
+    if ids is not None:
+        return ids
+    if a.kiste is not None:
+        _kiste_holen(con, nutzer, a.kiste)
+    gefunden = [z[0] for z in con.execute(sql_ids(a), a.args)]
+    if not gefunden:
+        raise Fehler("Die Auswahl ist leer.")
+    if len(gefunden) > AUSWAHL_MAX:
+        raise Fehler(f"Höchstens {AUSWAHL_MAX} Karten in einem Schritt.")
+    return gefunden
+
+
 async def datei_lesen(request, grenze: int) -> bytes:
     """Rumpf der Anfrage als Bytes, höchstens `grenze` (sonst 413), ohne alles vorher in den Speicher zu laden."""
     laenge = request.headers.get("content-length", "")
@@ -219,38 +253,11 @@ def routen(h) -> list[Route]:
         if unbekannt or ("karten" in d) == ("auswahl" in d):
             raise Fehler("Bitte „ziel“ und entweder „karten“ (Liste von IDs) oder „auswahl“ angeben.")
         ziel = _ganzzahl(d.get("ziel"), "ziel", 1, GROSSE_ID - 1)
-        ids: list[int] | None = None
-        auswahl = None
-        if "karten" in d:
-            liste = d["karten"]
-            if not isinstance(liste, list) or not liste or len(liste) > AUSWAHL_MAX:
-                raise Fehler(f"„karten“ muss eine Liste mit 1 bis {AUSWAHL_MAX} IDs sein.")
-            ids = list(dict.fromkeys(_ganzzahl(i, "karten", 1, 2 ** 62) for i in liste))
-        else:
-            auswahl = d["auswahl"]
-            if not isinstance(auswahl, dict) or set(auswahl) - {"kiste", "abfrage"}:
-                raise Fehler("„auswahl“ braucht „kiste“ (ID oder null für die Sammlung) und „abfrage“.")
-            bereich = auswahl.get("kiste")
-            if bereich is not None:
-                bereich = _ganzzahl(bereich, "kiste", 1, GROSSE_ID - 1)
-            abfrage = auswahl.get("abfrage") or ""
-            if not isinstance(abfrage, str) or len(abfrage) > ABFRAGE_MAX:
-                raise Fehler("„abfrage“ ist ungültig.")
-            # dieselbe Prüfung wie beim Blättern; Sortierung, Seite und Gruppe ändern die Auswahl nicht
-            a = anfrage_lesen(QueryParams(abfrage), bereich, h.nutzer)
+        ids, a = auswahl_lesen(d, h.nutzer)
 
         def arbeit(con):
             _ab_version_3(con, 409)
-            nonlocal ids
-            if ids is None:
-                if a.kiste is not None:
-                    _kiste_holen(con, h.nutzer, a.kiste)
-                ids = [z[0] for z in con.execute(sql_ids(a), a.args)]
-                if not ids:
-                    raise Fehler("Die Auswahl ist leer.")
-                if len(ids) > AUSWAHL_MAX:
-                    raise Fehler(f"Höchstens {AUSWAHL_MAX} Karten in einem Schritt.")
-            return verschieben(con, h.nutzer, ids, ziel)
+            return verschieben(con, h.nutzer, auswahl_ids(con, h.nutzer, ids, a), ziel)
         return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
 
     @h.schreibend

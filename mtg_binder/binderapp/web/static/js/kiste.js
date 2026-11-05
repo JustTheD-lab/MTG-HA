@@ -248,6 +248,7 @@ function beschriftung(k) {
   if (k.markierung === 'unsicher') teile.push(k.geprueft ? 'Erkennung unsicher, von dir geprüft' : 'Erkennung unsicher');
   else if (k.markierung) teile.push(k.geprueft ? 'Druck unsicher, von dir geprüft' : 'Name sicher, Druck offen');
   if (k.ort?.text) teile.push(k.ort.text);
+  if (k.fach) teile.push(`Fach ${k.fach}`);
   if (k.doppel) teile.push('mögliches Doppel');
   if (k.preis) teile.push(preisText(k.preis));
   return teile.join(', ');
@@ -259,6 +260,10 @@ const fStern = (k) => (k.foil ? `<span class="kiste-fstern" role="img" aria-labe
 const adresse = (k) => `${S.basis}/karte/${k.id}`;
 const gewaehlt = (k) => (S.gewaehlt.has(k.id) ? ' kiste-gewaehlt' : '');
 const ortZeile = (k) => (S.sammlung ? k.ort?.text ?? '' : '');
+
+/** Fach der Karte als kleines Schild; nach Fach gruppiert sagt das schon die Trennkarte. */
+const fachSichtbar = (k) => Boolean(k.fach) && S.gruppe !== 'fach';
+const fachHtml = (k) => (fachSichtbar(k) ? `<span class="kiste-fach" title="Fach ${esc(k.fach)}">${esc(k.fach)}</span>` : '');
 
 /** Kleines Kennzeichen „mögliches Doppel“ (nur in der Gesamtsammlung). */
 function doppelHtml(k) {
@@ -285,7 +290,7 @@ function listeHtml(k, i) {
   return `<li><a class="kiste-zeile${gewaehlt(k)}" href="${adresse(k)}" data-karte="${k.id}" data-i="${i}"`
     + ` aria-label="${esc(beschriftung(k))}">`
     + `<span class="z-anz${k.anzahl > 1 ? ' z-mehr' : ''}">×${k.anzahl}</span>`
-    + `<span class="z-name"><span class="z-text">${esc(k.name)}</span>${fStern(k)}${abzeichen(k)}${doppelHtml(k)}</span>`
+    + `<span class="z-name"><span class="z-text">${esc(k.name)}</span>${fStern(k)}${abzeichen(k)}${doppelHtml(k)}${fachHtml(k)}</span>`
     + `<span class="z-mw"${mana ? ` title="${esc(mana.lang)}"` : ''}>${k.manawert == null ? '–' : esc(zahlText(k.manawert))}</span>`
     + '<span class="z-meta">'
     + `<span class="z-set">${esc(setText(k)) || '–'}</span>`
@@ -314,6 +319,7 @@ function rasterHtml(k, i) {
     + preisStreifen(k.preis)
     + '</a>'
     + (S.sammlung ? `<span class="kachel-unter" title="${esc(ort)}">${esc(ort) || '–'}${doppelHtml(k)}</span>` : '')
+    + (fachSichtbar(k) ? `<span class="kachel-unter" title="Fach ${esc(k.fach)}">${esc(k.fach)}</span>` : '')
     + '</li>';
 }
 
@@ -326,7 +332,7 @@ function kastenHtml(k, i) {
     + (S.sammlung
       ? `<span class="ks-name"><span class="ks-text"><span class="z-text">${esc(k.name)}</span>`
         + `<span class="ks-ort">${esc(ort) || '–'}</span></span>${fStern(k)}${abzeichen(k)}${doppelHtml(k)}</span>`
-      : `<span class="ks-name"><span class="z-text">${esc(k.name)}</span>${fStern(k)}${abzeichen(k)}</span>`)
+      : `<span class="ks-name"><span class="z-text">${esc(k.name)}</span>${fStern(k)}${abzeichen(k)}${fachHtml(k)}</span>`)
     + (mana ? `<span class="ks-mana" title="${esc(mana.lang)}"><span class="ks-k">${esc(mana.kurz)}</span><span class="ks-l">${esc(mana.lang)}</span></span>` : '')
     + (k.anzahl > 1 ? `<span class="ks-anz">×${k.anzahl}</span>` : '')
     + (k.foil ? '<span class="ks-foil">Foil</span>' : '')
@@ -474,6 +480,7 @@ function geruestHtml(s) {
         <button type="button" class="knopf" data-wahl="keine">Keine</button>
       </div>
       <button type="button" class="knopf knopf-haupt kiste-verschieben" disabled>${SYM.weiter}<span>Verschieben nach …</span></button>
+      <button type="button" class="knopf kiste-zurueckstellen" hidden disabled>Für Binder zurückstellen</button>
     </div>
     <button type="button" class="knopf knopf-sym kiste-hoch" aria-label="Nach oben" hidden>${SYM.hoch}</button>`;
 }
@@ -1314,6 +1321,9 @@ function wahlAnzeigen() {
     ? `${zahl(z.karten)} ${z.karten === 1 ? 'Karte' : 'Karten'} gewählt (${zahl(z.posten)} Posten)`
     : 'Nichts gewählt – Karten antippen';
   leiste.querySelector('.kiste-verschieben').disabled = z.posten === 0;
+  const zurueck = leiste.querySelector('.kiste-zurueckstellen');
+  zurueck.hidden = !s.kopf?.scan_eingang;
+  zurueck.disabled = z.posten === 0;
   const alle = leiste.querySelector('[data-wahl="gefiltert"]');
   alle.setAttribute('aria-pressed', String(s.alleGefiltert));
   alle.textContent = s.gesamt ? `Alle gefilterten (${zahl(s.gesamt.posten)})` : 'Alle gefilterten';
@@ -1447,6 +1457,29 @@ async function verschieben() {
 // ---------- Jetzt einsortieren (Scan-Eingang) ----------
 
 const karten = (n) => `${zahl(n)} ${n === 1 ? 'Karte' : 'Karten'}`;
+
+/** Gewählte Karten für einen Binder beiseitelegen (Kiste „Zurückgestellt“). Im Binder liegen sie dann bereit. */
+async function zurueckstellen() {
+  const s = S;
+  if (!wahlZahl().posten) return;
+  const daten = s.alleGefiltert
+    ? { auswahl: { kiste: s.id, abfrage: filterParameter(s.filter, s.sammlung).toString() } }
+    : { karten: [...s.gewaehlt.keys()] };
+  const knopf = s.wurzel.querySelector('.kiste-zurueckstellen');
+  knopf.disabled = true;
+  let a;
+  try {
+    a = await senden('/api/karten/zurueckstellen', { daten });
+  } catch (f) {
+    if (S === s) { knopf.disabled = false; hinweisZeigen(f.message, { art: 'fehler' }); }
+    return;
+  }
+  if (S !== s) return;
+  await neuAufbauen({ wahlBehalten: true });
+  const rest = a.uebersprungen ? ` ${zahl(a.uebersprungen)} unsichere bleiben hier, bitte erst prüfen.` : '';
+  hinweisZeigen(`${karten(a.karten)} zurückgestellt. Im Binder unter „Bearbeiten“ eine leere Tasche antippen.${rest}`,
+    { schritt: a.schritt });
+}
 
 /** Sortierregeln auf den ganzen Scan-Eingang anwenden: erst zeigen, was geschieht, dann als ein Schritt ausführen. */
 async function jetztEinsortieren() {
@@ -1887,6 +1920,7 @@ function verdrahten(s) {
     if (!b) return;
     if (b.classList.contains('kiste-wahl-fertig')) wahlUmschalten(false);
     else if (b.classList.contains('kiste-verschieben')) verschieben();
+    else if (b.classList.contains('kiste-zurueckstellen')) zurueckstellen();
     else if (b.dataset.wahl === 'seite') wahlAlleSeite();
     else if (b.dataset.wahl === 'gefiltert') wahlAlleGefiltert();
     else if (b.dataset.wahl === 'keine') wahlLeeren();

@@ -758,7 +758,12 @@ def routen(h) -> list[Route]:
             _kiste_holen(con, h.nutzer, kiste_id)
             if a.gruppe == "fach":
                 fach_vorbereiten(con, h.nutzer, kiste_id)
-            return JSONResponse(seite_lesen(con, a))
+            antwort = seite_lesen(con, a)
+            # Fach je Karte nur für diese Seite: Es wird berechnet, nicht gespeichert
+            faecher = einsortieren.faecher_von(con, h.nutzer, kiste_id, [k["id"] for k in antwort["karten"]])
+            for k in antwort["karten"]:
+                k["fach"] = faecher.get(k["id"])
+            return JSONResponse(antwort)
 
     # ------------------------------------------------------------------ Schreiben
 

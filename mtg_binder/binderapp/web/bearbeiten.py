@@ -14,30 +14,41 @@
          Status „sicher“, geprüft).
     POST /api/tasche/{id}/leeren
          Rückseite oder unklare Tasche ohne Karte als leer markieren (04.11.2026).
+    POST /api/karten/zurueckstellen  {"karten": [IDs]} oder {"auswahl": …} wie beim Verschieben
+         Sichere oder geprüfte Karten in die Kiste „Zurückgestellt“; unsichere bleiben (`uebersprungen`).
+    GET  /api/zurueckgestellt   Karten, die sich in eine Tasche legen lassen
+    POST /api/seite/{id}/zurueckgestellt  {"zeile", "spalte", "karte_id"}
+         Ein Exemplar aus „Zurückgestellt“ in eine Tasche ohne Karte legen (ein Stapel teilt sich, 05.11.2026).
 
 Löschen läuft über DELETE /api/karte/{id} (pruefen.py), in eine Kiste über POST /api/karten/verschieben
 (kistenschreiben.py). Jeder Schritt lässt sich mit POST /api/schritt/{schritt}/rueckgaengig zurücknehmen.
 """
 from __future__ import annotations
 
+from contextlib import closing
+
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from binderapp.db import schritte
+from binderapp.db import erkennung, schritte
 from binderapp.db.datenbank import version
 from binderapp.db.seiten import raster_masse
 from binderapp.katalog import kartendaten
 from binderapp.preise import werte, zeitplan
-from binderapp.web.helfer import Fehler
+from binderapp.sortieren.einsortieren import sortierbar
+from binderapp.web.helfer import Fehler, fehler
 from binderapp.web.kisten import _ab_version_3
-from binderapp.web.kistenschreiben import ANZAHL_MAX, _ganzzahl, druck_nachschlagen
+from binderapp.web.kistenschreiben import (ANZAHL_MAX, _ganzzahl, auswahl_ids, auswahl_lesen, druck_nachschlagen,
+                                           verschieben as karten_verschieben)
 from binderapp.web.pruefen import SPRACHEN, _kennung
 
-__all__ = ["routen", "foil_umschalten", "seite_foil", "tasche_verschieben", "karte_einlegen", "tasche_leeren"]
+__all__ = ["routen", "foil_umschalten", "seite_foil", "tasche_verschieben", "karte_einlegen", "tasche_leeren",
+           "zurueckstellen", "zurueckgestellte", "zurueckgestellte_einlegen"]
 
 GROSS = 2 ** 62
 NICHT_KOPIEREN = ("id", "angelegt", "geaendert")
+ZURUECK_LISTE_MAX = 500
 
 
 def _foil(wert) -> bool:
@@ -198,23 +209,33 @@ def tasche_verschieben(con, nutzer: int, tasche_id: int, ziel: dict) -> dict:
 # ---------------------------------------------------------------- Karte hinzufügen
 
 
+def _freie_stelle(con, seite_id: int, zeile: int, spalte: int):
+    """Die Tasche an dieser Stelle (oder None); liegt dort schon eine Karte, ein Fehler."""
+    t = _tasche_an(con, seite_id, zeile, spalte)
+    if t is not None and _karten_in(con, t["id"]):
+        raise Fehler("In dieser Tasche liegt schon eine Karte.", 409)
+    return t
+
+
+def _tasche_fuer_karte(con, nutzer: int, seite_id: int, zeile: int, spalte: int, t, schritt: str) -> int:
+    """Stelle für eine neue Karte vorbereiten: Tasche anlegen oder ihren Inhalt auf „karte“ setzen."""
+    if t is None:
+        return schritte.einfuegen(con, nutzer, "tasche", {"seite_id": seite_id, "zeile": zeile, "spalte": spalte,
+                                                          "inhalt": "karte", "ausschnitt": None}, schritt=schritt)
+    if t["inhalt"] != "karte":
+        # Rückseite: Der Foto-Ausschnitt zeigt die Rückseite, nicht die neue Karte (Rückgängig stellt ihn wieder her)
+        felder = {"inhalt": "karte", **({"ausschnitt": None} if t["inhalt"] == "rueckseite" else {})}
+        schritte.aendern_genau(con, nutzer, "tasche", t["id"], felder, schritt=schritt)
+    return t["id"]
+
+
 def karte_einlegen(con, nutzer: int, seite_id: int, zeile, spalte, daten: dict, foil: bool,
                    sprache: str | None) -> dict:
     seite = _seite_holen(con, nutzer, seite_id)
     zeile, spalte = _position(seite, zeile, spalte)
-    t = _tasche_an(con, seite_id, zeile, spalte)
-    if t is not None and _karten_in(con, t["id"]):
-        raise Fehler("In dieser Tasche liegt schon eine Karte.", 409)
+    t = _freie_stelle(con, seite_id, zeile, spalte)
     schritt = schritte.neuer_schritt()
-    if t is None:
-        tasche_id = schritte.einfuegen(con, nutzer, "tasche", {"seite_id": seite_id, "zeile": zeile, "spalte": spalte,
-                                                               "inhalt": "karte", "ausschnitt": None}, schritt=schritt)
-    else:
-        tasche_id = t["id"]
-        if t["inhalt"] != "karte":
-            # Rückseite: Der Foto-Ausschnitt zeigt die Rückseite, nicht die neue Karte (Rückgängig stellt ihn wieder her)
-            felder = {"inhalt": "karte", **({"ausschnitt": None} if t["inhalt"] == "rueckseite" else {})}
-            schritte.aendern_genau(con, nutzer, "tasche", tasche_id, felder, schritt=schritt)
+    tasche_id = _tasche_fuer_karte(con, nutzer, seite_id, zeile, spalte, t, schritt)
     karte_id = schritte.einfuegen(con, nutzer, "karte", {
         "nutzer_id": nutzer, "tasche_id": tasche_id, "kiste_id": None, "quelle": "manuell",
         "scryfall_id": daten["scryfall_id"], "oracle_id": daten["oracle_id"], "name": daten["name"],
@@ -224,6 +245,66 @@ def karte_einlegen(con, nutzer: int, seite_id: int, zeile, spalte, daten: dict, 
     }, schritt=schritt)
     kartendaten.schreiben(con, daten, art="behalten")   # abgeleitet aus dem Katalog, ohne Historie
     return {"id": karte_id, "schritt": schritt, "tasche_id": tasche_id, "name": daten["name"],
+            "binder_id": seite["binder_id"], "seite_id": seite_id, "zeile": zeile, "spalte": spalte}
+
+
+# ---------------------------------------------------------------- Zurückstellen (Wunsch des Nutzers, 05.11.2026)
+
+
+def zurueckstellen(con, nutzer: int, ids: list[int]) -> dict:
+    """Karten in die Kiste „Zurückgestellt“, ein Schritt. Unsichere bleiben, wo sie sind: Sie gehen wie beim
+    Einsortieren erst nach der Prüfung weiter."""
+    erlaubt, uebersprungen = [], 0
+    for kid in ids:
+        k = con.execute("SELECT status, geprueft FROM karte WHERE id = ? AND nutzer_id = ?", (kid, nutzer)).fetchone()
+        if k is not None and not sortierbar(k):
+            uebersprungen += 1
+        else:
+            erlaubt.append(kid)   # fehlende Karten meldet `verschieben`
+    if not erlaubt:
+        raise Fehler("Unsichere Karten bitte zuerst in der Prüfansicht bestätigen.", 409)
+    ziel = erkennung.zurueck_kiste(con, nutzer)
+    return {**karten_verschieben(con, nutzer, erlaubt, ziel), "uebersprungen": uebersprungen, "kiste_id": ziel}
+
+
+def zurueckgestellte(con, nutzer: int) -> list[dict]:
+    """Karten aus „Zurückgestellt“, die sich in eine Tasche legen lassen (nur sicher oder geprüft)."""
+    kiste = erkennung.zurueck_kiste_id(con, nutzer)
+    if kiste is None:
+        return []
+    zeilen = con.execute(
+        "SELECT id, name, set_code, nummer, sprache, foil, anzahl FROM karte WHERE nutzer_id = ? AND kiste_id = ?"
+        " AND (status = 'sicher' OR geprueft = 1) ORDER BY name COLLATE NOCASE, id LIMIT ?",
+        (nutzer, kiste, ZURUECK_LISTE_MAX)).fetchall()
+    return [{**dict(z), "foil": bool(z["foil"])} for z in zeilen]
+
+
+def zurueckgestellte_einlegen(con, nutzer: int, seite_id: int, zeile, spalte, karte_id: int) -> dict:
+    """Legt ein Exemplar aus „Zurückgestellt“ in eine Tasche ohne Karte, ein Schritt mit Rückgängig."""
+    seite = _seite_holen(con, nutzer, seite_id)
+    zeile, spalte = _position(seite, zeile, spalte)
+    t = _freie_stelle(con, seite_id, zeile, spalte)
+    k = con.execute("SELECT * FROM karte WHERE id = ? AND nutzer_id = ?", (karte_id, nutzer)).fetchone()
+    if k is None or k["kiste_id"] is None or k["kiste_id"] != erkennung.zurueck_kiste_id(con, nutzer):
+        raise Fehler("Diese Karte ist nicht mehr zurückgestellt.", 404)
+    if not sortierbar(k):
+        raise Fehler("Unsichere Karten bitte zuerst in der Prüfansicht bestätigen.", 409)
+    vorher = schritte.summe(con, nutzer)[1]   # nur die Karten: Ein geteilter Stapel ergibt einen Posten mehr
+    schritt = schritte.neuer_schritt()
+    tasche_id = _tasche_fuer_karte(con, nutzer, seite_id, zeile, spalte, t, schritt)
+    if k["anzahl"] == 1:
+        schritte.aendern_genau(con, nutzer, "karte", karte_id, {"kiste_id": None, "tasche_id": tasche_id}, schritt=schritt)
+        ergebnis = karte_id
+    else:   # ein Exemplar je Tasche: Der Rest des Stapels bleibt zurückgestellt
+        schritte.aendern_genau(con, nutzer, "karte", karte_id, {"anzahl": k["anzahl"] - 1}, schritt=schritt)
+        felder = {s: k[s] for s in k.keys() if s not in NICHT_KOPIEREN}
+        felder.update({"anzahl": 1, "kiste_id": None, "tasche_id": tasche_id, "extern_id": None})
+        if "sortieren" in felder:
+            felder["sortieren"] = None
+        ergebnis = schritte.einfuegen(con, nutzer, "karte", felder, schritt=schritt)
+    if schritte.summe(con, nutzer)[1] != vorher:   # darf nie vorkommen; die Ausnahme rollt alles zurück
+        raise Fehler("Summenprüfung fehlgeschlagen, nichts verschoben.", 500)
+    return {"id": ergebnis, "schritt": schritt, "tasche_id": tasche_id, "name": k["name"],
             "binder_id": seite["binder_id"], "seite_id": seite_id, "zeile": zeile, "spalte": spalte}
 
 
@@ -302,7 +383,37 @@ def routen(h) -> list[Route]:
         tasche_id = int(request.path_params["id"])
         return JSONResponse(await _ausfuehren(lambda con: tasche_leeren(con, h.nutzer, tasche_id)))
 
+    @h.schreibend
+    async def zurueck_stellen(request):
+        d = await h.json_daten(request)
+        if set(d) - {"karten", "auswahl"} or ("karten" in d) == ("auswahl" in d):
+            raise Fehler("Bitte entweder „karten“ (Liste von IDs) oder „auswahl“ angeben.")
+        ids, a = auswahl_lesen(d, h.nutzer)
+        return JSONResponse(await _ausfuehren(lambda con: zurueckstellen(con, h.nutzer, auswahl_ids(con, h.nutzer, ids, a))))
+
+    def zurueck_liste(request):
+        try:
+            with closing(h.db()) as con:
+                _ab_version_3(con, 404)
+                return JSONResponse({"karten": zurueckgestellte(con, h.nutzer)})
+        except Fehler as f:
+            return fehler(str(f), f.status)
+
+    @h.schreibend
+    async def zurueck_einlegen(request):
+        seite_id = int(request.path_params["id"])
+        d = await h.json_daten(request)
+        if set(d) != {"zeile", "spalte", "karte_id"}:
+            raise Fehler("Bitte „zeile“, „spalte“ und „karte_id“ angeben.")
+        karte_id = _ganzzahl(d["karte_id"], "karte_id", 1, GROSS)
+        antwort = await _ausfuehren(lambda con: zurueckgestellte_einlegen(con, h.nutzer, seite_id, d["zeile"],
+                                                                          d["spalte"], karte_id))
+        return JSONResponse(antwort, status_code=201)
+
     return [
+        Route("/karten/zurueckstellen", zurueck_stellen, methods=["POST"]),
+        Route("/zurueckgestellt", zurueck_liste),
+        Route("/seite/{id:int}/zurueckgestellt", zurueck_einlegen, methods=["POST"]),
         Route("/tasche/{id:int}/leeren", leeren, methods=["POST"]),
         Route("/karte/{id:int}/foil", karte_foil, methods=["POST"]),
         Route("/seite/{id:int}/foil", ganze_seite_foil, methods=["POST"]),

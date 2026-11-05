@@ -300,7 +300,7 @@ def faecher_von(con, nutzer: int, kiste_id: int, karten_ids: list[int]) -> dict[
 
 # ---------------------------------------------------------------- Einsortieren
 
-def _sortierbar(k) -> bool:
+def sortierbar(k) -> bool:
     return k["status"] == "sicher" or bool(k["geprueft"])
 
 
@@ -345,7 +345,7 @@ def einsortieren(con, nutzer: int, karten_ids: list[int] | None = None, *, schri
     for k in offen:
         if eingang is None or k["kiste_id"] != eingang:   # inzwischen woanders: nicht mehr offen
             _offen_beenden(con, nutzer, k["id"], schritt)
-        elif _sortierbar(k):
+        elif sortierbar(k):
             kandidaten.append(k)
     if not kandidaten:
         return []
@@ -387,10 +387,10 @@ def _eingang_plan(con, nutzer: int) -> tuple[dict, list]:
     if eingang is None:
         return plan, []
     karten = con.execute("SELECT * FROM karte WHERE nutzer_id = ? AND kiste_id = ? ORDER BY id", (nutzer, eingang)).fetchall()
-    ergebnis = auswerten(con, nutzer, [k["id"] for k in karten if _sortierbar(k)])
+    ergebnis = auswerten(con, nutzer, [k["id"] for k in karten if sortierbar(k)])
     wege, ziele = [], {}
     for k in karten:
-        if not _sortierbar(k):
+        if not sortierbar(k):
             plan["pruefen"] += k["anzahl"]
             continue
         e = ergebnis.get(k["id"], {"regel": None, "fehlt": ["Kartendaten"]})
@@ -466,7 +466,7 @@ def stand(con, nutzer: int, karten: list) -> dict[int, dict]:
         if k["kiste_id"] is not None and k["kiste_id"] != eingang:
             woanders.setdefault(k["kiste_id"], []).append(k["id"])
         elif k["sortieren"] == "offen":
-            if _sortierbar(k):
+            if sortierbar(k):
                 offen.append(k["id"])
             else:
                 aus[k["id"]] = {"wartet": GRUND_PRUEFEN}

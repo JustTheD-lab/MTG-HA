@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.18.1
+- Kisten mit Fächern zeigen das Fach jetzt an jeder Karte, in allen drei Ansichten. Unter „Gruppieren“ → „Fach“ lässt
+  sich die Kiste weiter nach Fächern ordnen.
+
+## 0.18.0
+- Karten aus dem Scan-Eingang für einen Binder zurückstellen: Im Auswahlmodus legt „Für Binder zurückstellen“ die
+  gewählten Karten in die neue Kiste „Zurückgestellt“. Unsichere Karten bleiben im Eingang, bis sie geprüft sind.
+- Im Binder unter „Bearbeiten“ zeigt ein Tipp auf eine leere Tasche zuerst diese Karten. Von einem Stapel geht ein
+  Exemplar in die Tasche. „Andere Karte suchen“ öffnet wie bisher die Katalogsuche. Alles mit Rückgängig.
+- Korrektur: Die Auswahlleiste einer Kiste steht wieder unten am Bildschirm statt am Ende der Seite.
+
 ## 0.17.0
 - Scan-Eingang: Der neue Knopf „Jetzt einsortieren“ wendet die Sortierregeln auf alle Karten im Eingang an, auch auf
   solche, zu denen beim Scan keine Regel passte. Vorher zeigt die App, wie viele Karten wohin gehen und was bleibt.
