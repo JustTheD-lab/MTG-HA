@@ -130,6 +130,8 @@ Summen aus Cardmarket (Ø 7 Tage, sonst Low, ohne Foil) und keine Kaufempfehlung
 - **Teuerste Reprints:** je Karte der teuerste andere Nonfoil-Druck, zusammengezählt. **Günstigste Reprints** entsprechend.
 - **Dieser Drop heute:** der neue Druck selbst, sobald er bei Cardmarket einen Preis hat.
 - **Basic Lands** zählen nur gegen andere Secret Lairs, sonst stünden Sammlerdrucke im Vergleich.
+- **Bilder:** Ein Drop zeigt je Karte die Secret-Lair-Fassung und beide Reprints. Sie kommen direkt von Scryfall, ein
+  Tipp vergrößert sie.
 - **Kosten:** Oben stellst du ein, was ein Drop dich mit Versand kostet; je Drop lässt sich das ändern. Wizards nennt
   nur Dollarpreise.
 

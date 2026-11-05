@@ -17,10 +17,10 @@ from pathlib import Path
 SCHEMA = Path(__file__).with_name("schema.sql")
 TABELLEN = {"binder", "seite", "tasche", "kiste", "karte", "foto", "nutzer", "scan_durchgang", "scan_foto",
             "sortierregel", "sortierfach", "deck", "deck_karte", "deck_entnahme"}
-VERSION = 12         # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
+VERSION = 13         # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
                      # 7: Decks (02.11.2026), 8: Deckbau (03.11.2026), 9: Foil und Sets je Scan-Durchgang (04.11.2026),
                      # 10: Messwerte je Scan-Foto (05.11.2026), 11: Kaufpreis (05.11.2026),
-                     # 12: Secret-Lair-Drops (05.11.2026)
+                     # 12: Secret-Lair-Drops (05.11.2026), 13: Reprints der Drops mit Druck (06.11.2026)
 MINDEST = 2          # ältester Stand, mit dem Server und Verarbeiter noch laufen (ohne Kisten)
 WARTEZEIT = 10       # Sekunden Wartezeit, wenn ein anderer Prozess gerade schreibt
 ANZAHL_MAX = 999     # so viele Exemplare höchstens in einem Posten
@@ -55,7 +55,7 @@ SPALTEN_V3 = {
 
 # Tabellen, die erst später dazukamen (kartendaten ab 3, scan_durchgang ab 5); fehlt eine, legt schema.sql sie
 # vollständig an, statt Spalten anzuhängen
-NEUE_TABELLEN = {"kartendaten", "scan_durchgang", "deck_karte"}
+NEUE_TABELLEN = {"kartendaten", "scan_durchgang", "deck_karte", "secret_karte"}
 
 # Spalten, die Version 4 anhängt (Preise); die Tabellen preis und preisabruf legt schema.sql an
 SPALTEN_V4 = {
@@ -105,7 +105,15 @@ SPALTEN_V11 = {
         ("kaufpreis_waehrung", "TEXT"),
     ],
 }
-ALLE_SPALTEN = (SPALTEN_V2, SPALTEN_V3, SPALTEN_V4, SPALTEN_V6, SPALTEN_V8, SPALTEN_V9, SPALTEN_V11)
+# Spalten, die Version 13 anhängt (Wunsch des Nutzers, 06.11.2026): Bilder der Reprints in der Secret-Lair-Ansicht
+SPALTEN_V13 = {
+    "secret_karte": [
+        ("teuer_id", "TEXT"),
+        ("guenstig_id", "TEXT"),
+        ("guenstig_nummer", "TEXT"),
+    ],
+}
+ALLE_SPALTEN = (SPALTEN_V2, SPALTEN_V3, SPALTEN_V4, SPALTEN_V6, SPALTEN_V8, SPALTEN_V9, SPALTEN_V11, SPALTEN_V13)
 
 
 def verbinden(pfad: str | Path, nur_lesen: bool = False) -> sqlite3.Connection:
@@ -143,7 +151,7 @@ def fehlende_spalten(con) -> list[str]:
 
 
 def migrieren(con) -> list[str]:
-    """Bringt eine Datenbank der Version 1 bis 11 auf Version 12. Wiederholbar: Vorhandenes bleibt, wie es ist.
+    """Bringt eine Datenbank der Version 1 bis 12 auf Version 13. Wiederholbar: Vorhandenes bleibt, wie es ist.
 
     Gibt die ausgeführten Schritte zurück (leer, wenn nichts zu tun war). Daten werden nicht
     verändert; neue Spalten bekommen ihren Standardwert (Fotos: Quelle „import", Seiten: Art „foto",

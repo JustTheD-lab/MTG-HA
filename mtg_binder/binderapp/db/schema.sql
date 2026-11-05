@@ -371,7 +371,11 @@ CREATE TABLE IF NOT EXISTS secret_karte (
     teuer_nummer  TEXT,
     guenstig      REAL,                    -- günstigster Nonfoil-Reprint
     guenstig_set  TEXT,
-    nur_sld       INTEGER NOT NULL DEFAULT 0 CHECK (nur_sld IN (0, 1))   -- Basic Land: nur andere Secret Lairs zählen
+    nur_sld       INTEGER NOT NULL DEFAULT 0 CHECK (nur_sld IN (0, 1)),  -- Basic Land: nur andere Secret Lairs zählen
+    -- ab Version 13 (Bilder in der Ansicht): die Drucke hinter den Vergleichswerten
+    teuer_id      TEXT,
+    guenstig_id   TEXT,
+    guenstig_nummer TEXT
 );
 
 CREATE TABLE IF NOT EXISTS secret_wert (
@@ -417,4 +421,4 @@ CREATE INDEX IF NOT EXISTS i_karte_deck       ON karte(deck_id) WHERE deck_id IS
 CREATE INDEX IF NOT EXISTS i_deck_produkt_cm  ON deck_produkt(cardmarket_id);
 CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 
-PRAGMA user_version = 12;
+PRAGMA user_version = 13;

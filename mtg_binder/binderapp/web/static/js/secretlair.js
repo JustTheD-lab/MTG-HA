@@ -5,7 +5,7 @@
 //
 // Vergleichswert ist der teuerste Nonfoil-Reprint je Karte (Wunsch des Nutzers). Daten: web/secretlair.py.
 
-import { holen, senden, esc, gehe, zurueck, euro } from './gemeinsam.js';
+import { holen, senden, esc, gehe, zurueck, euro, scryfallBild } from './gemeinsam.js';
 import { dialog, bestaetigen } from './dialog.js';
 import { angemeldet } from './anmeldung.js';
 
@@ -183,20 +183,32 @@ async function listeZeigen(wurzel) {
   wurzel.replaceChildren(bereich);
 }
 
+/** Bild eines Drucks mit Preis darunter. Ein Tipp vergrößert es. Die Bilder kommen direkt von Scryfall. */
+function figurHtml(titel, id, name, wert, druck, leer) {
+  const url = scryfallBild(id);
+  const bild = url
+    ? `<button type="button" class="sl-bild" data-bild="${esc(url)}" data-name="${esc(name)}" aria-label="${esc(titel)} von ${esc(name)} groß anzeigen">`
+      + `<img src="${esc(url)}" alt="" loading="lazy" decoding="async"></button>`
+    : `<span class="sl-bild sl-bild-leer">${esc(leer)}</span>`;
+  return `<figure class="sl-figur">${bild}<figcaption><span class="sl-druck">${esc(titel)}</span>`
+    + `<strong>${esc(geld(wert))}</strong><span class="sl-druck">${esc(druck)}</span></figcaption></figure>`;
+}
+
 function kartenHtml(d) {
-  const zeile = (k) => {
-    const teuer = k.teuer === null ? 'keine' : `${euro(k.teuer)}<span class="sl-druck">${esc(String(k.teuer_set).toUpperCase())} ${esc(k.teuer_nummer)}</span>`;
-    const guenstig = k.guenstig === null ? 'keine' : `${euro(k.guenstig)}<span class="sl-druck">${esc(String(k.guenstig_set).toUpperCase())}</span>`;
-    const name = `${k.anzahl > 1 ? `${k.anzahl}× ` : ''}${esc(k.name)}`
-      + (k.nur_sld ? '<span class="sl-druck">Basic Land: nur gegen andere Secret Lairs</span>' : '')
-      + (k.scryfall_id ? '' : '<span class="sl-druck">Druck noch nicht im Katalog</span>');
-    return `<tr><td>${name}</td><td class="sl-zahl" data-titel="Teuerster Reprint">${teuer}</td>`
-      + `<td class="sl-zahl" data-titel="Günstigster Reprint">${guenstig}</td>`
-      + `<td class="sl-zahl" data-titel="Dieser Druck">${esc(geld(k.preis))}</td></tr>`;
-  };
-  return '<table class="sl-karten"><thead><tr><th>Karte</th><th class="sl-zahl">Teuerster Reprint</th>'
-    + '<th class="sl-zahl">Günstigster Reprint</th><th class="sl-zahl">Dieser Druck</th></tr></thead>'
-    + `<tbody>${d.liste.map(zeile).join('')}</tbody></table>`;
+  const druck = (set, nummer) => (set ? `${String(set).toUpperCase()} ${nummer ?? ''}`.trim() : '');
+  const karte = (k) => `<li class="sl-karte"><h2 class="sl-kartenname">${k.anzahl > 1 ? `${k.anzahl}× ` : ''}${esc(k.name)}</h2>`
+    + (k.nur_sld ? '<p class="sl-druck">Basic Land: nur gegen andere Secret Lairs</p>' : '')
+    + '<div class="sl-figuren">'
+    + figurHtml('Secret Lair', k.scryfall_id, k.name, k.preis, k.nummer ? `SLD ${k.nummer}` : '', 'Noch kein Bild')
+    + figurHtml('Teuerster Reprint', k.teuer_id, k.name, k.teuer, druck(k.teuer_set, k.teuer_nummer), 'Kein Reprint')
+    + figurHtml('Günstigster Reprint', k.guenstig_id, k.name, k.guenstig, druck(k.guenstig_set, k.guenstig_nummer), 'Kein Reprint')
+    + '</div></li>';
+  return `<ul class="sl-karten">${d.liste.map(karte).join('')}</ul>`;
+}
+
+function bildZeigen(knopf) {
+  const bild = Object.assign(document.createElement('img'), { src: knopf.dataset.bild, alt: knopf.dataset.name, className: 'sl-gross' });
+  dialog({ titel: knopf.dataset.name, klasse: 'dialog-klein', inhalt: bild });
 }
 
 async function dropZeigen(wurzel, id) {
@@ -243,6 +255,10 @@ async function dropZeigen(wurzel, id) {
     + (v && v.tage > 1 ? `<p class="sl-hinweis">Verlauf dieses Drops: ${esc(geld(v.erster[1]))} am ${esc(datum(v.erster[0]))}, `
       + `${esc(geld(v.letzter[1]))} am ${esc(datum(v.letzter[0]))} (${v.tage} Tage).</p>` : '')
     + kartenHtml(d);
+  inhalt.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-bild]');
+    if (b) bildZeigen(b);
+  });
   bereich.append(werkzeug, inhalt);
   wurzel.replaceChildren(bereich);
 }

@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.23.0
+- Secret Lair: Ein Drop zeigt jetzt Bilder, je Karte die Secret-Lair-Fassung, den teuersten und den günstigsten Reprint
+  mit Preis und Druck. Ein Tipp vergrößert das Bild. Die Bilder lädt der Browser direkt von Scryfall.
+- Datenbank Version 13 (die Sicherung entsteht beim Update wie immer). Die Bilder der Reprints erscheinen wenige Minuten
+  nach dem Start, sobald die Drops neu bewertet sind.
+
 ## 0.22.2
 - Nach einem Update bietet die App oben „Neu laden“ an, wenn die geöffnete Seite noch den alten Stand zeigt. Das wirkt ab
   dem nächsten Update; für dieses bitte die Seite einmal neu laden.

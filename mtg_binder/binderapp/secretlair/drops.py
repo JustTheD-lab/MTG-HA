@@ -234,11 +234,12 @@ def bewerten(con, kat, roh: bytes) -> int:
                  and (not nur_sld or d["set_code"] == SET)]
         teuer = max(werte, key=lambda w: w[0], default=None)
         guenstig = min(werte, key=lambda w: w[0], default=None)
-        con.execute("UPDATE secret_karte SET preis = ?, teuer = ?, teuer_set = ?, teuer_nummer = ?, guenstig = ?,"
-                    " guenstig_set = ?, nur_sld = ? WHERE id = ?",
+        con.execute("UPDATE secret_karte SET preis = ?, teuer = ?, teuer_set = ?, teuer_nummer = ?, teuer_id = ?,"
+                    " guenstig = ?, guenstig_set = ?, guenstig_nummer = ?, guenstig_id = ?, nur_sld = ? WHERE id = ?",
                     (preise.get(k["cardmarket_id"]), teuer and teuer[0], teuer and teuer[1]["set_code"],
-                     teuer and teuer[1]["nummer"], guenstig and guenstig[0], guenstig and guenstig[1]["set_code"],
-                     int(nur_sld), k["id"]))
+                     teuer and teuer[1]["nummer"], teuer and teuer[1]["scryfall_id"], guenstig and guenstig[0],
+                     guenstig and guenstig[1]["set_code"], guenstig and guenstig[1]["nummer"],
+                     guenstig and guenstig[1]["scryfall_id"], int(nur_sld), k["id"]))
     wert_setzen(con, "bewertet", _jetzt())
     return len(karten)
 
@@ -346,7 +347,8 @@ def einzeln(con, drop_id: int, heute: date | None = None) -> dict | None:
         return None
     d = _drop(z, standard_kosten(con), (heute or date.today()).isoformat())
     d["liste"] = [dict(k) for k in con.execute(
-        "SELECT name, nummer, anzahl, preis, teuer, teuer_set, teuer_nummer, guenstig, guenstig_set, nur_sld, scryfall_id"
+        "SELECT name, nummer, anzahl, preis, teuer, teuer_set, teuer_nummer, teuer_id, guenstig, guenstig_set,"
+        " guenstig_nummer, guenstig_id, nur_sld, scryfall_id"
         " FROM secret_karte WHERE drop_id = ? ORDER BY teuer IS NULL, teuer DESC, name", (drop_id,))]
     # Verlauf nur aus echten Abrufen, mit Foil-Preisen hat er nichts zu tun
     verlauf = [(t, _rund(w)) for t, w in con.execute(
@@ -393,7 +395,10 @@ class Secretabgleich(threading.Thread):
         bewertet = self._zeit("bewertet")
         if self.preisdatei.is_file():
             datei = datetime.fromtimestamp(self.preisdatei.stat().st_mtime, timezone.utc)
-            if bewertet is None or datei > bewertet:
+            with closing(verbinden(self.datenbank, nur_lesen=True)) as con:   # bewertet vor Version 13: Drucke fehlen
+                ohne_druck = con.execute("SELECT 1 FROM secret_karte WHERE teuer IS NOT NULL AND teuer_id IS NULL"
+                                         " LIMIT 1").fetchone()
+            if bewertet is None or datei > bewertet or ohne_druck:
                 bewerten_lauf(self.datenbank, self.katalog, self.preisdatei)
 
     def run(self) -> None:
