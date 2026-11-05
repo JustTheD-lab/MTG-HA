@@ -56,12 +56,12 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route, Router
 from starlette.staticfiles import StaticFiles
 
-from binderapp.db import seiten
+from binderapp.db import leeren, seiten
 from binderapp.db.datenbank import MINDEST, aendern, einfuegen, schreiben, verbinden, version
 from binderapp.db.seiten import Fehler
 from binderapp.preise import werte
 from binderapp.web import (abzug, bearbeiten, decks, hochladen, kisten, kistenschreiben, pc, pruefen, regeln, sammlung,
-                           scan, sets)
+                           scan, sets, verwaltung)
 from binderapp.web.anmeldung import COOKIE, DAUER, Anmeldung
 from binderapp.web.helfer import Helfer
 from binderapp.web.speicher import MELDUNG as MELDUNG_SPEICHER
@@ -400,7 +400,15 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
             "eingerichtet": ha or anmeldung.eingerichtet(),
             "ha": ha,  # im Add-on meldet Home Assistant an: kein Knopf „Anmelden“
             "max_foto_mb": anmeldung.max_foto_bytes() // (1024 * 1024),
+            "bildstand": bildstand(),
         })
+
+    def bildstand() -> int:
+        """Zählt „Datenbank löschen“ mit: Die Oberfläche hängt den Stand an die Bildadressen (db/leeren.py)."""
+        if not datenbank.exists():
+            return 0
+        with closing(db()) as con:
+            return leeren.bildstand(con)
 
     def verarbeiter(request):
         with closing(db()) as con:
@@ -646,8 +654,8 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         Route("/sitzung", sitzung),
         Route("/verarbeiter", verarbeiter),
         Route("/speicher", speicherstand),
-        *([Route("/pc/verbindung", pc_verbindung), Route("/pc/schluessel", pc_schluessel, methods=["POST"])]
-          if ha else []),
+        *([Route("/pc/verbindung", pc_verbindung), Route("/pc/schluessel", pc_schluessel, methods=["POST"]),
+           *verwaltung.routen(h)] if ha else []),
         Route("/anmelden", anmelden, methods=["POST"]),
         Route("/abmelden", abmelden, methods=["POST"]),
         *pruefen.routen(h),

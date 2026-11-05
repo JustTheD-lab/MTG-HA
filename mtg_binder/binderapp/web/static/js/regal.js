@@ -678,6 +678,22 @@ export async function zeigen(wurzel, parameter, vorher) {
       delete pcKnopf.dataset.offen;
     }
   });
+  // Add-on: „Verwaltung“ (Sicherungen, Datenbank löschen); am PC gibt es das nicht
+  const verwaltungKnopf = document.createElement('button');
+  verwaltungKnopf.type = 'button';
+  verwaltungKnopf.className = 'knopf regal-pc';
+  verwaltungKnopf.innerHTML = '<span>Verwaltung</span>';
+  verwaltungKnopf.hidden = !sitzung().ha;
+  verwaltungKnopf.addEventListener('click', async () => {
+    if (verwaltungKnopf.dataset.offen) return;   // Doppelklick: nur ein Dialog
+    verwaltungKnopf.dataset.offen = '1';
+    try {
+      const { oeffnen } = await import('./verwaltung.js');
+      await oeffnen();
+    } finally {
+      delete verwaltungKnopf.dataset.offen;
+    }
+  });
   const scannen = document.createElement('button');
   scannen.type = 'button';
   scannen.className = 'knopf regal-scannen';
@@ -685,7 +701,7 @@ export async function zeigen(wurzel, parameter, vorher) {
   scannen.innerHTML = '<span>Scannen</span>';
   scannen.hidden = !(scanDa && angemeldet());
   scannen.addEventListener('click', () => gehe('#/scan'));
-  szene.querySelector('.regal-aktionen').append(neu, neueKiste, scannen, pcKnopf, anmeldeKnopf());
+  szene.querySelector('.regal-aktionen').append(neu, neueKiste, scannen, pcKnopf, verwaltungKnopf, anmeldeKnopf());
 
   const plaetze = binder.map((b) => {
     const li = elementAus(rueckenHtml(b));
@@ -709,6 +725,7 @@ export async function zeigen(wurzel, parameter, vorher) {
     statusUhr: 0, statusLaeuft: false, statusZeit: 0, sichtbar: null,
     sitzung: () => {
       neu.hidden = !angemeldet(); neueKiste.hidden = !(kistenDa && angemeldet()); pcKnopf.hidden = !sitzung().ha;
+      verwaltungKnopf.hidden = !sitzung().ha;
       scannen.hidden = !(scanDa && angemeldet());
       if (neuesDeck) neuesDeck.hidden = !angemeldet();
     },

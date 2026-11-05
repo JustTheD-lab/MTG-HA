@@ -78,7 +78,7 @@ schickt die Erkennung am PC beim nächsten Start automatisch.
 5. Läuft die Erkennung am PC, holt sie die Scan-Fotos ab (nach den Binderseiten) und legt die erkannten Karten in
    die Kiste **„Scan-Eingang“**. Gleiche sichere Drucke werden zu einem Posten mit Anzahl zusammengefasst,
    unsichere bleiben einzeln und stehen in der Prüfansicht. Ist der PC aus, warten die Fotos im Scan-Eingang.
-   Eine Erkennung dauert etwa 4 Sekunden je Foto (16 Fotos je Lauf).
+   Der Name erscheint meist schon nach ein bis zwei Sekunden.
 
 **Foil und Sets je Durchgang:** Am Scan-Bildschirm stellst du vor dem Start oder während des Scans ein:
 - **„Alle Karten Foil“:** Jede danach erkannte Karte ist Foil.
@@ -142,11 +142,29 @@ gehört, zum Beispiel „Preis (Ø 7 Tage) ab 5 € → Spezial“ oder „Farbe
 | Datenbank | im Add-on (`/data/binder.sqlite`), in den Backups von Home Assistant |
 | Kartenkatalog, Schlüssel (nur als Hash) | im Add-on (`/data/katalog.sqlite`, `/data/pc_schluessel`) |
 | Sicherungen | im Add-on (`/data/sicherung`), die jüngsten 10 bleiben; vor jedem Update automatisch |
+| Tägliche Sicherungen | im Add-on (`/data/sicherung/taeglich`, die jüngsten 7) und auf dem Netzlaufwerk (`sicherung/`, die jüngsten 30) |
 | Fotos und Vorschaubilder | auf dem Netzlaufwerk unter dem Speicherort (`fotos/`, `bilder/`), **nicht** in den Backups |
 | Scan-Fotos | auf dem Netzlaufwerk unter `fotos/scan/`, Vorschauen unter `bilder/scan/` |
+| Archiv aus „Datenbank löschen“ | auf dem Netzlaufwerk unter `archiv/<Zeit>/` |
 
 Ist das Netzlaufwerk nicht erreichbar, kannst du weiter blättern, suchen und prüfen, nur ohne Bilder.
 Hochladen ist dann gesperrt, oben steht ein Hinweis.
+
+## Verwaltung
+
+Der Knopf **„Verwaltung“** im Regal zeigt, wann zuletzt gesichert wurde, und meldet Fehler dabei.
+
+**Sicherung zurückholen:** Eine Datei aus `sicherung/` (oder `archiv/<Zeit>/binder.sqlite`) als
+`einspielen/binder.sqlite` in den Speicherort kopieren und das Add-on neu starten, siehe „Testkopie einspielen“.
+
+**Datenbank löschen** ist für den Neubeginn gedacht und nicht rückgängig zu machen:
+
+- Gelöscht werden Binder, Kisten, Fächer, Sortierregeln, Decks, Karten, Preise, die Historie und alle Vorschaubilder.
+- Die Original-Fotos kommen wahlweise nach `archiv/<Zeit>/fotos/` oder werden endgültig gelöscht.
+- Die Datenbank wird vorher immer nach `archiv/<Zeit>/binder.sqlite` gesichert. Dieser Ordner wird nie automatisch
+  gelöscht.
+- Kartenkatalog, Schlüssel des PCs und die Einstellungen des Add-ons bleiben.
+- Gesperrt, solange die Erkennung am PC gerade rechnet oder das Netzlaufwerk nicht erreichbar ist.
 
 ## Testkopie einspielen
 

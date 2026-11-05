@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.20.0
+- Tägliche Sicherung: Das Add-on sichert die Datenbank jetzt jeden Tag von selbst und prüft jede Sicherung. Die letzten 7
+  bleiben im Add-on, die letzten 30 auf dem Netzlaufwerk unter `sicherung/`.
+- Neuer Knopf „Verwaltung“ im Regal: zeigt den Stand der Sicherungen und führt zu „Datenbank löschen“.
+- „Datenbank löschen“ für den Neubeginn: zeigt vorher, was gelöscht wird, und fragt, ob die Original-Fotos ins Archiv
+  sollen. Eine Sicherung der Datenbank kommt vorher in den Ordner `archiv/`. Der Kartenkatalog und die Verbindung zum
+  PC bleiben. Solange die Erkennung am PC arbeitet oder das Netzlaufwerk fehlt, ist das Löschen gesperrt.
+
 ## 0.19.1
 - Die Kiste bleibt bedienbar, wenn man ein Fach einsteckt, während seine Karten noch laden.
 - Eine neue Karte in einer leeren Tasche zeigt nicht mehr das Foto, das dort vorher lag.

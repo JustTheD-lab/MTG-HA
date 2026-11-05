@@ -1,7 +1,7 @@
 // Scan-Eingang (#/scan/eingang): Durchgänge des Bulk-Scans mit ihren Fotos. Vorschauen ansehen, Fotos
 // verwerfen oder zurückholen (Fotos werden nie gelöscht), Original groß ansehen.
 
-import { holen, senden, esc, gehe, adresse } from './gemeinsam.js';
+import { holen, senden, esc, gehe, adresse, bildPfad } from './gemeinsam.js';
 import { dialog } from './dialog.js';
 
 const STATUS_TEXT = {
@@ -27,7 +27,7 @@ function kopfHtml(d, offen) {
   if (d.fehler) teile.push(`${d.fehler} mit Fehler`);
   if (d.verworfen) teile.push(`${d.verworfen} verworfen`);
   const vorschau = d.letzte_vorschau
-    ? `<img class="eingang-mini" src="${esc(adresse(`bilder/${d.letzte_vorschau}`))}" alt="" loading="lazy" decoding="async">`
+    ? `<img class="eingang-mini" src="${esc(adresse(bildPfad(d.letzte_vorschau)))}" alt="" loading="lazy" decoding="async">`
     : '<span class="eingang-mini eingang-mini--leer" aria-hidden="true"></span>';
   return `<button type="button" class="eingang-kopf" aria-expanded="${offen}" data-durchgang="${d.id}">${vorschau}`
     + '<span class="eingang-text">'
@@ -40,7 +40,7 @@ function kopfHtml(d, offen) {
 function fotoHtml(f) {
   const verworfen = f.status === 'verworfen';
   const bild = f.vorschau
-    ? `<img src="${esc(adresse(`bilder/${f.vorschau}`))}" alt="Foto ${f.nummer}" loading="lazy" decoding="async">`
+    ? `<img src="${esc(adresse(bildPfad(f.vorschau)))}" alt="Foto ${f.nummer}" loading="lazy" decoding="async">`
     : '<span class="eingang-platzhalter">keine Vorschau</span>';
   const titel = f.fehler ? `${STATUS_TEXT[f.status] || f.status}: ${f.fehler}` : (STATUS_TEXT[f.status] || f.status);
   // Erkannte Karte: Name mit Sprung in die Kartenansicht (Kiste „Scan-Eingang“); unsichere sichtbar markiert

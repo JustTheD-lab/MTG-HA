@@ -5,12 +5,15 @@ startet den Server für Ingress (nur der Supervisor darf anfragen, siehe `server
 
     /data/binder.sqlite        Datenbank (lokal, in den Backups von Home Assistant; nie auf dem Netzlaufwerk)
     /data/sicherung/           Sicherungen, die jüngsten 10 bleiben
+    /data/sicherung/taeglich/  tägliche Sicherungen, die jüngsten 7 (db/sicherung.py)
     /data/katalog.sqlite       Kartenkatalog (schickt der PC, web/pc.py; täglich mit Scryfall abgeglichen,
                                katalog/abgleich.py)
     /data/pc_schluessel        Hash des Schlüssels für die PC-Schnittstelle (Port 8099)
     /data/preise/              Price Guide von Cardmarket (täglich geladen, preise/zeitplan.py)
     <speicherort>/fotos/       Original-Fotos (Upload)            ┐ Netzlaufwerk, in den Einstellungen
     <speicherort>/bilder/      Vorschaubilder (erzeugt der PC)    ┘ des Add-ons gewählt
+    <speicherort>/sicherung/   Kopie der täglichen Sicherung, die jüngsten 30
+    <speicherort>/archiv/      Sicherung und Fotos aus „Datenbank löschen“ (web/verwaltung.py)
     <speicherort>/einspielen/binder.sqlite   wird beim Start übernommen (Testkopie); vorher Sicherung
 
 Ohne Speicherort liegen Fotos und Bilder unter /data/medien (nur zum Ausprobieren: der Mini-PC hat wenig Platz).
@@ -24,6 +27,7 @@ import os
 import shutil
 import sqlite3
 import sys
+import threading
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
@@ -165,6 +169,13 @@ def main() -> int:
     # Katalog täglich mit Scryfall abgleichen, nur Neues (Wunsch des Nutzers, 04.11.2026)
     from binderapp.katalog.abgleich import Katalogabgleich
     Katalogabgleich(DATEN / "katalog.sqlite", DATEN / "binder.sqlite").start()
+    # Täglich sichern, auch aufs Netzlaufwerk (Wunsch des Nutzers, 05.11.2026)
+    from binderapp.db.sicherung import Tagessicherung
+    ort = speicherort(optionen(DATEN / "options.json"))
+    Tagessicherung(DATEN / "binder.sqlite", DATEN / "sicherung" / "taeglich", ort / "sicherung" if ort else None).start()
+    # Was „Datenbank löschen“ beim letzten Mal nicht mehr geschafft hat (Neustart mitten im Aufräumen)
+    from binderapp.web.verwaltung import reste_entfernen
+    threading.Thread(target=reste_entfernen, args=(ort or DATEN / "medien",), name="Aufraeumen", daemon=True).start()
     # Werte an Home Assistant per MQTT (Entscheidung des Nutzers, 02.11.2026); abschaltbar in den Einstellungen
     sender = None
     if optionen(DATEN / "options.json").get("mqtt", True) is not False:

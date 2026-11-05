@@ -10,7 +10,7 @@
 //   await anmelden()       zeigt den Dialog; true, wenn danach angemeldet
 //   knopf()                Pillen-Knopf, der sich selbst aktualisiert (für Kopfleisten)
 
-import { holen, senden } from './gemeinsam.js';
+import { holen, senden, bildStandSetzen } from './gemeinsam.js';
 import { dialog } from './dialog.js';
 
 let stand = { angemeldet: false, eingerichtet: false, ha: false, max_foto_mb: 60 };
@@ -34,7 +34,11 @@ function setzen(neu) {
 /** Holt den Zustand vom Server; `neu` erzwingt eine neue Abfrage. Fehler lassen den Zustand, wie er ist. */
 export function laden(neu = false) {
   if (!anfrage || neu) {
-    anfrage = holen('/api/sitzung').then((s) => { setzen(s); return sitzung(); }).catch(() => sitzung());
+    anfrage = holen('/api/sitzung').then((s) => {
+      bildStandSetzen(s.bildstand);
+      setzen(s);
+      return sitzung();
+    }).catch(() => sitzung());
   }
   return anfrage;
 }

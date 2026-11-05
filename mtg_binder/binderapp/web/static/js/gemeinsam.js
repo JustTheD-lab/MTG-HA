@@ -78,7 +78,17 @@ export function geaendert(binderId) {
 
 /** Adresse eines vorbereiteten Bildes. art: 'foto' (eigener Ausschnitt) oder 'scryfall'. */
 export function bildUrl(art, schluessel, breite = 400) {
-  return `bilder/${art}/${encodeURIComponent(schluessel)}_${breite}.webp`;
+  return bildPfad(`${art}/${encodeURIComponent(schluessel)}_${breite}.webp`);
+}
+
+// Nach „Datenbank löschen“ beginnen die Nummern neu, der Browser hält Bilder aber eine Woche vor. Der Stand in der
+// Adresse trennt neue Bilder von alten mit gleichem Namen.
+let bildStand = 0;
+export function bildStandSetzen(stand) { bildStand = Number(stand) || 0; }
+
+/** Adresse eines Bilds, `pfad` relativ zu bilder/. */
+export function bildPfad(pfad) {
+  return `bilder/${pfad}${bildStand ? `?s=${bildStand}` : ''}`;
 }
 
 /** Bild direkt von Scryfall (Ausweg, solange der PC noch kein Vorschaubild erzeugt hat, z. B. für eine eben
