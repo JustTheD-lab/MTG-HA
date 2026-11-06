@@ -52,7 +52,7 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
 from binderapp import katalog as katalog_paket
-from binderapp.db.datenbank import ANZAHL_MAX, aendern, einfuegen, loeschen, version
+from binderapp.db.datenbank import ANZAHL_MAX, aendern, einfuegen, loeschen, mit_scan_ausschnitt, version
 from binderapp.katalog import kartendaten, suche
 from binderapp.preise import zeitplan
 from binderapp.sortieren import einsortieren
@@ -97,7 +97,7 @@ WHERE t.id = ? AND b.nutzer_id = ?
 SQL_WARTESCHLANGE = """
 SELECT * FROM (
     SELECT 'karte' AS art, k.id AS karte_id, t.id AS tasche_id, k.status AS status, k.name AS name,
-           t.ausschnitt AS ausschnitt, b.id AS binder_id, b.name AS binder_name, b.regalplatz AS binder_platz,
+           t.ausschnitt, b.id AS binder_id, b.name AS binder_name, b.regalplatz AS binder_platz,
            s.nummer AS seite, t.zeile AS zeile, t.spalte AS spalte,
            ki.id AS kiste_id, ki.name AS kiste_name, ki.regalplatz AS kiste_platz
     FROM karte k
@@ -273,7 +273,7 @@ def fall_holen(con, nutzer: int, *, karte_id: int | None = None, tasche_id: int 
                katalog: bool = False) -> dict | None:
     """Alles für die Prüfkarte oder None, wenn Karte oder Tasche fehlt oder einem anderen Nutzer gehört."""
     if karte_id is not None:
-        z = con.execute(SQL_KARTE, (karte_id, nutzer)).fetchone()
+        z = con.execute(mit_scan_ausschnitt(con, SQL_KARTE), (karte_id, nutzer)).fetchone()
         if z is None:
             return None
         karte, art, tid = z, "karte", z["tasche_id"]
@@ -403,7 +403,7 @@ def routen(h, bilder: Path | None = None) -> list[Route]:
 
     @lesend
     def warteschlange(con, request):
-        zeilen = con.execute(SQL_WARTESCHLANGE, {"n": h.nutzer}).fetchall()
+        zeilen = con.execute(mit_scan_ausschnitt(con, SQL_WARTESCHLANGE), {"n": h.nutzer}).fetchall()
         faelle = [{
             "art": z["art"], "karte_id": z["karte_id"], "tasche_id": z["tasche_id"], "status": z["status"],
             "name": z["name"], "ausschnitt": z["ausschnitt"], "ort": _ort(z),

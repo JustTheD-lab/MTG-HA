@@ -28,6 +28,7 @@ import shutil
 import sqlite3
 import sys
 import threading
+import time
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
@@ -149,6 +150,23 @@ def vorbereiten(daten: Path = DATEN, version: str | None = None) -> dict:
     }
 
 
+def ausschnitte_nachtragen(db: Path, ordner: Path, warten: float = 60) -> None:
+    """Thread: `erkennung.scan_ausschnitte_nachtragen`, bis das Netzlaufwerk den Ordner einmal hergegeben hat."""
+    from binderapp.db import erkennung
+    while True:
+        try:
+            with closing(datenbank.verbinden(db)) as con:
+                zahl = erkennung.scan_ausschnitte_nachtragen(con, ordner)
+        except (OSError, sqlite3.Error) as f:
+            log.warning("Ausschnitte nicht nachgetragen: %s", f)
+            zahl = None
+        if zahl is not None:
+            if zahl:
+                log.info("Ausschnitte von %d Scan-Fotos nachgetragen.", zahl)
+            return
+        time.sleep(warten)
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
     try:
@@ -179,6 +197,9 @@ def main() -> int:
     # Was „Datenbank löschen“ beim letzten Mal nicht mehr geschafft hat (Neustart mitten im Aufräumen)
     from binderapp.web.verwaltung import reste_entfernen
     threading.Thread(target=reste_entfernen, args=(ort or DATEN / "medien",), name="Aufraeumen", daemon=True).start()
+    # Ausschnitte der Scan-Karten von vor Version 14 (Wunsch des Nutzers, 06.11.2026); wartet aufs Netzlaufwerk
+    threading.Thread(target=ausschnitte_nachtragen, args=(DATEN / "binder.sqlite", Path(umgebung["BINDER_BILDER"]) / "foto"),
+                     name="Ausschnittnachtrag", daemon=True).start()
     # Werte an Home Assistant per MQTT (Entscheidung des Nutzers, 02.11.2026); abschaltbar in den Einstellungen
     sender = None
     if optionen(DATEN / "options.json").get("mqtt", True) is not False:

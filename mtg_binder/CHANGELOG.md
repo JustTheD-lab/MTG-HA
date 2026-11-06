@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.25.0
+- Prüfansicht und Kartenansicht zeigen bei Kamera-Scans jetzt unter „Mein Foto“ den Ausschnitt, nach dem die Karte
+  bestimmt wurde. Schon gescannte Karten bekommen ihn beim Start nachgetragen.
+- Datenbank Version 14 (neue Spalte am Scan-Foto); die Sicherung vor dem Update läuft wie immer automatisch.
+
 ## 0.24.0
 - Neu: Dashboard, erreichbar über den Knopf neben „Sets“ im Regal. Es zeigt den Wert der Sammlung mit Preisentwicklung,
   Kennzahlen, die teuersten Karten mit Bild, Gewinner und Verlierer, Verteilungen nach Ort, Set, Farbe, Seltenheit,

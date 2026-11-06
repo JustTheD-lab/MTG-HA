@@ -331,7 +331,7 @@ function inhaltHtml(k) {
   const druck = [k.set_name && setKuerzel ? `${k.set_name} (${setKuerzel})` : setKuerzel, k.nummer && `Nr. ${k.nummer}`,
     k.sprache && (SPRACHEN[k.sprache] ?? k.sprache)].filter(Boolean).join(' · ');
   const kiste = istKistenkarte(k);
-  const mitFoto = Boolean(k.ausschnitt) && !kiste;
+  const mitFoto = Boolean(k.ausschnitt);   // Scan-Karten in Kisten haben den Ausschnitt vom Scan-Foto
   return `
     <button type="button" class="knopf karte-schliessen" aria-label="Karte schließen">${KREUZ}</button>
     <div class="karte-spalte">
@@ -380,7 +380,7 @@ function karteDom(k, fehler) {
 // ---------- Bilder ----------
 
 function schluessel(art, k) {
-  if (art === 'foto') return istKistenkarte(k) ? null : k.ausschnitt;
+  if (art === 'foto') return k.ausschnitt;
   return k.bild;
 }
 
@@ -416,8 +416,8 @@ function bildZeigen(overlay, k, wahl, versucht = new Set()) {
   img.decoding = 'async';
   img.loading = 'lazy';
   img.sizes = '(min-width: 900px) 460px, 92vw';
-  // Kistenkarten haben nur Vorschaubilder in 200 und 400 Pixel; andere Breiten gäbe es nicht.
-  img.srcset = istKistenkarte(k)
+  // Scryfall-Bilder von Kistenkarten gibt es nur in 200 und 400 Pixel; eigene Ausschnitte in allen Breiten.
+  img.srcset = istKistenkarte(k) && art === 'scryfall'
     ? BREITEN.filter((b) => b <= 400).map((b) => `${bildUrl(art, schluessel(art, k), b)} ${b}w`).join(', ')
     : bildSrcset(art, schluessel(art, k));
   img.src = bildUrl(art, schluessel(art, k), 400);

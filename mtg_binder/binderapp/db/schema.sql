@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS scan_foto (
     ausloeser     TEXT,                      -- JSON: Grund und Messwerte der Auslösung (zum Einstellen)
     aufgenommen   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     geaendert     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    ausschnitt    TEXT,                      -- ab Version 14: Bildschlüssel des Ausschnitts, z. B. scan-12_z1s1
     UNIQUE (durchgang_id, nummer)
 );
 
@@ -420,5 +421,7 @@ CREATE INDEX IF NOT EXISTS i_karte_oracle     ON karte(oracle_id);
 CREATE INDEX IF NOT EXISTS i_karte_deck       ON karte(deck_id) WHERE deck_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS i_deck_produkt_cm  ON deck_produkt(cardmarket_id);
 CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
+-- ab Version 14: Ausschnitt je Scan-Foto
+CREATE INDEX IF NOT EXISTS i_scan_foto_karte  ON scan_foto(karte_id);
 
-PRAGMA user_version = 13;
+PRAGMA user_version = 14;

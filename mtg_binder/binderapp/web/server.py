@@ -57,7 +57,7 @@ from starlette.routing import Mount, Route, Router
 from starlette.staticfiles import StaticFiles
 
 from binderapp.db import leeren, seiten
-from binderapp.db.datenbank import MINDEST, aendern, einfuegen, schreiben, verbinden, version
+from binderapp.db.datenbank import MINDEST, aendern, einfuegen, mit_scan_ausschnitt, schreiben, verbinden, version
 from binderapp.db.seiten import Fehler
 from binderapp.preise import werte
 from binderapp.web import (abzug, bearbeiten, dashboard, decks, hochladen, kisten, kistenschreiben, manabox, pc, pruefen,
@@ -358,7 +358,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
     def karte(request):
         with closing(db()) as con:
             sql = SQL_KARTE_V8 if version(con) >= 8 else SQL_KARTE_V3 if version(con) >= 3 else SQL_KARTE
-            k = con.execute(sql, (request.path_params["id"], NUTZER)).fetchone()
+            k = con.execute(mit_scan_ausschnitt(con, sql), (request.path_params["id"], NUTZER)).fetchone()
             if k is None:
                 return fehler("Karte nicht gefunden", 404)
             # Ab Version 3 nur die Historie ab der jüngsten Anlage (eine neu vergebene ID erbt nichts)

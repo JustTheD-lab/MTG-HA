@@ -8,10 +8,12 @@ Standardbibliothek und der Importcode, damit es im Add-on läuft. Alle Schreibzu
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections import defaultdict
+from pathlib import Path
 
-from binderapp.db.datenbank import ANZAHL_MAX, aendern, einfuegen, version
+from binderapp.db.datenbank import ANZAHL_MAX, aendern, einfuegen, schreiben, version
 from binderapp.db.importieren import Tasche, karte_felder, schreibe_taschen
 from binderapp.db.seiten import raster_masse
 
@@ -19,6 +21,7 @@ from binderapp.db.seiten import raster_masse
 # Der erste Import (importieren.ERKENNUNG = c804be1) behält seinen eigenen Stand.
 ERKENNUNG = "527d563"
 QUELLE = "erkennung"
+RE_SCAN_VORSCHAU = re.compile(r"(?P<satz>scan-(?P<id>\d+)_z\d+s\d+)_400\.webp")
 DIENST = "verarbeiter"
 FRISCH = 30  # Sekunden: so jung muss ein Lebenszeichen sein, damit ein anderer Verarbeiter als aktiv gilt
 
@@ -247,9 +250,39 @@ def scan_ergebnis_schreiben(con, nutzer: int, scan_id: int, tasche: Tasche | Non
         if foil:
             felder["foil"] = 1
         kid = einfuegen(con, nutzer, QUELLE, "karte", {**felder, "kiste_id": kiste, "quelle": "scan", **offen})
+    # ab Version 14: der Ausschnitt, nach dem bestimmt wurde (die Prüfansicht zeigt ihn als „Mein Foto“)
+    ausschnitt = {"ausschnitt": tasche.satz} if version(con) >= 14 else {}
     aendern(con, nutzer, QUELLE, "scan_foto", scan_id,
-            {"status": "erkannt", "karte_id": kid, "fehler": None, "erkennung": ERKENNUNG})
+            {"status": "erkannt", "karte_id": kid, "fehler": None, "erkennung": ERKENNUNG, **ausschnitt})
     return {"karte_id": kid, "name": e["name"], "status": e["status"], "zusammengefasst": zusammen, "kiste_id": kiste}
+
+
+def scan_ausschnitte_nachtragen(con, ordner: Path) -> int | None:
+    """Trägt bei Scan-Fotos von vor Version 14 den Ausschnitt nach. Die Vorschaubilder liegen schon im Ordner `ordner`,
+    nur der Schlüssel fehlte; er lässt sich nicht errechnen (`scan-256_z1s2`), darum wird der Ordner einmal gelesen.
+    Gibt die Zahl der Nachträge zurück, None wenn der Ordner gerade fehlt (Netzlaufwerk)."""
+    offen = con.execute("SELECT f.id, d.nutzer_id FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id"
+                        " WHERE f.ausschnitt IS NULL AND f.karte_id IS NOT NULL").fetchall()
+    if not offen:
+        return 0
+    if not ordner.is_dir():
+        return None
+    gefunden: dict[int, tuple[float, str]] = {}
+    with os.scandir(ordner) as eintraege:
+        for eintrag in eintraege:
+            m = RE_SCAN_VORSCHAU.fullmatch(eintrag.name)
+            if m is None:
+                continue
+            scan_id, zeit = int(m["id"]), eintrag.stat().st_mtime
+            if scan_id not in gefunden or zeit > gefunden[scan_id][0]:   # neu gerechnet: der letzte Lauf zählt
+                gefunden[scan_id] = (zeit, m["satz"])
+    zahl = 0
+    with schreiben(con):
+        for z in offen:
+            if z["id"] in gefunden:
+                aendern(con, z["nutzer_id"], QUELLE, "scan_foto", z["id"], {"ausschnitt": gefunden[z["id"]][1]})
+                zahl += 1
+    return zahl
 
 
 def scan_fehlgeschlagen(con, nutzer: int, scan_id: int, grund: str) -> None:
