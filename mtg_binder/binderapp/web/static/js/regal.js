@@ -203,7 +203,9 @@ function sammlungHtml(s) {
 function setsHtml(s) {
   if (!s || typeof s.karten !== 'number') return '';
   return '<p class="regal-sets-zeile"><button type="button" class="knopf regal-sets"'
-    + ' aria-label="Sets öffnen: wie vollständig die Sammlung je Set ist">Sets</button></p>';
+    + ' aria-label="Sets öffnen: wie vollständig die Sammlung je Set ist">Sets</button>'
+    + '<button type="button" class="knopf regal-dashboard"'
+    + ' aria-label="Dashboard öffnen: Werte und Graphen der ganzen Sammlung">Dashboard</button></p>';
 }
 
 /** Platz „Scan-Eingang“ im Stil der Sammlung (Bulk-Scan). Ohne Schnittstelle (alte Datenbank) gibt es ihn nicht. */
@@ -756,6 +758,7 @@ export async function zeigen(wurzel, parameter, vorher) {
     if (ereignis.target.closest('.scan-platz')) { gehe('#/scan/eingang'); return; }
     if (ereignis.target.closest('.regal-regeln')) { gehe('#/regeln'); return; }
     if (ereignis.target.closest('.regal-sets')) { gehe('#/sets'); return; }
+    if (ereignis.target.closest('.regal-dashboard')) { gehe('#/dashboard'); return; }
     if (ereignis.target.closest('.regal-sammlung')) { gehe('#/sammlung'); return; }
     const knopf = ereignis.target.closest('.regal-ruecken');
     if (knopf) { gehe(`#/binder/${knopf.dataset.binder}`); return; }
@@ -846,6 +849,8 @@ export async function zeigen(wurzel, parameter, vorher) {
     zustand.szene.querySelector(`.regal-deck[data-deck="${Number(vorher.deck)}"]`)?.focus({ preventScroll: true });
   } else if ((vorher?.ansicht === 'sets' || vorher?.ansicht === 'set') && !sucheDa) {
     zustand.szene.querySelector('.regal-sets')?.focus({ preventScroll: true });   // zurück aus den Sets
+  } else if (vorher?.ansicht === 'dashboard' && !sucheDa) {
+    zustand.szene.querySelector('.regal-dashboard')?.focus({ preventScroll: true });
   } else if (vorher?.sammlung && !sucheDa) {
     zustand.szene.querySelector('.regal-sammlung')?.focus({ preventScroll: true });   // zurück aus der Sammlung
   } else if ((vorher?.ansicht === 'lesetisch' || vorher?.ansicht === 'kiste') && !sucheDa) {

@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.24.0
+- Neu: Dashboard, erreichbar über den Knopf neben „Sets“ im Regal. Es zeigt den Wert der Sammlung mit Preisentwicklung,
+  Kennzahlen, die teuersten Karten mit Bild, Gewinner und Verlierer, Verteilungen nach Ort, Set, Farbe, Seltenheit,
+  Preisbereich, Kartentyp, Sprache und Manawert, dazu Zuwachs, Bulk-Scan, fast vollständige Sets und kommende Secret Lairs.
+- Keine Änderung an der Datenbank.
+
 ## 0.23.0
 - Secret Lair: Ein Drop zeigt jetzt Bilder, je Karte die Secret-Lair-Fassung, den teuersten und den günstigsten Reprint
   mit Preis und Druck. Ein Tipp vergrößert das Bild. Die Bilder lädt der Browser direkt von Scryfall.

@@ -210,7 +210,8 @@ def veraenderung_gesamt(con, nutzer: int, preisart: str = PREISART, deck_id: int
 
 # Drucke zusammengefasst (gleicher Druck und Foil an mehreren Orten zählt einmal, mit Summe der Anzahl)
 SQL_TEUERSTE = """
-SELECT MIN(k.name) AS name, k.set_code, k.nummer, k.foil, SUM(k.anzahl) AS anzahl, {preis} AS preis
+SELECT MIN(k.name) AS name, k.set_code, k.nummer, k.foil, SUM(k.anzahl) AS anzahl, {preis} AS preis,
+       MIN(k.id) AS karte_id, k.scryfall_id, MIN(COALESCE(k.bild, d.bild)) AS bild
 FROM karte k
 JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
 JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?
@@ -220,7 +221,8 @@ ORDER BY preis DESC, name LIMIT ?
 """
 SQL_AENDERUNG_KARTEN = """
 SELECT MIN(k.name) AS name, k.set_code, k.nummer, k.foil, SUM(k.anzahl) AS anzahl,
-       {jetzt} AS preis, {frueher} AS preis_vorher, SUM(k.anzahl) * ({jetzt} - {frueher}) AS euro
+       {jetzt} AS preis, {frueher} AS preis_vorher, SUM(k.anzahl) * ({jetzt} - {frueher}) AS euro,
+       MIN(k.id) AS karte_id, k.scryfall_id, MIN(COALESCE(k.bild, d.bild)) AS bild
 FROM karte k
 JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
 JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?
@@ -232,30 +234,35 @@ ORDER BY euro {richtung}, name LIMIT ?
 """
 
 
-def _karte_eintrag(z) -> dict:
-    return {"name": z["name"], "set": (z["set_code"] or "").upper(), "nummer": z["nummer"], "foil": bool(z["foil"]),
-            "anzahl": z["anzahl"], "preis": round(z["preis"], 2)}
+def _karte_eintrag(z, mit_bild: bool = False) -> dict:
+    eintrag = {"name": z["name"], "set": (z["set_code"] or "").upper(), "nummer": z["nummer"], "foil": bool(z["foil"]),
+               "anzahl": z["anzahl"], "preis": round(z["preis"], 2)}
+    if mit_bild:   # für die Oberfläche; an Home Assistant gehen Bildschlüssel nicht
+        eintrag.update(karte_id=z["karte_id"], scryfall_id=z["scryfall_id"], bild=z["bild"])
+    return eintrag
 
 
-def teuerste(con, nutzer: int, anzahl: int = 5, preisart: str = PREISART) -> list[dict]:
+def teuerste(con, nutzer: int, anzahl: int = 5, preisart: str = PREISART, mit_bild: bool = False) -> list[dict]:
     """Die `anzahl` Drucke mit dem höchsten Einzelpreis (neuester Tag)."""
     tag = neuester_tag(con)
     if tag is None:
         return []
     sql = SQL_TEUERSTE.format(preis=preis_ausdruck(preisart))
-    return [_karte_eintrag(z) for z in con.execute(sql, (tag, nutzer, anzahl))]
+    return [_karte_eintrag(z, mit_bild) for z in con.execute(sql, (tag, nutzer, anzahl))]
 
 
-def groesste_aenderung(con, nutzer: int, anzahl: int = 5, preisart: str = PREISART) -> dict[str, list[dict]]:
-    """Gewinner und Verlierer in Euro zum Vortag (Anzahl × Preisänderung): {"gewinner": […], "verlierer": […]}."""
-    tag, vortag = neuester_tag(con), vergleichstage(con)["vortag"]
-    if tag is None or vortag is None:
+def groesste_aenderung(con, nutzer: int, anzahl: int = 5, preisart: str = PREISART, abstand: str = "vortag",
+                       mit_bild: bool = False) -> dict[str, list[dict]]:
+    """Gewinner und Verlierer in Euro zum früheren Tag `abstand` (Schlüssel aus ABSTAENDE, Anzahl × Preisänderung):
+    {"gewinner": […], "verlierer": […]}."""
+    tag, frueher_tag = neuester_tag(con), vergleichstage(con)[abstand]
+    if tag is None or frueher_tag is None:
         return {"gewinner": [], "verlierer": []}
     ergebnis = {}
     for liste, vergleich, richtung in (("gewinner", ">", "DESC"), ("verlierer", "<", "ASC")):
         sql = SQL_AENDERUNG_KARTEN.format(jetzt=preis_ausdruck(preisart, "p"), frueher=preis_ausdruck(preisart, "q"),
                                           vergleich=vergleich, richtung=richtung)
-        ergebnis[liste] = [{**_karte_eintrag(z), "preis_vorher": round(z["preis_vorher"], 2),
+        ergebnis[liste] = [{**_karte_eintrag(z, mit_bild), "preis_vorher": round(z["preis_vorher"], 2),
                             "euro": round(z["euro"], 2), "prozent": _prozent(z["preis"], z["preis_vorher"])}
-                           for z in con.execute(sql, (tag, vortag, nutzer, anzahl))]
+                           for z in con.execute(sql, (tag, frueher_tag, nutzer, anzahl))]
     return ergebnis
