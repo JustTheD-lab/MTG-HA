@@ -204,7 +204,7 @@ function rueckseitenZeichnen() {
     + `<div class="proxy-kacheln" role="radiogroup" aria-label="Rückseite wählen">${liste.map(kachel).join('')}</div>`
     + `<div class="proxy-zeile"><label class="knopf proxy-datei" for="proxy-rueck-datei">${HOCH}<span>Rückseite hochladen</span></label>`
     + '<input id="proxy-rueck-datei" class="nur-vorleser" type="file" accept="image/png,image/jpeg">'
-    + '<span class="proxy-hinweis">PNG oder JPEG, höchstens 40 MB</span></div>'
+    + '<span class="proxy-hinweis">PNG oder JPEG, höchstens 40 MB; große Bilder werden vorher verkleinert</span></div>'
     + '<p class="meldung" role="alert" data-rueck-fehler></p>';
 }
 
@@ -218,16 +218,61 @@ async function rueckseitenNeuLaden() {
   if (Z === z) { z.rueckseite = rueckseiteGewaehlt(z); rueckseitenZeichnen(); }
 }
 
+// Home Assistant reicht über Ingress nur Anfragen bis 16 MB weiter (Antwort 413 ohne Text der App). Größere Bilder
+// rechnet der Browser darum vorher herunter: Silhouette Card Maker druckt mit 300 ppi, also 744 Pixel Kartenbreite;
+// 1488 Pixel (doppelt) lassen Reserve. Kleine Bilder gehen unverändert hoch.
+const RUECK_UNVERAENDERT = 12 * 1048576;
+const RUECK_BREITE = 1488;
+
+function alsBlob(leinwand, typ, guete) {
+  return new Promise((ok) => leinwand.toBlob(ok, typ, guete));
+}
+
+async function rueckseiteVerkleinern(datei) {
+  if (datei.size <= RUECK_UNVERAENDERT) return { datei, typ: datei.type };
+  const bild = await createImageBitmap(datei);
+  try {
+    const faktor = Math.min(1, RUECK_BREITE / bild.width);
+    const leinwand = document.createElement('canvas');
+    leinwand.width = Math.round(bild.width * faktor);
+    leinwand.height = Math.round(bild.height * faktor);
+    const ctx = leinwand.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bild, 0, 0, leinwand.width, leinwand.height);
+    let blob = datei.type === 'image/png' ? await alsBlob(leinwand, 'image/png') : null;
+    if (blob && blob.size <= RUECK_UNVERAENDERT) return { datei: blob, typ: 'image/png' };
+    // JPEG kennt keine Transparenz: durchsichtige Ecken werden schwarz statt zufällig.
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, leinwand.width, leinwand.height);
+    blob = await alsBlob(leinwand, 'image/jpeg', 0.93);
+    if (!blob) throw new Error('Umrechnen fehlgeschlagen');
+    return { datei: blob, typ: 'image/jpeg' };
+  } finally {
+    bild.close?.();
+  }
+}
+
 async function rueckseiteHochladen(datei) {
   const z = Z;
   const fehler = () => z.teil.rueck.querySelector('[data-rueck-fehler]');
   if (!datei) return;
   if (!/^image\/(png|jpeg)$/.test(datei.type)) { meldung(fehler(), 'Bitte ein PNG oder JPEG wählen.'); return; }
   if (datei.size > 40 * 1048576) { meldung(fehler(), 'Das Bild ist zu groß, höchstens 40 MB.'); return; }
+  let hochzuladen = { datei, typ: datei.type };
+  if (datei.size > RUECK_UNVERAENDERT) {
+    meldung(fehler(), 'Bild wird verkleinert …');
+    try {
+      hochzuladen = await rueckseiteVerkleinern(datei);
+    } catch {
+      if (Z === z) meldung(fehler(), 'Das Bild ließ sich nicht verkleinern. Bitte ein kleineres Bild wählen (höchstens 12 MB).');
+      return;
+    }
+    if (Z !== z) return;
+  }
   meldung(fehler(), 'Wird hochgeladen …');
   try {
-    const eintrag = await senden(`/api/proxy/rueckseiten?name=${encodeURIComponent(datei.name)}`,
-      { datei, typ: datei.type });
+    const eintrag = await senden(`/api/proxy/rueckseiten?name=${encodeURIComponent(datei.name)}`, hochzuladen);
     if (Z !== z) return;
     await rueckseitenNeuLaden();
     if (Z !== z) return;

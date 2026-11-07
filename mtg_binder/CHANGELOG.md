@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.27.2
+- Große Rückseiten (über 12 MB) verkleinert der Browser vor dem Hochladen auf 1488 Pixel Breite (doppelte
+  Druckauflösung). Home Assistant reicht über Ingress nur Anfragen bis 16 MB weiter, darum kam bei großen Bildern
+  „Die Datei ist zu groß“.
+
 ## 0.27.1
 - Eigene Rückseiten dürfen jetzt bis 40 MB groß sein (vorher 10 MB). Hochauflösende Rückseiten mit 300 dpi waren
   zu groß.

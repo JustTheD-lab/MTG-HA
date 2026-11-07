@@ -157,7 +157,8 @@ für Casual und Playtesting gedacht und bleiben als Proxy erkennbar.
    markierten Karten (per Haken auch vorhandene Karten und Basic Lands). Dasselbe startet der Knopf **„Proxys drucken“**
    in der Deckansicht. Gedruckt wird der Druck aus der Deckliste.
 2. Rückseite wählen (ein neutrales Beispiel ist dabei, eigene lädst du als PNG oder JPEG bis 40 MB hoch; größer als
-   745 × 1040 Pixel muss sie nicht sein).
+   745 × 1040 Pixel muss sie nicht sein). Bilder über 12 MB verkleinert der Browser vorher auf 1488 Pixel Breite,
+   weil Home Assistant über Ingress nur Anfragen bis 16 MB weiterreicht.
    Doppelseitige Karten bekommen ihre zweite Seite auf die Rückseite.
 3. **„PDF erzeugen“**. Die Bilder kommen von Scryfall. Karten, die sich nicht laden lassen, zeigt die App vorher; erst
    du entscheidest, ob das PDF ohne sie entsteht.
