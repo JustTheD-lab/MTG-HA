@@ -418,6 +418,11 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         # Version des Add-ons (am PC keine): Die Oberfläche merkt so, dass ein Update eingespielt wurde
         return JSONResponse({**speicher.stand(), "version": os.environ.get("BINDER_VERSION")})
 
+    async def gesund(request):
+        # Watchdog des Supervisors (addon/config.yaml): Antwortet der Server, läuft er. Bewusst ohne Datenbank und
+        # Netzlaufwerk, sonst startete Home Assistant das Add-on neu, nur weil das Netzlaufwerk fehlt.
+        return JSONResponse({"ok": True})
+
     # Add-on: Verbindung zum PC (Schlüssel für die PC-Schnittstelle, web/pc.py)
     def pc_verbindung(request):
         return JSONResponse({"eingerichtet": pc.schluessel_eingerichtet(daten), "port": PC_PORT})
@@ -655,6 +660,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         Route("/sitzung", sitzung),
         Route("/verarbeiter", verarbeiter),
         Route("/speicher", speicherstand),
+        Route("/gesund", gesund),
         *([Route("/pc/verbindung", pc_verbindung), Route("/pc/schluessel", pc_schluessel, methods=["POST"]),
            *verwaltung.routen(h), *manabox.routen(h), *secretlair.routen(h), *proxy.routen(h)] if ha else []),
         Route("/anmelden", anmelden, methods=["POST"]),

@@ -254,3 +254,10 @@ Repository neu füllen (`--repo …`) und pushen. Home Assistant zeigt „Update
 `config.yaml` gestiegen ist (sofort über „Nach Updates suchen“ im Store-Menü), mit den Änderungen aus
 `CHANGELOG.md`. Beim ersten Start einer neuen Version wird die Datenbank gesichert. Eine schon geöffnete Seite läuft
 mit dem alten Stand weiter; die App bietet dann oben „Neu laden“ an.
+
+**Automatische Updates:** Auf der Seite des Add-ons den Schalter „Automatisch aktualisieren“ einschalten. Home
+Assistant spielt neue Versionen dann selbst ein, die Datenbank wird beim ersten Start gesichert. Ein laufender
+Proxy-Auftrag oder Bulk-Scan bricht beim Update ab und muss neu gestartet werden.
+
+**Watchdog:** Den Schalter „Watchdog“ einschalten. Home Assistant fragt dann regelmäßig `/api/gesund` ab und startet
+das Add-on neu, wenn der Server nicht mehr antwortet. Fehlt nur das Netzlaufwerk, gibt es keinen Neustart.

@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.27.3
+- Watchdog: Home Assistant prüft jetzt, ob der Server noch antwortet (`/api/gesund`), und startet das Add-on sonst
+  neu. Einschalten mit dem Schalter „Watchdog“ auf der Seite des Add-ons. Ein fehlendes Netzlaufwerk löst keinen
+  Neustart aus.
+
 ## 0.27.2
 - Große Rückseiten (über 12 MB) verkleinert der Browser vor dem Hochladen auf 1488 Pixel Breite (doppelte
   Druckauflösung). Home Assistant reicht über Ingress nur Anfragen bis 16 MB weiter, darum kam bei großen Bildern

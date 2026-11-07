@@ -1,7 +1,7 @@
 # Lokales Home-Assistant-Add-on „MTG Binder“ (nur Server und Oberfläche; die Erkennung läuft am PC).
 # Gebaut wird der fertige Ordner mit: python -m binderapp.addon.paket  (PYTHONPATH=src)
 name: MTG Binder
-version: "0.27.2"
+version: "0.27.3"
 slug: mtg_binder
 description: Magic-Binder per Foto – Bücherregal, Lesetisch, Kisten und Prüfansicht
 arch:
@@ -14,6 +14,9 @@ ingress_port: 8098
 panel_icon: mdi:book-open-page-variant
 panel_title: MTG Binder
 panel_admin: true
+# Watchdog: Der Supervisor fragt den Server über die Adresse des Add-ons ab und startet ihn neu, wenn er nicht mehr
+# antwortet (einschalten mit dem Schalter „Watchdog“ auf der Seite des Add-ons)
+watchdog: "http://[HOST]:[PORT:8098]/api/gesund"
 ports:
   8099/tcp: 8099
 ports_description:
