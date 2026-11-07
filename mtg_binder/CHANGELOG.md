@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.31.2
+- Behoben: Von Hand hinzugefügte Karten zeigten kein Bild, solange der PC noch kein Vorschaubild geliefert hat. Der
+  Lesetisch nimmt dann das Bild direkt von Scryfall (das kannte er bisher gar nicht). Die Kistenansicht konnte das
+  schon, erkannte die Bildadresse nach „Datenbank löschen“ aber nicht mehr (angehängter Stand `?s=…`).
+
 ## 0.31.1
 - Behoben: Eine Leerseite, in die eine Karte gelegt wurde, zeigte weiter das Schild „Leerseite“ (ohne Umschalter
   Scryfall/Mein Foto, mit den Leerseiten-Knöpfen unter „Seiten verwalten“). Sie gilt jetzt als normale Seite; liegt

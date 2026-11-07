@@ -17,7 +17,7 @@
 // Exporte für den Wegweiser (app.js): zeigen, aktualisieren, verlassen.
 
 import { holen, senden, geaendert, bildUrl, bildSrcset, esc, gehe, zurueck, bewegungReduziert, istBreit, vorliebe, warten,
-  euro, preisStreifen, preisText } from './gemeinsam.js';
+  euro, preisStreifen, preisText, scryfallBild } from './gemeinsam.js';
 import { dialog, bestaetigen, dialogOffen } from './dialog.js';
 import { angemeldet, knopf as anmeldeKnopf } from './anmeldung.js';
 import { BINDERFARBEN, farbwahl, tischFarbe } from './farbrad.js';
@@ -654,11 +654,14 @@ function tascheBauen(t, seite, zeile, spalte, eifrig) {
 
 // ---------- Bilder ----------
 
-/** Bildquellen in der Reihenfolge der Vorliebe, ohne fehlende: [[art, schluessel], …] */
+/** Bildquellen in der Reihenfolge der Vorliebe, ohne fehlende: [[art, schluessel], …]. Zuletzt das Bild direkt von
+ *  Scryfall: Von Hand hinzugefügte Karten haben noch kein Vorschaubild, bis der PC es nachliefert (Meldung des Nutzers,
+ *  07.11.2026; Entscheidung vom 30.10.2026). */
 function quellen(t, k) {
   const foto = t?.ausschnitt ? ['foto', t.ausschnitt] : null;
   const scryfall = k?.bild ? ['scryfall', k.bild] : null;
-  return (z.art === 'foto' ? [foto, scryfall] : [scryfall, foto]).filter(Boolean);
+  const direkt = k?.bild && scryfallBild(k.bild) ? ['direkt', k.bild] : null;
+  return [...(z.art === 'foto' ? [foto, scryfall] : [scryfall, foto]), direkt].filter(Boolean);
 }
 
 function bildBauen(t, k, eifrig) {
@@ -684,6 +687,11 @@ function quelleSetzen(img, i) {
     return;
   }
   img._i = i;
+  if (q[0] === 'direkt') {
+    img.removeAttribute('srcset');
+    img.src = scryfallBild(q[1]);
+    return;
+  }
   img.sizes = z.sizes;
   img.srcset = bildSrcset(q[0], q[1]);
   img.src = bildUrl(q[0], q[1], 400);

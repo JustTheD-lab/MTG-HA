@@ -1917,7 +1917,8 @@ function verdrahten(s) {
     if (!(bild instanceof HTMLImageElement) || !bild.matches('.kiste-bild, .fach-bild')) return;
     // Neu hinzugefügte Karten haben noch kein Vorschaubild: am PC mit Katalog das lokale Scryfall-Bild nehmen,
     // im Add-on (oder wenn auch das fehlt) das Bild direkt von Scryfall, bis der PC die Vorschau nachliefert
-    const m = /(?:^|\/)bilder\/scryfall\/([^/]+)_\d+\.webp$/.exec(bild.getAttribute('src') ?? '');
+    // Nach „Datenbank löschen“ hängt bildPfad den Stand an (?s=…); darum auch mit Anfrageteil (Meldung, 07.11.2026)
+    const m = /(?:^|\/)bilder\/scryfall\/([^/?]+)_\d+\.webp(?:\?.*)?$/.exec(bild.getAttribute('src') ?? '');
     if (m) bild.dataset.sid = m[1];
     const sid = bild.dataset.sid;
     if (sid && katalogJa && !sitzung().ha && !bild.dataset.katalog) {
