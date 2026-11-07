@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.31.1
+- Behoben: Eine Leerseite, in die eine Karte gelegt wurde, zeigte weiter das Schild „Leerseite“ (ohne Umschalter
+  Scryfall/Mein Foto, mit den Leerseiten-Knöpfen unter „Seiten verwalten“). Sie gilt jetzt als normale Seite; liegt
+  keine Karte mehr darin, ist sie wieder eine Leerseite.
+
 ## 0.31.0
 - Lesetisch: **Ganze Seite löschen** im Bearbeiten-Modus (Werkzeug „Löschen“, Knopf „Ganze Seite löschen …“), etwa
   wenn ein Foto für Fehler gesorgt hat. Die Karten der Seite werden aus der Sammlung entfernt, an ihrer Stelle bleibt

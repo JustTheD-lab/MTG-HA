@@ -497,10 +497,16 @@ function leisteAktualisieren() {
 
 // ---------- Seiten und Taschen ----------
 
+/** Leerseite ohne Karten. Eine Leerseite, in die Karten gelegt wurden (Bearbeiten-Modus), ist für die Anzeige eine
+ *  normale Seite (Meldung des Nutzers, 07.11.2026); in der Datenbank bleibt sie eine Seite ohne Foto. */
+function leerseite(n) {
+  return z.info.get(n)?.art === 'leer' && !kartenAuf(n);
+}
+
 /** Seite ohne Kartenbilder: Leerseite oder Foto, dessen Erkennung noch aussteht bzw. fehlgeschlagen ist. */
 function ohneBilder(n) {
   const s = z.info.get(n);
-  return !s || s.art === 'leer' || (OHNE_TASCHEN.has(s.status) && !z.taschen.get(n)?.size);
+  return !s || leerseite(n) || (s.art !== 'leer' && OHNE_TASCHEN.has(s.status) && !z.taschen.get(n)?.size);
 }
 
 /** Text der Tafel über einer Fotoseite ohne Taschen. */
@@ -554,8 +560,8 @@ function seiteBauen(n, eifrig = false) {
   seite.setAttribute('role', 'group');
   const info = z.info.get(n);
   const taschen = z.taschen.get(n);
-  const leer = info?.art === 'leer';
-  const status = !leer && info && OHNE_TASCHEN.has(info.status) && !taschen?.size ? info.status : null;
+  const leer = leerseite(n);
+  const status = info?.art !== 'leer' && info && OHNE_TASCHEN.has(info.status) && !taschen?.size ? info.status : null;
   let beschriftung = `Seite ${n}`;
   if (leer) beschriftung += ', Leerseite';
   if (status) beschriftung += `, ${status === 'fehler' ? 'Fehler bei der Erkennung' : 'Erkennung steht aus'}`;
@@ -1197,7 +1203,7 @@ function bezugsSeite() {
   return z.breit ? sichtbar[sichtbar.length - 1] : sichtbar[0];
 }
 
-const leerSichtbar = () => seitenVon(z.index).map((n) => z.info.get(n)).filter((s) => s?.art === 'leer');
+const leerSichtbar = () => seitenVon(z.index).filter((n) => leerseite(n)).map((n) => z.info.get(n));
 
 function zeitText(zeitpunkt) {
   const d = new Date(zeitpunkt);
@@ -1647,7 +1653,7 @@ async function ganzeSeiteLoeschen() {
   const zustand = z;
   await bearbAktion(async () => {
     const kandidaten = seitenVon(z.index).map((n) => ({ n, s: z.info.get(n), karten: kartenAuf(n) }))
-      .filter((e) => e.s?.id && !(e.s.art === 'leer' && !e.karten));
+      .filter((e) => e.s?.id && !leerseite(e.n));
     if (!kandidaten.length) {
       meldung(z.breit ? 'Hier sind nur Leerseiten. Entfernen geht über „Seiten verwalten“.'
         : 'Das ist schon eine Leerseite. Entfernen geht über „Seiten verwalten“.');
@@ -1656,8 +1662,7 @@ async function ganzeSeiteLoeschen() {
     let wahl = kandidaten[0];
     if (kandidaten.length > 1) {
       wahl = await listeWaehlen('Seite löschen', 'Welche Seite soll gelöscht werden?',
-        kandidaten.map((e) => ({ ...e, name: `Seite ${e.n}`, info: e.s.art === 'leer' ? `Leerseite, ${kartenText(e.karten)}`
-          : kartenText(e.karten) })), '');
+        kandidaten.map((e) => ({ ...e, name: `Seite ${e.n}`, info: kartenText(e.karten) })), '');
       if (!wahl || z !== zustand) return;
     }
     if (wahl.s.status === 'in_verarbeitung') {
