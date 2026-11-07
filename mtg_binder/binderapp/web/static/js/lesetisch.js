@@ -1484,6 +1484,7 @@ function werkzeugZeichnen() {
     extra = knopf('seitefoil', `${SYM_STERN}<span>${z.breit ? 'Beide Seiten Foil' : 'Ganze Seite Foil'}</span>`);
   } else if (b.werkzeug === 'loeschen') {
     hinweis = 'Karten antippen: aus der Sammlung entfernen (Rückseiten: als leer markieren)';
+    extra = knopf('seiteloeschen', `${SYM_MUELL}<span>Ganze Seite löschen …</span>`, 'knopf-gefahr');
   } else if (b.wahl) {
     hinweis = `„${b.wahl.name}“ gewählt: Ziel-Tasche antippen`;
     extra = knopf('binder', 'In anderen Binder …') + knopf('kiste', 'In eine Kiste …') + knopf('abbrechen', 'Abbrechen');
@@ -1510,6 +1511,8 @@ function werkzeugKlick(name) {
     b.wahl = null;
   } else if (name === 'seitefoil') {
     return void ganzeSeiteFoil();
+  } else if (name === 'seiteloeschen') {
+    return void ganzeSeiteLoeschen();
   } else if (name === 'binder') {
     return void inAnderenBinder();
   } else if (name === 'kiste') {
@@ -1623,6 +1626,60 @@ async function ganzeSeiteFoil() {
     await laden(true);
     meldung(geaendert ? `${geaendert} ${geaendert === 1 ? 'Karte' : 'Karten'} auf Foil gesetzt.` : 'Alle Karten waren schon Foil.',
       { schritte });
+  });
+}
+
+/** Karten (mit Anzahl) auf Seite n, aus den geladenen Taschen. */
+function kartenAuf(n) {
+  let zahl = 0;
+  for (const t of z.taschen.get(n)?.values() ?? []) {
+    const liste = t.karten?.length ? t.karten : (t.karte ? [t.karte] : []);
+    for (const k of liste) zahl += Number(k.anzahl) || 1;
+  }
+  return zahl;
+}
+
+const kartenText = (n) => `${n} ${n === 1 ? 'Karte' : 'Karten'}`;
+
+/** Ganze Seite löschen (Wunsch des Nutzers, 07.11.2026): Karten der Seite aus der Sammlung entfernen, an der Stelle
+ *  bleibt eine Leerseite (Seitenzahlen bleiben), das Originalfoto bleibt erhalten. Ein Schritt mit Rückgängig. */
+async function ganzeSeiteLoeschen() {
+  const zustand = z;
+  await bearbAktion(async () => {
+    const kandidaten = seitenVon(z.index).map((n) => ({ n, s: z.info.get(n), karten: kartenAuf(n) }))
+      .filter((e) => e.s?.id && !(e.s.art === 'leer' && !e.karten));
+    if (!kandidaten.length) {
+      meldung(z.breit ? 'Hier sind nur Leerseiten. Entfernen geht über „Seiten verwalten“.'
+        : 'Das ist schon eine Leerseite. Entfernen geht über „Seiten verwalten“.');
+      return;
+    }
+    let wahl = kandidaten[0];
+    if (kandidaten.length > 1) {
+      wahl = await listeWaehlen('Seite löschen', 'Welche Seite soll gelöscht werden?',
+        kandidaten.map((e) => ({ ...e, name: `Seite ${e.n}`, info: e.s.art === 'leer' ? `Leerseite, ${kartenText(e.karten)}`
+          : kartenText(e.karten) })), '');
+      if (!wahl || z !== zustand) return;
+    }
+    if (wahl.s.status === 'in_verarbeitung') {
+      meldung(`Der PC erkennt Seite ${wahl.n} gerade. Bitte warten, bis die Erkennung fertig ist.`, { art: 'fehler' });
+      return;
+    }
+    const foto = wahl.s.foto_id != null;
+    const ja = await bestaetigen({
+      titel: `Seite ${wahl.n} löschen?`,
+      text: (wahl.karten ? `Die ${kartenText(wahl.karten)} dieser Seite werden aus der Sammlung entfernt. `
+        : 'Auf dieser Seite liegt keine Karte. ')
+        + `An ihrer Stelle bleibt eine Leerseite, die Seitenzahlen ändern sich nicht.`
+        + (foto ? ' Das Originalfoto bleibt erhalten. Ein neues Foto für die Leerseite gibt es über „Seiten verwalten“.' : ''),
+      ja: 'Seite löschen', gefahr: true,
+    });
+    if (!ja || z !== zustand) return;
+    const r = await senden(`/api/seite/${wahl.s.id}/loeschen`, { daten: { nummer: wahl.n } });
+    if (z !== zustand) return;
+    if (z.bearb) z.bearb.wahl = null;
+    await laden(true);
+    meldung(`Seite ${r.nummer} gelöscht${r.karten ? ` (${kartenText(r.karten)} entfernt)` : ''}, jetzt eine Leerseite.`,
+      { schritte: [r.schritt] });
   });
 }
 

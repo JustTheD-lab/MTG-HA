@@ -229,6 +229,8 @@ def verlauf_text(h) -> str:
                 else f"Seite {alt.get('nummer')} entfernt")
     if "nummer" in neu:
         return f"Seite {alt.get('nummer')} wird Seite {neu['nummer']}"
+    if neu.get("art") == "leer":   # „Seite löschen“ im Bearbeiten-Modus (07.11.2026)
+        return f"Seite {h['nummer_jetzt'] or ''} gelöscht, an ihrer Stelle steht eine Leerseite".replace("  ", " ")
     if neu.get("art") == "foto":
         return f"Leerseite {h['nummer_jetzt'] or ''} durch ein Foto ersetzt".replace("  ", " ")
     return "Seite geändert"

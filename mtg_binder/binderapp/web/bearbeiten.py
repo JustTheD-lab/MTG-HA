@@ -19,6 +19,9 @@
     GET  /api/zurueckgestellt   Karten, die sich in eine Tasche legen lassen
     POST /api/seite/{id}/zurueckgestellt  {"zeile", "spalte", "karte_id"}
          Ein Exemplar aus „Zurückgestellt“ in eine Tasche ohne Karte legen (ein Stapel teilt sich, 05.11.2026).
+    POST /api/seite/{id}/loeschen  {"nummer": n}
+         Ganze Seite löschen (Wunsch des Nutzers, 07.11.2026): Karten der Seite aus der Sammlung entfernen, die Seite
+         wird eine Leerseite an derselben Stelle (Nummern bleiben), das Originalfoto bleibt liegen. Ein Schritt.
 
 Löschen läuft über DELETE /api/karte/{id} (pruefen.py), in eine Kiste über POST /api/karten/verschieben
 (kistenschreiben.py). Jeder Schritt lässt sich mit POST /api/schritt/{schritt}/rueckgaengig zurücknehmen.
@@ -44,11 +47,12 @@ from binderapp.web.kistenschreiben import (ANZAHL_MAX, _ganzzahl, auswahl_ids, a
 from binderapp.web.pruefen import SPRACHEN, _kennung
 
 __all__ = ["routen", "foil_umschalten", "seite_foil", "tasche_verschieben", "karte_einlegen", "tasche_leeren",
-           "zurueckstellen", "zurueckgestellte", "zurueckgestellte_einlegen"]
+           "zurueckstellen", "zurueckgestellte", "zurueckgestellte_einlegen", "seite_loeschen"]
 
 GROSS = 2 ** 62
 NICHT_KOPIEREN = ("id", "angelegt", "geaendert")
 ZURUECK_LISTE_MAX = 2000
+SEITE_GELOESCHT = "Die Seite dieses Fotos wurde gelöscht."
 
 
 def _foil(wert) -> bool:
@@ -325,6 +329,58 @@ def tasche_leeren(con, nutzer: int, tasche_id: int) -> dict:
     return {"schritt": schritt, "tasche_id": tasche_id, "vorher": t["inhalt"]}
 
 
+# ---------------------------------------------------------------- Seite löschen (Wunsch des Nutzers, 07.11.2026)
+
+
+def seite_loeschen(con, nutzer: int, seite_id: int, nummer: int) -> dict:
+    """Löscht eine ganze Seite als einen Schritt mit Rückgängig (Antworten des Nutzers: Karten mitlöschen, an der Stelle
+    bleibt eine Leerseite, das Originalfoto bleibt unverändert liegen).
+
+    Die Taschen bleiben als Zeilen erhalten und werden „leer“ (ohne Ausschnitt); fehlende Stellen des Rasters kommen als
+    leere Taschen dazu. So zeigt `herkunft_tasche_id` einer Deck-Karte weiter auf eine Tasche (Zerlegen legt sie in die
+    leere Tasche zurück). Die Seite verliert ihr Foto: Ein noch nicht erkanntes Foto bekommt den Status „fehler“, damit
+    der PC es überspringt; Rückgängig gibt es ihm zurück. Danach lässt sich über „Foto für diese Leerseite“ ein neues Foto
+    an dieselbe Stelle legen. `nummer` muss die aktuelle Seitenzahl sein (Schutz gegen eine veraltete Ansicht)."""
+    s = con.execute("SELECT s.*, b.raster FROM seite s JOIN binder b ON b.id = s.binder_id"
+                    " WHERE s.id = ? AND b.nutzer_id = ?", (seite_id, nutzer)).fetchone()
+    if s is None:
+        raise Fehler("Seite nicht gefunden.", 404)
+    if s["nummer"] != nummer:
+        raise Fehler("Die Seitenzahlen haben sich inzwischen geändert. Bitte die Ansicht neu laden.", 409)
+    taschen = con.execute("SELECT * FROM tasche WHERE seite_id = ? ORDER BY zeile, spalte", (seite_id,)).fetchall()
+    karten = con.execute("SELECT k.id, k.anzahl FROM karte k JOIN tasche t ON t.id = k.tasche_id"
+                         " WHERE t.seite_id = ? ORDER BY k.id", (seite_id,)).fetchall()
+    if s["art"] == "leer" and s["foto_id"] is None and not karten:
+        raise Fehler("Diese Seite ist schon eine Leerseite. Entfernen geht über „Seiten verwalten“.", 409)
+    foto = None
+    if s["foto_id"] is not None:
+        foto = con.execute("SELECT id, status FROM foto WHERE id = ?", (s["foto_id"],)).fetchone()
+        if foto is not None and foto["status"] == "in_verarbeitung":
+            raise Fehler("Der PC erkennt diese Seite gerade. Bitte warten, bis die Erkennung fertig ist.", 409)
+    posten_vorher, karten_vorher = schritte.summe(con, nutzer)
+    schritt = schritte.neuer_schritt()
+    for k in karten:
+        schritte.loeschen(con, nutzer, "karte", k["id"], schritt=schritt)
+    for t in taschen:
+        schritte.aendern_genau(con, nutzer, "tasche", t["id"], {"inhalt": "leer", "ausschnitt": None}, schritt=schritt)
+    vorhanden = {(t["zeile"], t["spalte"]) for t in taschen}
+    zeilen, spalten = raster_masse(s["raster"])
+    for z in range(1, zeilen + 1):
+        for sp in range(1, spalten + 1):
+            if (z, sp) not in vorhanden:
+                schritte.einfuegen(con, nutzer, "tasche", {"seite_id": seite_id, "zeile": z, "spalte": sp,
+                                                           "inhalt": "leer", "ausschnitt": None}, schritt=schritt)
+    schritte.aendern_genau(con, nutzer, "seite", seite_id, {"art": "leer", "foto_id": None}, schritt=schritt)
+    if foto is not None and foto["status"] == "neu":
+        schritte.aendern_genau(con, nutzer, "foto", foto["id"], {"status": "fehler", "fehler": SEITE_GELOESCHT},
+                               schritt=schritt)
+    entfernt = sum(k["anzahl"] for k in karten)
+    if schritte.summe(con, nutzer) != (posten_vorher - len(karten), karten_vorher - entfernt):
+        raise Fehler("Summenprüfung fehlgeschlagen, nichts gelöscht.", 500)   # die Ausnahme rollt alles zurück
+    return {"schritt": schritt, "seite_id": seite_id, "binder_id": s["binder_id"], "nummer": s["nummer"],
+            "posten": len(karten), "karten": entfernt, "foto": s["foto_id"] is not None}
+
+
 # ---------------------------------------------------------------- Routen
 
 
@@ -411,7 +467,17 @@ def routen(h) -> list[Route]:
                                                                           d["spalte"], karte_id))
         return JSONResponse(antwort, status_code=201)
 
+    @h.schreibend
+    async def ganze_seite_loeschen(request):
+        seite_id = int(request.path_params["id"])
+        d = await h.json_daten(request)
+        if set(d) != {"nummer"}:
+            raise Fehler("Bitte nur „nummer“ (die aktuelle Seitenzahl) angeben.")
+        nummer = _ganzzahl(d["nummer"], "nummer", 1, GROSS)
+        return JSONResponse(await _ausfuehren(lambda con: seite_loeschen(con, h.nutzer, seite_id, nummer)))
+
     return [
+        Route("/seite/{id:int}/loeschen", ganze_seite_loeschen, methods=["POST"]),
         Route("/karten/zurueckstellen", zurueck_stellen, methods=["POST"]),
         Route("/zurueckgestellt", zurueck_liste),
         Route("/seite/{id:int}/zurueckgestellt", zurueck_einlegen, methods=["POST"]),

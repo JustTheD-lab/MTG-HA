@@ -346,7 +346,8 @@ def _zuruecknehmen(con, nutzer: int, alter_schritt: str, zeilen) -> str:
     neuer = _neuer_schritt()
     for z in reversed(zeilen):
         tabelle = z["tabelle"]
-        if tabelle not in ("karte", "tasche", "scan_foto"):   # scan_foto: Verbindung einer gelöschten Karte
+        # scan_foto: Verbindung einer gelöschten Karte; seite und foto: „Seite löschen“ (bearbeiten.seite_loeschen)
+        if tabelle not in ("karte", "tasche", "scan_foto", "seite", "foto"):
             raise Fehler(KONFLIKT, 409)
         spalten = _spalten(con, tabelle)
         alt, neu = _json(z["alt"]), _json(z["neu"])

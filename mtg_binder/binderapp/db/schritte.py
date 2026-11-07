@@ -22,7 +22,8 @@ QUELLE_REGEL = "sortierregel"
 # Der ManaBox-Import in der App (db/manabox_app.py) ist ein Schritt; seine Zeilen behalten die Quelle „manabox“.
 QUELLE_IMPORT = "manabox"
 QUELLEN = (QUELLE, QUELLE_REGEL, QUELLE_IMPORT)
-TABELLEN = ("karte", "tasche", "kiste", "scan_foto")
+# seite und foto: „Seite löschen“ im Lesetisch (07.11.2026) macht aus einer Fotoseite eine Leerseite.
+TABELLEN = ("karte", "tasche", "kiste", "scan_foto", "seite", "foto")
 KONFLIKT = "Das lässt sich nicht mehr zurücknehmen: Die Karten wurden inzwischen geändert."
 MUSTER = re.compile(r"^[0-9a-f]{32}$")
 JETZT = "SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now')"

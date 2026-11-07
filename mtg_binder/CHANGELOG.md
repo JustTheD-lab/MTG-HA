@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.31.0
+- Lesetisch: **Ganze Seite löschen** im Bearbeiten-Modus (Werkzeug „Löschen“, Knopf „Ganze Seite löschen …“), etwa
+  wenn ein Foto für Fehler gesorgt hat. Die Karten der Seite werden aus der Sammlung entfernt, an ihrer Stelle bleibt
+  eine Leerseite (die Seitenzahlen ändern sich nicht), das Originalfoto bleibt erhalten. Ein neues Foto für die
+  Leerseite gibt es über „Seiten verwalten“. Mit Rückfrage und „Rückgängig“; bei einer Doppelseite wählt man die Seite.
+
 ## 0.30.0
 - Proxys: **Archidekt-Link** einfügen und „Laden“: Hauptdeck mit Commander, Druck aus Archidekt, Basic Lands nur mit
   Haken. Die Liste landet im Eingabefeld und wird gleich geprüft. Das Deck muss öffentlich oder ungelistet sein.
