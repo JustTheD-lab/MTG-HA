@@ -165,6 +165,10 @@ für Casual und Playtesting gedacht und bleiben als Proxy erkennbar.
 4. Drucken: **Tatsächliche Größe / 100 %**, beidseitig an der **langen Kante**. Schneiden in Silhouette Studio mit der
    Vorlage `a4-standard-v5`, Maschine **„Cameo 5“**.
 
+- **Archidekt-Link:** Link einfügen (`https://archidekt.com/decks/…`) und „Laden“. Übernommen werden Hauptdeck und
+  Commander mit dem Druck aus Archidekt; Sideboard, Maybeboard und Kategorien „nicht im Deck“ fallen weg, Basic Lands
+  nur mit dem Haken. Das Deck muss öffentlich oder ungelistet sein. Moxfield-Links gehen nicht (keine offene
+  Schnittstelle); dort die Liste exportieren und einfügen.
 - **Druck bevorzugen:** „Wie in der Liste“, „Günstigster Druck“ (Cardmarket Ø 7 Tage aus dem täglichen Price Guide,
   ohne diesen Wert Low; nur englische Papierdrucke, deren Scryfall-Bild ein guter Scan ist) oder „Erster Druck“
   (ältester normaler Druck ohne Promos). Gilt für Zeilen ohne Set und Nummer, mit „Sets ignorieren“ für alle. Der

@@ -82,6 +82,14 @@ function eingabeHtml(formate) {
       + `${DECK_STANDARD.includes(g) ? ' checked' : ''}><span>${esc(t)}<span class="proxy-hinweis" data-zahl="${g}"></span>`
       + '</span></label>').join('')
     + '</div><p class="proxy-hinweis" role="status" data-deck-status></p></div>'
+    + '<div class="proxy-deck" data-archidekt>'
+    + '<label class="etikett feld-etikett" for="proxy-archidekt">Archidekt-Link</label>'
+    + '<div class="proxy-zeile"><input id="proxy-archidekt" class="feld proxy-deck-wahl" type="url" inputmode="url"'
+    + ' placeholder="https://archidekt.com/decks/…" autocomplete="off" autocapitalize="off" spellcheck="false">'
+    + '<button type="button" class="knopf" data-archidekt-laden>Laden</button></div>'
+    + '<label class="proxy-haken"><input type="checkbox" id="proxy-archidekt-basics"><span>Basic Lands mitnehmen</span>'
+    + '</label><p class="proxy-hinweis" role="status" data-archidekt-status>Hauptdeck mit Commander, Druck aus'
+    + ' Archidekt. Das Deck muss öffentlich oder ungelistet sein.</p></div>'
     + '<label class="etikett feld-etikett" for="proxy-text">Deckliste einfügen</label>'
     + '<textarea id="proxy-text" class="feld proxy-text" rows="10" spellcheck="false" autocomplete="off"'
     + ' autocapitalize="off" placeholder="1 Sol Ring&#10;1 Command Tower (CMM) 350&#10;…"></textarea>'
@@ -660,6 +668,36 @@ async function deckUebernehmen() {
   }
 }
 
+// ---------------------------------------------------------------- Archidekt-Link
+
+async function archidektLaden() {
+  const z = Z;
+  const block = z.teil.eingabe.querySelector('[data-archidekt]');
+  const status = block.querySelector('[data-archidekt-status]');
+  const link = block.querySelector('#proxy-archidekt').value.trim();
+  if (!link) { status.textContent = 'Bitte einen Archidekt-Link einfügen.'; return; }
+  const knopf = block.querySelector('[data-archidekt-laden]');
+  knopf.disabled = true;
+  status.textContent = 'Deck wird bei Archidekt geladen …';
+  try {
+    const d = await senden('/api/proxy/archidekt', {
+      daten: { link, basics: block.querySelector('#proxy-archidekt-basics').checked } });
+    if (Z !== z) return;
+    z.feld.text.value = d.text;
+    z.feld.name.value = d.name;
+    z.formatWahl = d.format;
+    z.feld.format.value = d.format;
+    const basics = block.querySelector('#proxy-archidekt-basics').checked;
+    status.textContent = `${zahl(d.exemplare)} Karten aus „${d.name}“ übernommen`
+      + (d.basics && !basics ? ` (${zahl(d.basics)} Basic Lands ausgelassen).` : '.');
+    await pruefen();
+  } catch (f) {
+    if (Z === z) status.textContent = fehlerSatz(f);
+  } finally {
+    knopf.disabled = false;
+  }
+}
+
 // ---------------------------------------------------------------- Ansicht
 
 function verdrahten(bereich) {
@@ -670,6 +708,7 @@ function verdrahten(bereich) {
     if (!k || k.disabled) return;
     if (k.matches('[data-pruefen]')) pruefen();
     else if (k.matches('[data-deck-laden]')) deckUebernehmen();
+    else if (k.matches('[data-archidekt-laden]')) archidektLaden();
     else if (k.matches('[data-erzeugen]')) erzeugen();
     else if (k.dataset.weiter) weiter(k.dataset.weiter === 'ja');
     else if (k.dataset.rueck) {
@@ -725,6 +764,9 @@ function verdrahten(bereich) {
     }
   });
   z.feld.text.addEventListener('input', aenderung);
+  bereich.querySelector('#proxy-archidekt').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); archidektLaden(); }
+  });
 }
 
 /** Text oder Sets geändert: Vorschau und Knopf zeigen „bitte neu prüfen“. */

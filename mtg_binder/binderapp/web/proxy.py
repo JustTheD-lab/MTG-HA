@@ -13,6 +13,8 @@ und gesetztem `BINDER_PROXY` (das Add-on setzt es, am PC gibt es den Bereich nic
     GET    /api/proxy/decks                   Decks der App für „Aus Deck übernehmen“ (id, name)
     GET    /api/proxy/deck/{id}?gruppen=      Proxy-Liste eines Decks; Gruppen fehlt,proxy,vorhanden,basics
                                               (ohne Angabe: fehlt,proxy), Druck aus der Deckliste, Format mtga
+    POST   /api/proxy/archidekt               {"link", "basics"} Proxy-Liste aus einem Archidekt-Deck (Hauptdeck
+                                              mit Commander, Druck aus Archidekt, Basics nur auf Wunsch; Format mtga)
     GET    /api/proxy/kalibrierung            Druckversatz der Rückseiten {x, y, winkel, geaendert, vorher}
     POST   /api/proxy/kalibrierung            {"x", "y", "winkel"} setzen oder {"ablesen": {"x", "y"}} dazuzählen
     GET    /api/proxy/kalibrierung/bogen      Kalibrierbogen A4 mit dem gespeicherten Versatz (PDF)
@@ -31,7 +33,7 @@ from functools import wraps
 from pathlib import Path
 
 from binderapp.db.datenbank import version
-from binderapp.decks import abgleich
+from binderapp.decks import abgleich, lesen
 
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse, JSONResponse
@@ -175,6 +177,27 @@ def routen(h) -> list[Route]:
         gruppen = pa.DECK_STANDARD if wert is None else [g for g in wert.split(",") if g in pa.DECK_GRUPPEN]
         return JSONResponse(await run_in_threadpool(_deck, request.path_params["id"], gruppen))
 
+    def _archidekt(link, basics: bool) -> dict:
+        try:
+            kopf, zeilen = lesen.archidekt_zeilen(lesen.archidekt_holen(lesen.archidekt_id(link)))
+            kat = h.katalog()
+            if kat is not None:   # Druck aus dem Katalog bestätigen; ohne Katalog gilt Set und Nummer von Archidekt
+                try:
+                    zeilen, _ = lesen.aufloesen(kat, zeilen)
+                finally:
+                    kat.close()
+        except lesen.DeckFehler as f:
+            raise Fehler(str(f), f.status)
+        if not zeilen:
+            raise Fehler("Das Archidekt-Deck hat keine Karten im Hauptdeck.")
+        return pa.archidekt_liste(kopf, zeilen, basics)
+
+    @h.schreibend
+    @_fehler_umwandeln
+    async def archidekt(request):
+        daten = await h.json_daten(request)
+        return JSONResponse(await run_in_threadpool(_archidekt, daten.get("link"), daten.get("basics") is True))
+
     @_fehler_umwandeln
     async def kalibrierung(request):
         return JSONResponse(_bereit().kalibrierung())
@@ -240,6 +263,7 @@ def routen(h) -> list[Route]:
         Route("/proxy/auftrag/{id}/weiter", weiter, methods=["POST"]),
         Route("/proxy/decks", decks),
         Route("/proxy/deck/{id:int}", deck),
+        Route("/proxy/archidekt", archidekt, methods=["POST"]),
         Route("/proxy/kalibrierung", kalibrierung),
         Route("/proxy/kalibrierung", kalibrierung_setzen, methods=["POST"]),
         Route("/proxy/kalibrierung/bogen", kalibrierbogen),

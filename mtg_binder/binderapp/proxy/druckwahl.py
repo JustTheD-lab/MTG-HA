@@ -5,7 +5,7 @@ wie bei Secret Lair), nur Drucke mit gutem Scan. Kandidaten sind die englischen 
 Cardmarket-Produkt aus dem Katalog; ob ihr Scryfall-Bild ein richtiger Scan ist (`image_status = highres_scan`),
 fragt `scans_pruefen` live bei Scryfall nach (`/cards/collection`, je Anfrage höchstens 75 Karten), weil der Katalog
 das nicht kennt. Zeilen mit Set und Nummer bleiben, außer „Sets ignorieren“ ist an. Das Ergebnis ist eine Liste im
-Stil von MTG Arena („N Name (SET) Nr“), die Silhouette Card Maker unverändert lädt.
+Deckstats-Format („N [SET#Nr] Name“, proxy/liste.py), die Silhouette Card Maker unverändert lädt.
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from pathlib import Path
 
 from binderapp.katalog.suche import normalisiere
 from binderapp.preise import abruf
+from binderapp.proxy import liste
 
 SCRYFALL = "https://api.scryfall.com/cards/collection"
 SAMMEL_MAX = 75            # Grenze von Scryfall je Anfrage
@@ -84,11 +85,6 @@ def scans_pruefen(ids: list[str], senden=_post, warten=time.sleep) -> dict[str, 
     return ergebnis
 
 
-def _zeile(anzahl: int, name: str, satz: str | None, nummer: str | None) -> str:
-    name = name.replace("\n", " ").strip()
-    return f"{anzahl} {name} ({satz.upper()}) {nummer}" if satz and nummer else f"{anzahl} {name}"
-
-
 def waehlen(kat, preisdatei: Path, karten: list[dict], sets_ignorieren: bool, scans=scans_pruefen) -> dict:
     """Neue Liste (Text, Format mtga) und je Zeile, was gewählt wurde.
 
@@ -133,8 +129,8 @@ def waehlen(kat, preisdatei: Path, karten: list[dict], sets_ignorieren: bool, sc
                 e.update(art="guenstig", set=gut["set_code"], nummer=gut["nummer"],
                          preis=round(preise[gut["cardmarket_id"]], 2))
         if e["art"] == "ohne":
-            zeilen.append(_zeile(e["anzahl"], e["name"], None, None))
+            zeilen.append(liste.zeile(e["anzahl"], e["name"]))
         else:
-            zeilen.append(_zeile(e["anzahl"], e["name"], e["set"], e["nummer"]))
+            zeilen.append(liste.zeile(e["anzahl"], e["name"], e["set"], e["nummer"]))
         gewaehlt.append(e)
-    return {"text": "\n".join(zeilen), "format": "mtga", "gewaehlt": gewaehlt}
+    return {"text": "\n".join(zeilen), "format": liste.FORMAT, "gewaehlt": gewaehlt}

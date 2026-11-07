@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.30.0
+- Proxys: **Archidekt-Link** einfügen und „Laden“: Hauptdeck mit Commander, Druck aus Archidekt, Basic Lands nur mit
+  Haken. Die Liste landet im Eingabefeld und wird gleich geprüft. Das Deck muss öffentlich oder ungelistet sein.
+- Behoben: Listen aus Decks der App und aus „Günstigster Druck“ verloren Drucke mit besonderen Nummern (The List wie
+  `IMA-177`, Buchstaben wie `151p`, Sterne). Die App schreibt solche Listen jetzt im Deckstats-Format
+  (`1 [PLST#IMA-177] Nature's Claim`), das jede Nummer liest.
+
 ## 0.29.0
 - Proxys: Neue Auswahl **„Druck bevorzugen“**: wie in der Liste, **günstigster Druck** oder **erster Druck**.
 - Günstigster Druck: nach dem Cardmarket-Preis Ø 7 Tage (ohne ihn Low) aus dem täglichen Price Guide, nur englische

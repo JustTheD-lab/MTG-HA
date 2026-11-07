@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from binderapp.db.datenbank import verbinden
-from binderapp.proxy import druckwahl
+from binderapp.proxy import druckwahl, liste
 from binderapp.proxy import staende as st
 
 log = logging.getLogger("binderapp.proxy")
@@ -158,6 +158,11 @@ def format_waehlen(formate: dict, kat) -> str | None:
 
 # --- Decks der App als Quelle ---------------------------------------------------------------------------------
 
+# Listen, die die App selbst schreibt, im Deckstats-Format (proxy/liste.py)
+LISTENFORMAT = liste.FORMAT
+liste_zeile = liste.zeile
+
+
 # Gruppen einer Deckzeile (Entscheidung des Nutzers, 07.11.2026: vorgewählt fehlend und als Proxy markiert)
 DECK_GRUPPEN = ("fehlt", "proxy", "vorhanden", "basics")
 DECK_STANDARD = ("fehlt", "proxy")
@@ -183,14 +188,27 @@ def deck_liste(abgleich: dict, gruppen) -> dict:
         anzahl = sum(n for g, n in je.items() if g in gruppen)
         if anzahl <= 0:
             continue
-        name = str(z["name"]).replace("\n", " ").strip()
         if z.get("druck_angegeben") and z.get("set_code") and z.get("nummer"):
-            zeilen.append(f"{anzahl} {name} ({str(z['set_code']).upper()}) {z['nummer']}")
+            zeilen.append(liste_zeile(anzahl, z["name"], z["set_code"], z["nummer"]))
         else:
-            zeilen.append(f"{anzahl} {name}")
-    return {"name": abgleich.get("name") or "Deck", "text": "\n".join(zeilen), "format": "mtga",
+            zeilen.append(liste_zeile(anzahl, z["name"]))
+    return {"name": abgleich.get("name") or "Deck", "text": "\n".join(zeilen), "format": LISTENFORMAT,
             "gruppen": sorted(gruppen, key=DECK_GRUPPEN.index), "zahlen": zahlen,
             "exemplare": sum(int(zeile.split(" ", 1)[0]) for zeile in zeilen)}
+
+
+def archidekt_liste(kopf: dict, zeilen: list[dict], basics: bool) -> dict:
+    """Proxy-Liste aus einem Archidekt-Deck (`decks.lesen.archidekt_zeilen`, schon ohne Sideboard und Maybeboard):
+    Commander zuerst, Druck aus Archidekt, Basic Lands nur mit `basics` (Antworten des Nutzers, 07.11.2026)."""
+    reihe = sorted(zeilen, key=lambda z: not z.get("commander"))
+    text, exemplare = [], 0
+    for z in reihe:
+        if z.get("basic") and not basics:
+            continue
+        text.append(liste_zeile(z["anzahl"], z["name"], z.get("set_code"), z.get("nummer")))
+        exemplare += z["anzahl"]
+    return {"name": kopf.get("name") or "Archidekt-Deck", "text": "\n".join(text), "format": LISTENFORMAT,
+            "exemplare": exemplare, "basics": sum(z["anzahl"] for z in zeilen if z.get("basic"))}
 
 
 # --- Bilder in Dateiköpfen (ohne Bildverarbeitung) ------------------------------------------------------------
