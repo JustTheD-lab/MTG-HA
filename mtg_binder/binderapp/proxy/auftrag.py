@@ -5,6 +5,8 @@
     <wurzel>/arbeit/<id>/     Bilder eines Auftrags, nach dem Auftrag gelöscht (nicht in den Sicherungen)
     <ablage>/bilder/          Bilder-Cache (Netzlaufwerk), höchstens 2 GB, nach 30 Tagen neu geladen
     <ablage>/pdf/             die letzten 50 PDFs mit <name>.json daneben
+    <wurzel>/kalibrierung.json Druckversatz der Rückseiten (x, y, Winkel), in den HA-Sicherungen
+    <wurzel>/kalibrierung/    der zuletzt gebaute Kalibrierbogen
 
 Entscheidungen des Nutzers (07.11.2026): Cache auf dem Netzlaufwerk (ohne Netzlaufwerk nur je Auftrag), doppelseitige
 Karten immer mit der zweiten Seite hinten (wie im Original), 50 PDFs aufheben. Nichts fällt stillschweigend weg:
@@ -51,6 +53,13 @@ BEISPIEL_ID = "beispiel"
 FORMATNAMEN = {"moxfield": "Moxfield/Archidekt mit Set und Nummer", "archidekt": "Archidekt", "mtga": "MTG Arena",
                "mtgo": "MTGO (Anzahl und Name)", "deckstats": "Deckstats", "simple": "Nur Namen"}
 ID_MUSTER = re.compile(r"^[0-9a-f]{12}$")
+# Kalibrierung (Druckversatz der Rückseiten in Pixeln bei 300 ppi wie in SCM, 1 px ≈ 0,085 mm). Entscheidung des
+# Nutzers 07.11.2026: eine Kalibrierung, in jedem PDF eingerechnet, je Auftrag abschaltbar.
+VERSATZ_MAX = 300          # rund 25 mm
+WINKEL_MAX = 5.0
+ABLESEN_MAX = 50           # ein Feld des Bogens liegt bei ±9 (waagerecht) und ±14 (senkrecht)
+KALIBRIERUNG_ZEIT = 3 * 60
+KALIBRIERUNG_LEER = {"x": 0, "y": 0, "winkel": 0.0}
 PDF_MUSTER = re.compile(r"^[0-9]{8}-[0-9]{6}-[A-Za-z0-9_\-]{1,60}\.pdf$")
 
 
@@ -247,7 +256,8 @@ class Auftrag:
     format: str
     optionen: dict
     rueckseite: str
-    zustand: str = "wartet"            # wartet → laedt → (fehlende) → baut → fertig | abgebrochen | fehler
+    versatz: dict | None = None        # Kalibrierung beim Anlegen (None: abgeschaltet oder nicht kalibriert)
+    zustand: str = "wartet"           # wartet → laedt → (fehlende) → baut → fertig | abgebrochen | fehler
     fertig: int = 0
     gesamt: int = 0
     fehlende: list = field(default_factory=list)
@@ -262,7 +272,7 @@ class Auftrag:
     def anzeige(self) -> dict:
         return {"id": self.id, "name": self.name, "format": self.format, "zustand": self.zustand,
                 "fertig": self.fertig, "gesamt": self.gesamt, "fehlende": self.fehlende, "meldung": self.meldung,
-                "pdf": self.pdf, "stand": self.stand, "zeiten": self.zeiten, "cache": self.cache}
+                "pdf": self.pdf, "stand": self.stand, "zeiten": self.zeiten, "cache": self.cache, "versatz": self.versatz}
 
 
 class Dienst:
@@ -356,7 +366,8 @@ class Dienst:
                 raise Proxyfehler("Es läuft schon ein Proxy-Auftrag. Bitte warten, bis er fertig ist.", 409)
             a = Auftrag(uuid.uuid4().hex[:12], deckname(name), text, format_name,
                         {"sets_ignorieren": bool(optionen.get("sets_ignorieren")),
-                         "extra_art": bool(optionen.get("extra_art"))}, rueckseite or BEISPIEL_ID)
+                         "extra_art": bool(optionen.get("extra_art"))}, rueckseite or BEISPIEL_ID,
+                        versatz=self.kalibrierung_werte() if optionen.get("versatz", True) is not False else None)
             self.auftrag = a
         threading.Thread(target=self._ausfuehren, args=(a,), name="Proxyauftrag", daemon=True).start()
         return a.anzeige()
@@ -437,7 +448,8 @@ class Dienst:
         mitte = time.monotonic()
         with self.staende.sperre:
             r = self._lauf("pdf", ["--vorne", str(vorne), "--hinten", str(hinten), "--doppelt", str(doppelt),
-                                   "--ausgabe", str(zwischen)], PDF_ZEIT, arbeit, a)
+                                   "--ausgabe", str(zwischen)]
+                           + (["--versatz", json.dumps(a.versatz)] if a.versatz else []), PDF_ZEIT, arbeit, a)
         a.zeiten["pdf_s"] = round(time.monotonic() - mitte, 1)
         if not r.get("ok"):
             raise RuntimeError("PDF erzeugen gescheitert: " + str(r.get("fehler")))
@@ -452,12 +464,90 @@ class Dienst:
             "name": a.name, "erstellt": time.strftime("%Y-%m-%dT%H:%M:%S"), "karten": exemplare,
             "doppelseitig": sum(1 for _ in doppelt.iterdir()), "seiten": r.get("seiten"), "bytes": r.get("bytes"),
             "stand": a.stand, "fehlende": [f["name"] for f in a.fehlende], "rueckseite": a.rueckseite,
-            "format": a.format}, ensure_ascii=False), encoding="utf-8")
+            "format": a.format, "versatz": a.versatz}, ensure_ascii=False), encoding="utf-8")
         pdfs_aufraeumen(ziel)
         a.pdf, a.zustand = dateiname, "fertig"
         a.zeiten["gesamt_s"] = round(time.monotonic() - beginn, 1)
         log.info("Proxy-Druck: %s fertig (%d Karten, %s Seiten, %.0f s).", dateiname, exemplare, r.get("seiten"),
                  a.zeiten["gesamt_s"])
+
+    # Kalibrierung
+    @property
+    def _kalibrierung_datei(self) -> Path:
+        return self.wurzel / "kalibrierung.json"
+
+    def kalibrierung(self) -> dict:
+        try:
+            d = json.loads(self._kalibrierung_datei.read_text(encoding="utf-8"))
+            werte = {"x": int(d["x"]), "y": int(d["y"]), "winkel": float(d["winkel"])}
+        except (OSError, ValueError, KeyError, TypeError):
+            return {**KALIBRIERUNG_LEER, "geaendert": None, "vorher": None}
+        return {**werte, "geaendert": d.get("geaendert"), "vorher": d.get("vorher")}
+
+    def kalibrierung_werte(self) -> dict | None:
+        """Werte für den Läufer; None, wenn nichts zu verschieben ist."""
+        k = self.kalibrierung()
+        werte = {"x": k["x"], "y": k["y"], "winkel": k["winkel"]}
+        return None if werte == KALIBRIERUNG_LEER else werte
+
+    @staticmethod
+    def _zahl(wert, grenze: float, ganz: bool, name: str):
+        if isinstance(wert, bool) or not isinstance(wert, (int, float)) or wert != wert:
+            raise Proxyfehler(f"{name}: bitte eine Zahl angeben.")
+        if ganz and wert != int(wert):
+            raise Proxyfehler(f"{name}: bitte eine ganze Zahl angeben.")
+        if abs(wert) > grenze:
+            raise Proxyfehler(f"{name}: höchstens ±{grenze:g}.")
+        return int(wert) if ganz else round(float(wert), 2)
+
+    def kalibrierung_setzen(self, x, y, winkel) -> dict:
+        werte = {"x": self._zahl(x, VERSATZ_MAX, True, "Waagerecht"), "y": self._zahl(y, VERSATZ_MAX, True, "Senkrecht"),
+                 "winkel": self._zahl(winkel, WINKEL_MAX, False, "Winkel")}
+        with self._sperre:
+            alt = self.kalibrierung()
+            neu = {**werte, "geaendert": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                   "vorher": {"x": alt["x"], "y": alt["y"], "winkel": alt["winkel"]}}
+            self.wurzel.mkdir(parents=True, exist_ok=True)
+            teil = self._kalibrierung_datei.with_suffix(".teil")
+            teil.write_text(json.dumps(neu, ensure_ascii=False), encoding="utf-8")
+            os.replace(teil, self._kalibrierung_datei)
+        return self.kalibrierung()
+
+    def kalibrierung_ablesen(self, x, y) -> dict:
+        """Abgelesenes Feld des Bogens (der mit dem gespeicherten Versatz gedruckt wurde) zum Versatz dazuzählen."""
+        dx, dy = self._zahl(x, ABLESEN_MAX, True, "Feld waagerecht"), self._zahl(y, ABLESEN_MAX, True, "Feld senkrecht")
+        k = self.kalibrierung()
+        return self.kalibrierung_setzen(k["x"] + dx, k["y"] + dy, k["winkel"])
+
+    def kalibrierbogen(self) -> Path:
+        """Kalibrierbogen A4 mit dem gespeicherten Versatz; der letzte bleibt liegen, solange sich nichts ändert."""
+        tag, code, py = self._stand()
+        werte = self.kalibrierung_werte()
+        schluessel = "{}_{}_{}_{}".format(tag, *(werte or KALIBRIERUNG_LEER).values()).replace(".", "-")
+        ordner = self.wurzel / "kalibrierung"
+        datei = ordner / f"kalibrierbogen-{schluessel}.pdf"
+        if datei.is_file():
+            return datei
+        if not self.staende.sperre.acquire(timeout=5):
+            raise Proxyfehler("Gerade läuft ein Proxy-Auftrag oder ein Standwechsel. Bitte gleich noch einmal.", 409)
+        try:
+            if datei.is_file():   # ein gleichzeitiger Aufruf hat ihn eben gebaut
+                return datei
+            arbeit = self._arbeitsordner("kalibrierung")
+            try:
+                r = self._laeufer(py, code, "kalibrierung",
+                                  ["--arbeit", str(arbeit / "bogen"), "--ausgabe", str(arbeit / "bogen.pdf")]
+                                  + (["--versatz", json.dumps(werte)] if werte else []), KALIBRIERUNG_ZEIT, arbeit)
+                if not r.get("ok"):
+                    raise Proxyfehler("Kalibrierbogen gescheitert: " + str(r.get("fehler")), 500)
+                shutil.rmtree(ordner, ignore_errors=True)   # nur der neueste Bogen bleibt
+                ordner.mkdir(parents=True)
+                shutil.copyfile(arbeit / "bogen.pdf", datei)
+            finally:
+                shutil.rmtree(arbeit, ignore_errors=True)
+        finally:
+            self.staende.sperre.release()
+        return datei
 
     @staticmethod
     def _fortschritt(a: Auftrag, datei: Path) -> None:

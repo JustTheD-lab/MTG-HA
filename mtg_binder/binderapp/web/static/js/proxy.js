@@ -350,7 +350,10 @@ function erzeugenZeichnen() {
       : !v ? 'Zuerst die Liste prüfen'
         : v.zu_viele ? 'Die Liste hat zu viele Karten'
           : veraltet(z) ? 'Die Liste wurde geändert, bitte neu prüfen' : '';
+  const k = z.daten.kalibrierung;
   z.teil.erzeugen.innerHTML = '<h2 class="proxy-titel">PDF erzeugen</h2>'
+    + (kalibriert(k) ? `<label class="proxy-haken"><input type="checkbox" id="proxy-versatz"${z.versatzAn ? ' checked' : ''}>`
+      + `<span>Druckversatz einrechnen <span class="proxy-hinweis">(${esc(versatzText(k))})</span></span></label>` : '')
     + `<div class="proxy-zeile"><button type="button" class="knopf knopf-haupt" data-erzeugen${sperre ? ' disabled' : ''}>`
     + 'PDF erzeugen</button>'
     + `<span class="proxy-hinweis" role="status">${esc(sperre)}</span></div>`
@@ -369,7 +372,7 @@ async function erzeugen() {
     const name = z.feld.name.value.trim() || 'Deck';
     const a = await senden('/api/proxy/auftrag', { daten: {
       text: z.geprueftText, format: v.format, name, rueckseite: z.rueckseite,
-      sets_ignorieren: z.geprueftSets, extra_art: z.feld.extra.checked } });
+      sets_ignorieren: z.geprueftSets, extra_art: z.feld.extra.checked, versatz: z.versatzAn } });
     if (Z !== z) return;
     z.auftrag = a;
     erzeugenZeichnen();
@@ -449,6 +452,82 @@ function pdfsZeichnen() {
       : liste.length === 0 ? '<p class="proxy-hinweis">Noch keine PDFs erzeugt.</p>'
         : `<ul class="proxy-pdfs">${liste.slice(0, 50).map(zeile).join('')}</ul>`)
     + druckhinweisHtml();
+}
+
+// ---------------------------------------------------------------- Kalibrierung
+// Druckversatz der Rückseiten wie in Silhouette Card Maker: Pixel bei 300 ppi, x nach rechts, y nach oben (auf der
+// Rückseite gesehen). Der Bogen kommt immer mit dem gespeicherten Versatz; das abgelesene Feld zählt dazu.
+
+const MM = 25.4 / 300;
+const kalibriert = (k) => Boolean(k) && (k.x !== 0 || k.y !== 0 || Number(k.winkel) !== 0);
+const dez = (n, s = 2) => Number(n ?? 0).toLocaleString('de-DE', { maximumFractionDigits: s });
+const versatzText = (k) => `x ${dez(k.x, 0)}, y ${dez(k.y, 0)}, Winkel ${dez(k.winkel)}°`;
+
+function kalibrierungZeichnen() {
+  const z = Z;
+  const k = z.daten.kalibrierung ?? { x: 0, y: 0, winkel: 0 };
+  const zahlfeld = (id, titel, wertA, schritt, min, max) => `<div><label class="etikett feld-etikett" for="${id}">${titel}</label>`
+    + `<input id="${id}" class="feld proxy-zahl" type="number" inputmode="${schritt === 1 ? 'numeric' : 'decimal'}"`
+    + ` step="${schritt}" min="${min}" max="${max}" value="${esc(String(wertA))}"></div>`;
+  z.teil.kalibrierung.innerHTML = '<h2 class="proxy-titel">Kalibrierung (Vorder- und Rückseite)</h2>'
+    + (kalibriert(k)
+      ? `<p class="proxy-hinweis" role="status">Gespeichert: ${esc(versatzText(k))} – rund ${esc(dez(k.x * MM, 1))} mm`
+        + ` waagerecht, ${esc(dez(k.y * MM, 1))} mm senkrecht${k.geaendert ? ` (${esc(zeit(k.geaendert))})` : ''}.`
+        + ' Wird in jedes PDF eingerechnet.</p>'
+      : '<p class="proxy-hinweis" role="status">Noch nicht kalibriert: Rückseiten werden nicht verschoben.</p>')
+    + '<ol class="proxy-schritte">'
+    + '<li>Kalibrierbogen herunterladen und auf dem Karton für die Proxys drucken: Tatsächliche Größe / 100 %, beidseitig'
+    + ' an der langen Kante.'
+    + `<div class="proxy-zeile"><a class="knopf" href="${esc(adresse('api/proxy/kalibrierung/bogen'))}"`
+    + ` download="kalibrierbogen-a4.pdf">${LADEN}<span>Kalibrierbogen (A4)</span></a></div></li>`
+    + '<li>Den Bogen gegen starkes Licht halten und das Quadrat suchen, bei dem Vorder- und Rückseite genau übereinander'
+    + ' liegen. Die rote Beschriftung auf der Rückseite nennt das Feld, zum Beispiel (2, -1).</li>'
+    + '<li>Das Feld eintragen und übernehmen. Danach einen neuen Bogen drucken: Jetzt muss das mittlere Feld (0, 0)'
+    + ' passen. Passt keins, liegt der Versatz außerhalb des Bogens; dann unten einen geschätzten Wert eintragen.'
+    + '<div class="proxy-felder proxy-felder-schmal">'
+    + zahlfeld('proxy-feld-x', 'Feld waagerecht (x)', 0, 1, -50, 50)
+    + zahlfeld('proxy-feld-y', 'Feld senkrecht (y)', 0, 1, -50, 50) + '</div>'
+    + '<div class="proxy-zeile"><button type="button" class="knopf knopf-haupt" data-ablesen>Feld übernehmen</button></div>'
+    + '</li></ol>'
+    + '<details class="proxy-mehr"><summary>Werte direkt eingeben</summary>'
+    + '<p class="proxy-hinweis">Pixel bei 300 ppi (1 Pixel ≈ 0,085 mm). Positiv: Rückseite nach rechts bzw. oben,'
+    + ' Winkel im Uhrzeigersinn.</p>'
+    + '<div class="proxy-felder proxy-felder-schmal">'
+    + zahlfeld('proxy-kal-x', 'Waagerecht (x)', k.x, 1, -300, 300)
+    + zahlfeld('proxy-kal-y', 'Senkrecht (y)', k.y, 1, -300, 300)
+    + zahlfeld('proxy-kal-w', 'Winkel (Grad)', k.winkel, 0.05, -5, 5) + '</div>'
+    + '<div class="proxy-zeile"><button type="button" class="knopf" data-kal-speichern>Speichern</button>'
+    + (kalibriert(k) ? '<button type="button" class="knopf" data-kal-null>Auf 0 zurücksetzen</button>' : '')
+    + (k.vorher && (k.vorher.x !== k.x || k.vorher.y !== k.y || k.vorher.winkel !== k.winkel)
+      ? `<button type="button" class="knopf" data-kal-vorher>Vorherigen Wert (${esc(versatzText(k.vorher))})</button>` : '')
+    + '</div></details>'
+    + `<p class="proxy-hinweis" role="status">${esc(z.kalHinweis || '')}</p>`
+    + '<p class="meldung" role="alert" data-kal-fehler></p>';
+}
+
+async function kalibrierungSenden(daten, bestaetigung) {
+  const z = Z;
+  const fehler = () => z.teil.kalibrierung.querySelector('[data-kal-fehler]');
+  if (bestaetigung) {
+    const ja = await bestaetigen(bestaetigung);
+    if (!ja || Z !== z) return;
+  }
+  try {
+    const k = await senden('/api/proxy/kalibrierung', { daten });
+    if (Z !== z) return;
+    z.daten.kalibrierung = k;
+    z.kalHinweis = daten.ablesen ? `Übernommen: ${versatzText(k)}. Zur Kontrolle einen neuen Bogen drucken.`
+      : `Gespeichert: ${versatzText(k)}.`;
+    kalibrierungZeichnen();
+    erzeugenZeichnen();
+  } catch (f) {
+    if (Z === z) meldung(fehler(), fehlerSatz(f));
+  }
+}
+
+function zahlAus(id) {
+  const t = Z.teil.kalibrierung.querySelector(`#${id}`).value.trim().replace(',', '.');
+  return t === '' ? 0 : Number(t);
 }
 
 // ---------------------------------------------------------------- Silhouette Card Maker
@@ -568,7 +647,17 @@ function verdrahten(bereich) {
       rueckseitenZeichnen();
       z.teil.rueck.querySelector(`[data-rueck="${CSS.escape(z.rueckseite)}"]`)?.focus({ preventScroll: true });
     } else if (k.dataset.weg) rueckseiteEntfernen(k.dataset.weg);
-    else if (k.matches('[data-suchen]')) standAktion('/api/proxy/stand/suchen');
+    else if (k.matches('[data-ablesen]')) {
+      kalibrierungSenden({ ablesen: { x: zahlAus('proxy-feld-x'), y: zahlAus('proxy-feld-y') } });
+    } else if (k.matches('[data-kal-speichern]')) {
+      kalibrierungSenden({ x: zahlAus('proxy-kal-x'), y: zahlAus('proxy-kal-y'), winkel: zahlAus('proxy-kal-w') });
+    } else if (k.matches('[data-kal-null]')) {
+      kalibrierungSenden({ x: 0, y: 0, winkel: 0 }, { titel: 'Kalibrierung zurücksetzen?',
+        text: 'Die Rückseiten werden dann nicht mehr verschoben.', ja: 'Zurücksetzen' });
+    } else if (k.matches('[data-kal-vorher]')) {
+      const v = Z.daten.kalibrierung.vorher;
+      kalibrierungSenden({ x: v.x, y: v.y, winkel: v.winkel });
+    } else if (k.matches('[data-suchen]')) standAktion('/api/proxy/stand/suchen');
     else if (k.matches('[data-vorheriger]')) {
       standAktion('/api/proxy/stand/zurueck', { titel: 'Vorherigen Stand verwenden?',
         text: 'Der Silhouette Card Maker wird auf den vorherigen Stand zurückgesetzt.', ja: 'Zurücksetzen' });
@@ -598,6 +687,8 @@ function verdrahten(bereich) {
       pruefen();
     } else if (t.id === 'proxy-sets') {
       aenderung();
+    } else if (t.id === 'proxy-versatz') {
+      z.versatzAn = t.checked;
     }
   });
   z.feld.text.addEventListener('input', aenderung);
@@ -621,7 +712,7 @@ export async function zeigen(wurzel, parameter) {
     + '<div class="proxy-inhalt"><p class="proxy-hinweis" role="status">Proxys werden geladen …</p></div>';
   wurzel.replaceChildren(bereich);
   const z = { bereich, daten: null, vorschau: null, geprueftText: '', geprueftSets: false, formatWahl: null, rueckseite: null,
-    auftrag: null, pdfs: [], uhr: null, teil: {}, feld: {}, taste: null, nameGesetzt: false };
+    auftrag: null, pdfs: [], uhr: null, teil: {}, feld: {}, taste: null, nameGesetzt: false, versatzAn: true };
   Z = z;
   bereich.querySelector('.proxy-zurueck').addEventListener('click', () => zurueck('#/'));
   z.taste = (e) => {
@@ -660,6 +751,7 @@ export async function zeigen(wurzel, parameter) {
   tafel('rueck');
   tafel('erzeugen');
   tafel('pdfs');
+  tafel('kalibrierung');
   tafel('stand');
   if (daten.hinweis) {
     const h = el('p', 'proxy-hinweis-tafel', esc(daten.hinweis));
@@ -676,6 +768,7 @@ export async function zeigen(wurzel, parameter) {
   rueckseitenZeichnen();
   erzeugenZeichnen();
   pdfsZeichnen();
+  kalibrierungZeichnen();
   standZeichnen();
   pdfsLaden();
   planen();

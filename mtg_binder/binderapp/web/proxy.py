@@ -5,12 +5,16 @@ und gesetztem `BINDER_PROXY` (das Add-on setzt es, am PC gibt es den Bereich nic
     POST   /api/proxy/stand/suchen            sofort nach neuem Stand suchen (Knopf)
     POST   /api/proxy/stand/zurueck           vorherigen Stand verwenden
     POST   /api/proxy/pruefen                 {"text", "format"?, "sets_ignorieren"?}  Vorschau, schreibt nichts
-    POST   /api/proxy/auftrag                 {"text", "format", "name", "rueckseite", "sets_ignorieren", "extra_art"}
+    POST   /api/proxy/auftrag                 {"text", "format", "name", "rueckseite", "sets_ignorieren", "extra_art",
+                                               "versatz" (Standard true: Kalibrierung einrechnen)}
     GET    /api/proxy/auftrag/{id}            Zustand und Fortschritt
     POST   /api/proxy/auftrag/{id}/weiter     {"weiter": true|false}  PDF ohne die fehlenden Karten oder abbrechen
     GET    /api/proxy/decks                   Decks der App für „Aus Deck übernehmen“ (id, name)
     GET    /api/proxy/deck/{id}?gruppen=      Proxy-Liste eines Decks; Gruppen fehlt,proxy,vorhanden,basics
                                               (ohne Angabe: fehlt,proxy), Druck aus der Deckliste, Format mtga
+    GET    /api/proxy/kalibrierung            Druckversatz der Rückseiten {x, y, winkel, geaendert, vorher}
+    POST   /api/proxy/kalibrierung            {"x", "y", "winkel"} setzen oder {"ablesen": {"x", "y"}} dazuzählen
+    GET    /api/proxy/kalibrierung/bogen      Kalibrierbogen A4 mit dem gespeicherten Versatz (PDF)
     GET    /api/proxy/pdfs                    die letzten 50 PDFs
     GET    /api/proxy/pdf/{datei}             Download
     GET    /api/proxy/rueckseiten             Rückseiten (mit dem neutralen Beispiel)
@@ -78,6 +82,7 @@ def routen(h) -> list[Route]:
         return JSONResponse({"stand": d.staende.anzeige(), "auftrag": a.anzeige() if a else None,
                              "ablage": _ablage_ok(), "katalog": h.katalog_pfad is not None
                              and Path(h.katalog_pfad).exists(), "rueckseiten": d.rueckseiten(),
+                             "kalibrierung": d.kalibrierung(),
                              "formate": [{"name": n, "titel": t} for n, t in pa.FORMATNAMEN.items()],
                              "hinweis": "Nur für Casual und Playtesting. Proxys bleiben als Proxy erkennbar."})
 
@@ -164,6 +169,26 @@ def routen(h) -> list[Route]:
         return JSONResponse(await run_in_threadpool(_deck, request.path_params["id"], gruppen))
 
     @_fehler_umwandeln
+    async def kalibrierung(request):
+        return JSONResponse(_bereit().kalibrierung())
+
+    @h.schreibend
+    @_fehler_umwandeln
+    async def kalibrierung_setzen(request):
+        daten = await h.json_daten(request)
+        d = _bereit()
+        if "ablesen" in daten:
+            feld = daten["ablesen"] if isinstance(daten["ablesen"], dict) else {}
+            return JSONResponse(d.kalibrierung_ablesen(feld.get("x"), feld.get("y")))
+        return JSONResponse(d.kalibrierung_setzen(daten.get("x"), daten.get("y"), daten.get("winkel", 0)))
+
+    @_fehler_umwandeln
+    async def kalibrierbogen(request):
+        pfad = await run_in_threadpool(_bereit().kalibrierbogen)
+        return FileResponse(pfad, media_type="application/pdf", filename="kalibrierbogen-a4.pdf",
+                            headers={"Cache-Control": "no-store"})
+
+    @_fehler_umwandeln
     async def pdfs(request):
         return JSONResponse({"pdfs": await run_in_threadpool(_bereit().pdfs), "ablage": _ablage_ok()})
 
@@ -208,6 +233,9 @@ def routen(h) -> list[Route]:
         Route("/proxy/auftrag/{id}/weiter", weiter, methods=["POST"]),
         Route("/proxy/decks", decks),
         Route("/proxy/deck/{id:int}", deck),
+        Route("/proxy/kalibrierung", kalibrierung),
+        Route("/proxy/kalibrierung", kalibrierung_setzen, methods=["POST"]),
+        Route("/proxy/kalibrierung/bogen", kalibrierbogen),
         Route("/proxy/pdfs", pdfs),
         Route("/proxy/pdf/{datei}", pdf),
         Route("/proxy/rueckseiten", rueckseiten),

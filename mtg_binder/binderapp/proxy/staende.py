@@ -37,9 +37,12 @@ KENNUNG = "MTG-Binder-Addon (Proxy-Druck)"     # ohne persönliche Daten
 TAG_MUSTER = re.compile(r"^v?(\d{1,4})\.(\d{1,4})(?:\.(\d{1,4}))?$")
 SHA_MUSTER = re.compile(r"^[0-9a-f]{40}$")
 PFAD_MUSTER = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.\-/]{0,200}$")
-# Pakete aus requirements.txt, die nur Windows oder Silhouette Studio brauchen (dxf_to_studio3.py, offset_pdf.py,
-# generate_dxf.py); alles andere wird installiert, der Testlauf entscheidet.
-AUSGENOMMEN = {"pyautogui", "pywinauto", "ezdxf", "pypdfium2", "split-image"}
+# Pakete aus requirements.txt, die nur Windows oder Silhouette Studio brauchen (dxf_to_studio3.py, generate_dxf.py);
+# alles andere wird installiert, der Testlauf entscheidet. pypdfium2 braucht offset_pdf.py (Kalibrierbogen mit Versatz).
+AUSGENOMMEN = {"pyautogui", "pywinauto", "ezdxf", "split-image"}
+# Zählt hoch, wenn sich ändert, wie ein Stand eingerichtet wird; ein älter eingerichteter aktiver Stand wird dann bei
+# der nächsten Suche neu eingerichtet (2: mit pypdfium2 und Kalibrierung im Testlauf).
+EINRICHTUNG = 2
 ANFORDERUNG = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._\-]*)(\[[A-Za-z0-9,._\-]+\])?\s*([<>=!~]=?\s*[A-Za-z0-9.*+!]+"
                          r"(\s*,\s*[<>=!~]=?\s*[A-Za-z0-9.*+!]+)*)?\s*(;[A-Za-z0-9 _.'\"<>=!~()]*)?$")
 DATEI_MAX = 8 * 1024 * 1024
@@ -339,6 +342,12 @@ class Staende:
                 "neuester": z.get("neuester"), "sucht": self.sucht, "eingerichtet": info.get("eingerichtet"),
                 "commit": (info.get("sha") or "")[:7] or None, "quelle": f"https://github.com/{REPO}"}
 
+    def _einrichtung(self, tag: str) -> int:
+        try:
+            return int(json.loads((self.ordner(tag) / "stand.json").read_text(encoding="utf-8")).get("einrichtung", 1))
+        except (OSError, ValueError, TypeError, Standfehler):
+            return 1
+
     # Suchen und einrichten
     def suchen(self, erzwingen: bool = False) -> dict:
         """Neuester Tag; neu einrichten, wenn er nicht aktiv ist. Ein gescheiterter Tag wird nur auf Knopfdruck
@@ -364,7 +373,10 @@ class Staende:
                 z.update(gesucht=jetzt, neuester=tag)
                 aktiv = version_von(z["aktiv"]) if z["aktiv"] else None
                 if tag == z["aktiv"]:
-                    z["meldung"] = None
+                    if self._einrichtung(tag) < EINRICHTUNG and (tag not in z["fehlgeschlagen"] or erzwingen):
+                        einrichten.append(True)   # gleicher Stand, aber nach älterem Rezept eingerichtet
+                    else:
+                        z["meldung"] = None
                 elif aktiv is not None and version_von(tag) < aktiv:
                     # nie still auf einen älteren Stand (z. B. wenn ein Tag im Original gelöscht wurde)
                     z["meldung"] = f"Der neueste Release im Original ({tag}) ist älter als der aktive Stand."
@@ -408,7 +420,8 @@ class Staende:
             log.warning("Proxy-Druck: %s", meldung)
             return False
         (neu / "stand.json").write_text(json.dumps({
-            "tag": tag, "sha": sha, "eingerichtet": time.strftime("%Y-%m-%dT%H:%M:%S"), "test": test,
+            "tag": tag, "sha": sha, "einrichtung": EINRICHTUNG, "eingerichtet": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "test": test,
             "dateien": menge["dateien"], "bytes": menge["bytes"], "sekunden": round(time.monotonic() - beginn)},
             ensure_ascii=False, indent=1), encoding="utf-8")
         with self.sperre:   # wartet, bis ein laufender Auftrag fertig ist

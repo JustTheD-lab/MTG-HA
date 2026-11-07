@@ -100,3 +100,13 @@
 @media (max-width: 480px) { .proxy-pdf { flex-direction: column; align-items: stretch; } .proxy-pdf .knopf { justify-content: center; } }
 .proxy-stand { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 16px; margin: 10px 0 0; }
 .proxy-stand dd { margin: 2px 0 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+/* ---------- Kalibrierung ---------- */
+.proxy-schritte { margin: 10px 0 0; padding-left: 1.4em; display: grid; gap: 12px; line-height: 1.45; }
+.proxy-schritte .proxy-zeile { margin-top: 8px; }
+.proxy-felder-schmal { grid-template-columns: repeat(3, minmax(0, 9em)); margin-top: 8px; }
+@media (max-width: 560px) { .proxy-felder-schmal { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.proxy-zahl { font-variant-numeric: tabular-nums; min-height: 44px; }
+.proxy-mehr { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--linie); }
+.proxy-mehr summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--text-2); }
+.proxy-mehr summary:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; }

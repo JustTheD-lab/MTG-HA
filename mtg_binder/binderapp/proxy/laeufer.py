@@ -3,7 +3,9 @@
     python -I laeufer.py erkennen   --code STAND --liste LISTE.txt --ergebnis E.json
     python -I laeufer.py laden      --code STAND --liste LISTE.txt --format F --optionen JSON --vorne D --doppelt D
                                     [--cache ORDNER --cache-tage 30] --fortschritt P.json --ergebnis E.json
-    python -I laeufer.py pdf        --code STAND --vorne D --hinten D --doppelt D --ausgabe X.pdf --ergebnis E.json
+    python -I laeufer.py pdf        --code STAND --vorne D --hinten D --doppelt D --ausgabe X.pdf [--versatz JSON]
+                                    --ergebnis E.json
+    python -I laeufer.py kalibrierung --code STAND --arbeit ORDNER --ausgabe X.pdf [--versatz JSON] --ergebnis E.json
     python -I laeufer.py selbsttest --code STAND --arbeit ORDNER --ergebnis E.json
 
 Eingebunden, nicht abgeschrieben: Formate liest `plugins.mtg.deck_formats.parse_deck`, Bilder holt
@@ -214,23 +216,56 @@ def laden(a) -> dict:
 # --- PDF ------------------------------------------------------------------------------------------------------
 
 PDF_EINSTELLUNG = ["--paper_size", "a4", "--card_size", "standard", "--registration", "3"]
+PAPIER = "a4"   # Kalibrierbogen passend zu PDF_EINSTELLUNG
 
 
-def pdf_bauen(code: Path, vorne: Path, hinten: Path, doppelt: Path, ausgabe: Path) -> None:
-    """`create_pdf.py` wie von Hand, nur mit festen Ordnern: A4, standard, 3-Punkt-Passermarken."""
-    argv = ["create_pdf.py", "--front_dir_path", str(vorne), "--back_dir_path", str(hinten),
-            "--double_sided_dir_path", str(doppelt), "--output_path", str(ausgabe), *PDF_EINSTELLUNG]
+def _skript(code: Path, name: str, argumente: list[str]) -> str:
+    """Ein Skript des Stands wie über die Kommandozeile; gibt seine Ausgabe zurück."""
     alt = sys.argv
-    sys.argv = argv
+    sys.argv = [name, *argumente]
+    ausgabe = io.StringIO()
     try:
-        runpy.run_path(str(code / "create_pdf.py"), run_name="__main__")
+        with contextlib.redirect_stdout(ausgabe):
+            runpy.run_path(str(code / name), run_name="__main__")
     except SystemExit as e:   # click beendet mit sys.exit
         if e.code not in (0, None):
-            raise RuntimeError(f"create_pdf.py endete mit {e.code}")
+            raise RuntimeError(f"{name} endete mit {e.code}")
     finally:
         sys.argv = alt
+    return ausgabe.getvalue()
+
+
+def versatz_lesen(text: str | None) -> dict | None:
+    """Druckversatz der Rückseiten in Pixeln bei 300 ppi (wie SCM), None ohne oder bei (0, 0, 0)."""
+    if not text:
+        return None
+    v = json.loads(text)
+    werte = {"x": int(v.get("x", 0)), "y": int(v.get("y", 0)), "winkel": float(v.get("winkel", 0.0))}
+    return None if werte == {"x": 0, "y": 0, "winkel": 0.0} else werte
+
+
+def _versatz_ablegen(ordner: Path, versatz: dict) -> None:
+    """SCM liest den gespeicherten Versatz aus `data/offset_data.json` im aktuellen Ordner
+    (`utilities.load_saved_offset`); der Ordner gehört dem Auftrag, nie dem Stand."""
+    (ordner / "data").mkdir(parents=True, exist_ok=True)
+    (ordner / "data" / "offset_data.json").write_text(json.dumps(
+        {"x_offset": versatz["x"], "y_offset": versatz["y"], "angle_offset": versatz["winkel"]}), encoding="utf-8")
+    os.chdir(ordner)
+
+
+def pdf_bauen(code: Path, vorne: Path, hinten: Path, doppelt: Path, ausgabe: Path, versatz: dict | None = None) -> None:
+    """`create_pdf.py` wie von Hand, nur mit festen Ordnern: A4, standard, 3-Punkt-Passermarken; mit Versatz
+    zusätzlich `--load_offset` (verschiebt jede zweite Seite, also die Rückseiten)."""
+    argumente = ["--front_dir_path", str(vorne), "--back_dir_path", str(hinten), "--double_sided_dir_path", str(doppelt),
+                 "--output_path", str(ausgabe), *PDF_EINSTELLUNG]
+    if versatz:
+        _versatz_ablegen(ausgabe.parent / "versatz", versatz)
+        argumente.append("--load_offset")
+    ausgabe_text = _skript(code, "create_pdf.py", argumente)
     if not ausgabe.is_file():
         raise RuntimeError("create_pdf.py hat kein PDF geschrieben.")
+    if versatz and "Loaded x offset" not in ausgabe_text:
+        raise StandPasstNicht("Der Stand hat den Druckversatz nicht übernommen.")
 
 
 def pdf_lesen(pfad: Path) -> dict:
@@ -244,9 +279,38 @@ def pdf_lesen(pfad: Path) -> dict:
 
 def pdf(a) -> dict:
     _stand_laden(a.code)
-    with contextlib.redirect_stdout(io.StringIO()):
-        pdf_bauen(a.code, a.vorne, a.hinten, a.doppelt, a.ausgabe)
-    return pdf_lesen(a.ausgabe)
+    versatz = versatz_lesen(a.versatz)
+    pdf_bauen(a.code, a.vorne, a.hinten, a.doppelt, a.ausgabe, versatz)
+    return {**pdf_lesen(a.ausgabe), "versatz": versatz}
+
+
+# --- Kalibrierbogen -------------------------------------------------------------------------------------------
+
+def kalibrierung(a) -> dict:
+    """Kalibrierbogen des Stands (`generate_calibration.py`) für A4; mit Versatz über `offset_pdf.py` verschoben,
+    damit der abgelesene Wert zum gespeicherten dazuzählt (Anleitung von SCM, „Large offset“)."""
+    _stand_laden(a.code)
+    versatz = versatz_lesen(a.versatz)
+    a.arbeit.mkdir(parents=True, exist_ok=True)
+    (a.arbeit / "calibration").mkdir(exist_ok=True)
+    os.chdir(a.arbeit)   # das Skript schreibt nach ./calibration
+    _skript(a.code, "generate_calibration.py", [])
+    bogen = a.arbeit / "calibration" / f"{PAPIER}-calibration.pdf"
+    if not bogen.is_file():
+        raise StandPasstNicht(f"generate_calibration.py hat keinen Bogen für {PAPIER} geschrieben.")
+    if versatz:
+        try:
+            import pypdfium2  # noqa: F401  (braucht offset_pdf.py)
+        except ImportError:   # kein Standfehler: ein älter eingerichteter Stand, der nächste Abgleich holt es nach
+            raise RuntimeError("Diesem Stand fehlt pypdfium2 für einen Bogen mit Versatz. Bitte „Nach neuem Stand "
+                               "suchen“ drücken, dann wird er neu eingerichtet.") from None
+        _skript(a.code, "offset_pdf.py", ["--pdf_path", str(bogen), "--output_pdf_path", str(a.ausgabe),
+                                          "-x", str(versatz["x"]), "-y", str(versatz["y"]), "-a", str(versatz["winkel"])])
+        if not a.ausgabe.is_file():
+            raise RuntimeError("offset_pdf.py hat kein PDF geschrieben.")
+    else:
+        a.ausgabe.write_bytes(bogen.read_bytes())
+    return {**pdf_lesen(a.ausgabe), "versatz": versatz}
 
 
 # --- Selbsttest (ohne Netz) -----------------------------------------------------------------------------------
@@ -288,9 +352,22 @@ def selbsttest(a) -> dict:
     bild(doppelt / f"{TEST_KARTEN:02d}test.png", "Zweite Seite", (160, 200, 220))
     bild(hinten / "rueckseite.png", "Testrückseite", (90, 90, 90))
     ausgabe = a.arbeit / "test.pdf"
-    with contextlib.redirect_stdout(io.StringIO()):
-        pdf_bauen(a.code, vorne, hinten, doppelt, ausgabe)
+    pdf_bauen(a.code, vorne, hinten, doppelt, ausgabe)
     werte = pdf_lesen(ausgabe)
+    # Kalibrierung: Druckversatz im PDF und Bogen mit Versatz (offset_pdf.py braucht pypdfium2)
+    mit_versatz = a.arbeit / "mit-versatz" / "test.pdf"
+    mit_versatz.parent.mkdir()
+    pdf_bauen(a.code, vorne, hinten, doppelt, mit_versatz, {"x": 3, "y": -2, "winkel": 0.2})
+    if pdf_lesen(mit_versatz)["seiten"] != werte["seiten"]:
+        funde.append("Mit Druckversatz hat das PDF eine andere Seitenzahl")
+    try:
+        bogen = kalibrierung(argparse.Namespace(code=a.code, arbeit=a.arbeit / "kalibrierung",
+                                                ausgabe=a.arbeit / "kalibrierung.pdf",
+                                                versatz=json.dumps({"x": 20, "y": -5, "winkel": 0})))
+        if bogen["seiten"] != 2:
+            funde.append(f"Kalibrierbogen mit {bogen['seiten']} statt 2 Seiten")
+    except Exception as f:
+        funde.append(f"Kalibrierbogen: {str(f)[:FEHLER_MAX]}")
     a4 = (abs(werte["breite_pt"] - 595.3) < 3 and abs(werte["hoehe_pt"] - 841.9) < 3) or \
          (abs(werte["breite_pt"] - 841.9) < 3 and abs(werte["hoehe_pt"] - 595.3) < 3)
     if not a4:
@@ -302,7 +379,8 @@ def selbsttest(a) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("befehl", choices=("erkennen", "laden", "pdf", "selbsttest"))
+    ap.add_argument("befehl", choices=("erkennen", "laden", "pdf", "kalibrierung", "selbsttest"))
+    ap.add_argument("--versatz", default=None)
     ap.add_argument("--code", type=Path, required=True)
     ap.add_argument("--ergebnis", type=Path, required=True)
     ap.add_argument("--liste", type=Path)
@@ -322,7 +400,8 @@ def main(argv: list[str] | None = None) -> int:
                  "fortschritt"):
         if getattr(a, name) is not None:
             setattr(a, name, getattr(a, name).resolve())
-    befehl = {"erkennen": erkennen, "laden": laden, "pdf": pdf, "selbsttest": selbsttest}[a.befehl]
+    befehl = {"erkennen": erkennen, "laden": laden, "pdf": pdf, "kalibrierung": kalibrierung,
+              "selbsttest": selbsttest}[a.befehl]
     try:
         ergebnis = {"ok": True, **befehl(a)}
     except Exception as f:

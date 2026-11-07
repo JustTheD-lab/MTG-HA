@@ -1,5 +1,14 @@
 # Änderungen
 
+## 0.28.0
+- Proxys: **Kalibrierung** von Vorder- und Rückseite aus der Oberfläche. Kalibrierbogen (A4) von Silhouette Card Maker
+  herunterladen, das passende Feld eintragen, fertig; der Bogen kommt immer mit dem gespeicherten Versatz, so lassen
+  sich auch große Abweichungen in mehreren Runden einstellen. Werte (x, y, Winkel) auch direkt eingeben.
+- Der Druckversatz steckt automatisch in jedem neuen PDF, je Auftrag abschaltbar.
+- Der Stand von Silhouette Card Maker bekommt dafür zusätzlich das Paket pypdfium2 (rund 6 MB). Ein schon
+  eingerichteter Stand wird nach dem Update einmal neu eingerichtet (einige Minuten); bis dahin geht der Bogen nur
+  ohne Versatz.
+
 ## 0.27.3
 - Watchdog: Home Assistant prüft jetzt, ob der Server noch antwortet (`/api/gesund`), und startet das Add-on sonst
   neu. Einschalten mit dem Schalter „Watchdog“ auf der Seite des Add-ons. Ein fehlendes Netzlaufwerk löst keinen

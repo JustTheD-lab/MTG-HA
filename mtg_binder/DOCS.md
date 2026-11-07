@@ -165,6 +165,14 @@ für Casual und Playtesting gedacht und bleiben als Proxy erkennbar.
 4. Drucken: **Tatsächliche Größe / 100 %**, beidseitig an der **langen Kante**. Schneiden in Silhouette Studio mit der
    Vorlage `a4-standard-v5`, Maschine **„Cameo 5“**.
 
+- **Kalibrierung (Vorder- und Rückseite):** Liegen die Rückseiten im Druck verschoben, hilft die Tafel
+  „Kalibrierung“. Den Kalibrierbogen von Silhouette Card Maker herunterladen und wie die Proxys drucken (100 %,
+  beidseitig an der langen Kante, gleicher Karton). Gegen Licht halten und das Quadrat suchen, bei dem Vorder- und
+  Rückseite übereinander liegen; die rote Beschriftung nennt das Feld, z. B. (2, -1). Feld eintragen, „Feld übernehmen“,
+  neuen Bogen drucken: Jetzt muss (0, 0) passen. Der Bogen kommt immer mit dem gespeicherten Versatz, darum klappt das
+  auch bei großen Abweichungen in mehreren Runden. Unter „Werte direkt eingeben“ lassen sich x, y (Pixel bei 300 ppi,
+  1 Pixel ≈ 0,085 mm) und ein Winkel setzen. Der Versatz steckt in jedem neuen PDF; im Auftrag lässt er sich mit dem
+  Haken „Druckversatz einrechnen“ abschalten. Die Kalibrierung des Plotters selbst bleibt in Silhouette Studio.
 - **Neue Stände:** Beim Start und danach alle 24 Stunden schaut das Add-on nach einem neuen Release des Originals. Es lädt
   nur die nötigen Dateien (etwa 2 MB), richtet sie in einem eigenen Ordner ein (etwa 150 MB Pakete, das dauert einige
   Minuten), macht einen Testlauf ohne Internet und schaltet erst dann um. Der vorherige Stand bleibt; stürzt ein
