@@ -205,7 +205,9 @@ function setsHtml(s) {
   return '<p class="regal-sets-zeile"><button type="button" class="knopf regal-sets"'
     + ' aria-label="Sets öffnen: wie vollständig die Sammlung je Set ist">Sets</button>'
     + '<button type="button" class="knopf regal-dashboard"'
-    + ' aria-label="Dashboard öffnen: Werte und Graphen der ganzen Sammlung">Dashboard</button></p>';
+    + ' aria-label="Dashboard öffnen: Werte und Graphen der ganzen Sammlung">Dashboard</button>'
+    + '<button type="button" class="knopf regal-proxy" hidden'
+    + ' aria-label="Proxys öffnen: Decklisten als druckfertige PDF">Proxys</button></p>';
 }
 
 /** Platz „Scan-Eingang“ im Stil der Sammlung (Bulk-Scan). Ohne Schnittstelle (alte Datenbank) gibt es ihn nicht. */
@@ -638,6 +640,17 @@ export async function zeigen(wurzel, parameter, vorher) {
     + '</div>';
   wurzel.replaceChildren(szene);
 
+  // Knopf „Proxys“ nur, wenn der Bereich da ist (im Add-on; am PC liefert die Schnittstelle 404)
+  const proxyKnopf = szene.querySelector('.regal-proxy');
+  if (proxyKnopf) {
+    holen('/api/proxy').then(() => {
+      proxyKnopf.hidden = false;
+      if (vorher?.ansicht === 'proxy' && zustand?.szene === szene && letzteSuche.trim().length < 2) {
+        proxyKnopf.focus({ preventScroll: true });
+      }
+    }).catch(() => { /* kein Proxy-Bereich */ });
+  }
+
   // Kopf: „Neuer Binder" nur angemeldet; der Anmelde-Knopf steht immer da
   const neu = document.createElement('button');
   neu.type = 'button';
@@ -759,6 +772,7 @@ export async function zeigen(wurzel, parameter, vorher) {
     if (ereignis.target.closest('.regal-regeln')) { gehe('#/regeln'); return; }
     if (ereignis.target.closest('.regal-sets')) { gehe('#/sets'); return; }
     if (ereignis.target.closest('.regal-dashboard')) { gehe('#/dashboard'); return; }
+    if (ereignis.target.closest('.regal-proxy')) { gehe('#/proxy'); return; }
     if (ereignis.target.closest('.regal-sammlung')) { gehe('#/sammlung'); return; }
     const knopf = ereignis.target.closest('.regal-ruecken');
     if (knopf) { gehe(`#/binder/${knopf.dataset.binder}`); return; }
@@ -851,6 +865,8 @@ export async function zeigen(wurzel, parameter, vorher) {
     zustand.szene.querySelector('.regal-sets')?.focus({ preventScroll: true });   // zurück aus den Sets
   } else if (vorher?.ansicht === 'dashboard' && !sucheDa) {
     zustand.szene.querySelector('.regal-dashboard')?.focus({ preventScroll: true });
+  } else if (vorher?.ansicht === 'proxy' && !sucheDa) {
+    zustand.szene.querySelector('.regal-proxy')?.focus({ preventScroll: true });
   } else if (vorher?.sammlung && !sucheDa) {
     zustand.szene.querySelector('.regal-sammlung')?.focus({ preventScroll: true });   // zurück aus der Sammlung
   } else if ((vorher?.ansicht === 'lesetisch' || vorher?.ansicht === 'kiste') && !sucheDa) {

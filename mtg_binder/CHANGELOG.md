@@ -1,5 +1,20 @@
 # Änderungen
 
+## 0.27.0
+- Proxys aus deinen Decks: Im Bereich „Proxys“ gibt es „Aus Deck übernehmen“, in der Deckansicht den Knopf „Proxys
+  drucken“. Vorgewählt sind die fehlenden und die als Proxy markierten Karten (per Haken auch vorhandene Karten und
+  Basic Lands), gedruckt wird der Druck aus der Deckliste.
+- Keine Änderung an der Datenbank.
+
+## 0.26.0
+- Neu: Proxys drucken. Der Knopf „Proxys“ im Regal macht aus einer Deckliste ein druckfertiges PDF (A4, standard,
+  3-Punkt-Passermarken) mit Silhouette Card Maker von Alan Cha (MIT-Lizenz): Format automatisch erkennen, Vorschau mit
+  nicht gefundenen Karten, Rückseite wählen oder hochladen, PDF herunterladen, die letzten 50 PDFs aufheben.
+- Das Add-on lädt neue Releases von Silhouette Card Maker selbst (beim Start und alle 24 Stunden), testet sie und
+  schaltet erst dann um. Der vorherige Stand bleibt zum Zurückfallen. Die erste Einrichtung nach dem Update dauert
+  einige Minuten.
+- Das Abbild nutzt jetzt Python 3.12 (Silhouette Card Maker verlangt es). Keine Änderung an der Datenbank.
+
 ## 0.25.0
 - Prüfansicht und Kartenansicht zeigen bei Kamera-Scans jetzt unter „Mein Foto“ den Ausschnitt, nach dem die Karte
   bestimmt wurde. Schon gescannte Karten bekommen ihn beim Start nachgetragen.

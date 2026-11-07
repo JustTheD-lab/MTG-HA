@@ -144,6 +144,39 @@ Verkaufstag und die Karten aus der Ankündigung von Wizards ein, je Zeile eine, 
 Die Preise dieser Drops speichert das Add-on täglich, auch wenn du die Karten nicht besitzt. Nach einigen Tagen zeigt ein
 Drop darum seinen Verlauf seit dem Verkauf.
 
+## Proxys drucken
+
+Der Knopf **„Proxys“** im Regal macht aus einer Deckliste ein druckfertiges PDF (A4, Kartengröße standard,
+3-Punkt-Passermarken), am iPhone und im Browser. Dahinter steckt
+[Silhouette Card Maker](https://github.com/Alan-Cha/silhouette-card-maker) von Alan Cha (MIT-Lizenz). Proxys sind nur
+für Casual und Playtesting gedacht und bleiben als Proxy erkennbar.
+
+1. Deckliste einfügen (Export von Archidekt, Moxfield, MTG Arena, MTGO oder einfach Namen), **„Prüfen“**. Die App
+   erkennt das Format und zeigt, welche Zeilen sie nicht lesen konnte und welche Karten oder Drucke der Katalog nicht
+   kennt. Oder **„Aus Deck übernehmen“**: ein Deck der App wählen, vorgewählt sind die fehlenden und die als Proxy
+   markierten Karten (per Haken auch vorhandene Karten und Basic Lands). Dasselbe startet der Knopf **„Proxys drucken“**
+   in der Deckansicht. Gedruckt wird der Druck aus der Deckliste.
+2. Rückseite wählen (ein neutrales Beispiel ist dabei, eigene lädst du als PNG oder JPEG hoch, etwa 745 × 1040 Pixel).
+   Doppelseitige Karten bekommen ihre zweite Seite auf die Rückseite.
+3. **„PDF erzeugen“**. Die Bilder kommen von Scryfall. Karten, die sich nicht laden lassen, zeigt die App vorher; erst
+   du entscheidest, ob das PDF ohne sie entsteht.
+4. Drucken: **Tatsächliche Größe / 100 %**, beidseitig an der **langen Kante**. Schneiden in Silhouette Studio mit der
+   Vorlage `a4-standard-v5`, Maschine **„Cameo 5“**.
+
+- **Neue Stände:** Beim Start und danach alle 24 Stunden schaut das Add-on nach einem neuen Release des Originals. Es lädt
+  nur die nötigen Dateien (etwa 2 MB), richtet sie in einem eigenen Ordner ein (etwa 150 MB Pakete, das dauert einige
+  Minuten), macht einen Testlauf ohne Internet und schaltet erst dann um. Der vorherige Stand bleibt; stürzt ein
+  Auftrag mit dem neuen Stand ab, nimmt das Add-on einmal den vorherigen. Unten im Bereich stehen der aktive Stand und
+  die Knöpfe „Jetzt nach neuem Stand suchen“ und „Vorherigen Stand verwenden“.
+- **Erster Start:** Nach dem Update auf 0.26.0 richtet das Add-on den ersten Stand ein. Bis dahin meldet der Bereich
+  „wird gerade eingerichtet“.
+- **Speicher:** Bei 100 Karten braucht der Auftrag kurzzeitig rund 1 GB Arbeitsspeicher. Das PDF ist dann etwa 130 MB
+  groß (300 ppi, wie beim Original). Ein PDF fasst höchstens 200 Karten; größere Listen bitte aufteilen.
+- **Sicherheit:** Der Code des Originals läuft als eigener Prozess ohne die Zugangsdaten des Add-ons (kein Token von
+  Home Assistant), aber im selben Container. Neue Stände kommen nur aus Releases des Original-Repositorys.
+- **Ablage:** Bilder-Cache (höchstens 2 GB, Bilder nach 30 Tagen neu) und die letzten 50 PDFs liegen auf dem
+  Netzlaufwerk unter `proxy/`. Ohne Netzlaufwerk ist das Erzeugen gesperrt.
+
 ## Werte in Home Assistant (MQTT)
 
 - Mit laufendem **Mosquitto-Broker** und eingerichteter MQTT-Integration erscheinen die Sensoren von selbst unter
@@ -170,6 +203,9 @@ Drop darum seinen Verlauf seit dem Verkauf.
 | Fotos und Vorschaubilder | auf dem Netzlaufwerk unter dem Speicherort (`fotos/`, `bilder/`), **nicht** in den Backups |
 | Scan-Fotos | auf dem Netzlaufwerk unter `fotos/scan/`, Vorschauen unter `bilder/scan/` |
 | Archiv aus „Datenbank löschen“ | auf dem Netzlaufwerk unter `archiv/<Zeit>/` |
+| Proxy-Druck: Stände von Silhouette Card Maker | im Add-on (`/data/proxy/staende`), **nicht** in den Backups (lädt sich neu) |
+| Proxy-Druck: eigene Rückseiten | im Add-on (`/data/proxy/rueckseiten`), in den Backups |
+| Proxy-Druck: Bilder-Cache und PDFs | auf dem Netzlaufwerk unter `proxy/bilder/` (höchstens 2 GB) und `proxy/pdf/` (die letzten 50) |
 
 Ist das Netzlaufwerk nicht erreichbar, kannst du weiter blättern, suchen und prüfen, nur ohne Bilder.
 Hochladen ist dann gesperrt, oben steht ein Hinweis.

@@ -147,6 +147,9 @@ def vorbereiten(daten: Path = DATEN, version: str | None = None) -> dict:
         "BINDER_SPEICHER_PRUEFEN": "1" if ort else "0",
         "BINDER_SICHERUNG": str(sicherungen),
         "BINDER_SICHERUNGEN_BEHALTEN": str(BEHALTEN),
+        # Proxy-Druck (Wunsch des Nutzers, 07.11.2026): Stände und Rückseiten lokal, Cache und PDFs auf dem Netzlaufwerk
+        "BINDER_PROXY": str(daten / "proxy"),
+        "BINDER_PROXY_ABLAGE": str(medien / "proxy"),
     }
 
 
@@ -200,6 +203,9 @@ def main() -> int:
     # Ausschnitte der Scan-Karten von vor Version 14 (Wunsch des Nutzers, 06.11.2026); wartet aufs Netzlaufwerk
     threading.Thread(target=ausschnitte_nachtragen, args=(DATEN / "binder.sqlite", Path(umgebung["BINDER_BILDER"]) / "foto"),
                      name="Ausschnittnachtrag", daemon=True).start()
+    # Proxy-Druck: Silhouette Card Maker beim Start und alle 24 h aus dem Original-Repository (Releases), 07.11.2026
+    from binderapp.proxy.auftrag import dienst
+    dienst().starten()
     # Werte an Home Assistant per MQTT (Entscheidung des Nutzers, 02.11.2026); abschaltbar in den Einstellungen
     sender = None
     if optionen(DATEN / "options.json").get("mqtt", True) is not False:

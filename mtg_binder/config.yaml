@@ -1,7 +1,7 @@
 # Lokales Home-Assistant-Add-on „MTG Binder“ (nur Server und Oberfläche; die Erkennung läuft am PC).
 # Gebaut wird der fertige Ordner mit: python -m binderapp.addon.paket  (PYTHONPATH=src)
 name: MTG Binder
-version: "0.25.0"
+version: "0.27.0"
 slug: mtg_binder
 description: Magic-Binder per Foto – Bücherregal, Lesetisch, Kisten und Prüfansicht
 arch:
@@ -26,6 +26,14 @@ map:
 # Werte an Home Assistant per MQTT mit Discovery; Zugang zum Mosquitto-Add-on liefert der Supervisor
 services:
   - mqtt:want
+# Proxy-Druck: Stände von Silhouette Card Maker (je rund 150 MB) und Arbeitsordner lädt das Add-on jederzeit neu,
+# darum nicht in die Sicherungen von Home Assistant; die Rückseiten (proxy/rueckseiten) bleiben drin.
+backup_exclude:
+  - "proxy/staende"
+  - "proxy/staende/*"
+  - "proxy/arbeit"
+  - "proxy/arbeit/*"
+  - "medien/proxy/bilder/*"
 options:
   speicherort: ""
   mqtt: true

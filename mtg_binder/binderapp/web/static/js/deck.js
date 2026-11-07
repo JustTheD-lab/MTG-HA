@@ -620,6 +620,7 @@ export async function zeigen(wurzel, parameter) {
     + '<a class="knopf deck-zerlegen" href="#/deck/0/zerlegen" hidden>Zerlegen</a></div>'
     + '<div class="deck-knoepfe">'
     + `<button type="button" class="knopf deck-fehlt-kopieren">${KOPIE}<span>Fehlt-Liste kopieren</span></button>`
+    + '<button type="button" class="knopf deck-proxys" hidden>Proxys drucken</button>'
     + `<button type="button" class="knopf deck-neu-laden" hidden>${NEU}<span>Neu laden</span></button>`
     + '<button type="button" class="knopf deck-umbenennen" hidden>Umbenennen</button>'
     + '<button type="button" class="knopf knopf-gefahr deck-loeschen" hidden>Löschen</button></div></div>'
@@ -665,6 +666,10 @@ export async function zeigen(wurzel, parameter) {
     if (b && b.getAttribute('aria-pressed') !== 'true') aendern(z, { abgleich: b.dataset.abgleich });
   });
   bereich.querySelector('.deck-fehlt-kopieren').addEventListener('click', () => fehltKopieren(z));
+  // „Proxys drucken“ (Wunsch des Nutzers, 07.11.2026): nur, wenn es den Bereich gibt (Add-on; am PC liefert er 404)
+  const proxys = bereich.querySelector('.deck-proxys');
+  proxys.addEventListener('click', () => gehe(`#/proxy/deck/${Number(z.id)}`));
+  holen('/api/proxy').then(() => { proxys.hidden = false; }).catch(() => { /* kein Proxy-Bereich */ });
   z.neuLaden.addEventListener('click', () => neuLaden(z));
   z.umbenennen.addEventListener('click', () => umbenennen(z));
   z.loeschen.addEventListener('click', () => loeschen(z));

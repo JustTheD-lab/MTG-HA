@@ -1,0 +1,102 @@
+/* Proxys im Stil „Galerie": glatte Tafeln, eine Spalte am Handy, Messing nur als Akzent.
+   Klassen mit Vorsatz proxy-; dazu der Einstieg im Regal (regal-proxy). */
+
+.regal-proxy { min-height: 44px; font-size: 0.84rem; color: var(--text-2); border-color: var(--linie); }
+.regal-proxy:hover { color: var(--text); }
+.regal-proxy[hidden] { display: none; }
+
+.proxy { max-width: 860px; margin: 0 auto; padding: calc(12px + env(safe-area-inset-top)) var(--rand-sicher) 56px; }
+.proxy-kopfzeile { display: flex; align-items: center; gap: 12px; }
+.proxy-seitentitel { font-size: 1.6rem; margin: 0; }
+.proxy-inhalt { margin-top: 14px; display: grid; gap: 14px; min-width: 0; }
+
+.proxy-tafel { background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius-gross);
+  padding: 16px; min-width: 0; }
+.proxy-tafel[hidden] { display: none; }
+.proxy-titel { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+.proxy-unter { margin: 16px 0 6px; font-size: 0.92rem; font-weight: 600; }
+.proxy-hinweis { margin: 6px 0; color: var(--text-3); font-size: 0.86rem; overflow-wrap: anywhere; }
+.proxy-hinweis-tafel { margin: 0; padding: 12px 16px; background: var(--flaeche-2); border: 1px dashed var(--linie-stark);
+  border-radius: var(--radius-gross); color: var(--text-2); font-size: 0.9rem; }
+.proxy-warnung { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--warnung); border-radius: var(--radius);
+  color: #f1b9b0; font-size: 0.9rem; overflow-wrap: anywhere; }
+.proxy-klein { margin: 6px 0 0; padding: 6px 10px; font-size: 0.8rem; }
+.proxy-druck { margin: 14px 0 0; padding: 10px 12px; border-left: 2px solid var(--messing); color: var(--text-2);
+  font-size: 0.88rem; line-height: 1.5; }
+.proxy-link { color: var(--messing-hell); }
+
+.proxy-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+.proxy-zeile .knopf { min-height: 44px; }
+.proxy-datei { cursor: pointer; min-height: 44px; gap: 8px; }
+.proxy-datei:focus-within { outline: 2px solid var(--messing); outline-offset: 2px; }
+.proxy-text { display: block; width: 100%; min-height: 12em; resize: vertical; font-family: var(--schrift); line-height: 1.45; }
+.proxy-felder { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; align-items: end; }
+.proxy-felder .feld { width: 100%; }
+@media (max-width: 560px) { .proxy-felder { grid-template-columns: 1fr; } }
+.proxy-haken { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-size: 0.94rem; }
+.proxy-haken input { width: 22px; height: 22px; accent-color: var(--messing); flex: none; }
+/* Aus Deck übernehmen */
+.proxy-deck { margin: 0 0 16px; padding: 0 0 14px; border-bottom: 1px solid var(--linie); }
+.proxy-deck[hidden] { display: none; }
+.proxy-deck .proxy-zeile { margin-top: 0; }
+.proxy-deck-wahl { flex: 1 1 14em; min-width: 0; }
+.proxy-deck-gruppen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; margin-top: 6px; }
+@media (max-width: 560px) { .proxy-deck-gruppen { grid-template-columns: 1fr; } }
+.proxy-deck .proxy-hinweis[data-deck-status]:empty { display: none; }
+.proxy-zahlen { margin: 0 0 10px; color: var(--text-2); font-size: 0.92rem; }
+.proxy-zahlen strong { color: var(--messing-hell); font-weight: 600; }
+
+/* ---------- Vorschau ---------- */
+.proxy-liste { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.proxy-zeile-karte { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; padding: 8px 10px;
+  border: 1px solid var(--linie); border-radius: var(--radius-klein); background: var(--flaeche-1); }
+.proxy-auffaellig { border-color: var(--hinweis); }
+.proxy-anzahl { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.proxy-kartenname { min-width: 0; overflow-wrap: anywhere; }
+.proxy-ort { color: var(--text-3); font-size: 0.84rem; white-space: nowrap; }
+.proxy-status { grid-column: 2; color: var(--text-3); font-size: 0.82rem; }
+.proxy-status-warn { color: var(--hinweis); display: flex; align-items: flex-start; gap: 6px; }
+.proxy-punkt { flex: none; width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; background: var(--hinweis);
+  color: #1a1408; font-size: 0.7rem; font-weight: 700; line-height: 16px; text-align: center; }
+.proxy-gut { margin-top: 14px; }
+.proxy-gut summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--text-2);
+  font-size: 0.9rem; width: fit-content; }
+.proxy-uebersprungen li { padding: 6px 10px; border: 1px dashed var(--linie-stark); border-radius: var(--radius-klein);
+  color: var(--text-2); font-size: 0.86rem; overflow-wrap: anywhere; }
+
+/* ---------- Rückseiten ---------- */
+.proxy-kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-top: 10px; }
+.proxy-kachel-huelle { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.proxy-kachel { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 8px; text-align: left;
+  background: var(--flaeche-1); border: 1px solid var(--linie); border-radius: var(--radius); color: var(--text);
+  font: inherit; cursor: pointer; min-width: 0; }
+.proxy-kachel:hover { border-color: var(--linie-stark); }
+.proxy-kachel:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; }
+.proxy-kachel[aria-checked="true"] { border-color: var(--messing); box-shadow: inset 0 0 0 1px var(--messing); }
+.proxy-kachel img { display: block; width: 100%; aspect-ratio: 63 / 88; object-fit: cover; border-radius: var(--radius-karte);
+  background: var(--flaeche-3); }
+.proxy-kachel-name { font-size: 0.86rem; overflow-wrap: anywhere; }
+.proxy-kachel-mass { font-size: 0.74rem; color: var(--text-3); }
+.proxy-kachel[aria-checked="true"] .proxy-kachel-name::before { content: "✓ "; color: var(--messing-hell); }
+.proxy-weg { min-height: 44px; font-size: 0.82rem; color: var(--text-2); }
+
+/* ---------- Auftrag ---------- */
+.proxy-fortschritt { height: 8px; margin: 10px 0 6px; border-radius: 4px; background: var(--flaeche-3); overflow: hidden; }
+.proxy-fortschritt span { display: block; height: 100%; background: var(--messing); transform-origin: left center;
+  transition: transform var(--dauer-mittel, 0.25s) var(--kurve, ease); }
+@media (prefers-reduced-motion: reduce) { .proxy-fortschritt span { transition: none; } }
+.proxy-gross { display: flex; width: 100%; min-height: 64px; justify-content: center; gap: 12px; margin-top: 10px; text-align: left; }
+.proxy-gross span { display: flex; flex-direction: column; min-width: 0; font-weight: 600; }
+.proxy-gross small { font-weight: 400; font-size: 0.8rem; overflow-wrap: anywhere; opacity: 0.85; }
+.proxy-auftrag { margin-top: 6px; }
+
+/* ---------- PDFs und Stand ---------- */
+.proxy-pdfs { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.proxy-pdf { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--linie); border-radius: var(--radius); background: var(--flaeche-1); }
+.proxy-pdf-text { display: grid; gap: 2px; min-width: 0; }
+.proxy-pdf-text strong { overflow-wrap: anywhere; font-weight: 600; }
+.proxy-pdf .knopf { flex: none; min-height: 44px; gap: 6px; }
+@media (max-width: 480px) { .proxy-pdf { flex-direction: column; align-items: stretch; } .proxy-pdf .knopf { justify-content: center; } }
+.proxy-stand { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 16px; margin: 10px 0 0; }
+.proxy-stand dd { margin: 2px 0 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }

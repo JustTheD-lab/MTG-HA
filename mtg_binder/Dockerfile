@@ -1,5 +1,7 @@
-# Schlankes Abbild: Python 3.11 mit Starlette und Uvicorn, sonst nur der Server-Teil von binderapp.
-FROM python:3.11-slim-bookworm
+# Schlankes Abbild: Python 3.12 mit Starlette und Uvicorn, sonst nur der Server-Teil von binderapp (der Code bleibt
+# 3.11-tauglich). 3.12, weil Silhouette Card Maker ab v3.0.0 mindestens 3.12 verlangt; seine Pakete kommen nicht ins
+# Abbild, sondern je Stand in ein eigenes venv unter /data/proxy (binderapp/proxy/staende.py).
+FROM python:3.12-slim-bookworm
 
 ARG BUILD_VERSION=0.0.0
 ENV PYTHONDONTWRITEBYTECODE=1 \
