@@ -39,7 +39,9 @@ NAME_MAX = 60
 PDF_BEHALTEN = 50
 CACHE_MAX = 2 * 1024 ** 3
 CACHE_TAGE = 30
-RUECKSEITE_MAX = 10 * 1024 * 1024
+# Wie beim Foto-Upload: Die Rückseite des Nutzers hat 2944 × 4036 px und 17,9 MB (gemessen 07.11.2026); SCM
+# skaliert sie beim PDF selbst auf Kartengröße, das Original bleibt unverändert.
+RUECKSEITE_MAX = 40 * 1024 * 1024
 RUECKSEITEN_MAX = 20
 ERKENNEN_ZEIT = 120
 LADEN_ZEIT = 60 * 60
@@ -523,7 +525,7 @@ class Dienst:
 
     def rueckseite_neu(self, daten: bytes, name: str) -> dict:
         if len(daten) > RUECKSEITE_MAX:
-            raise Proxyfehler("Die Rückseite ist zu groß (höchstens 10 MB).", 413)
+            raise Proxyfehler(f"Die Rückseite ist zu groß (höchstens {RUECKSEITE_MAX // 2 ** 20} MB).", 413)
         masse = bildmasse(daten)
         if masse is None:
             raise Proxyfehler("Bitte ein PNG- oder JPEG-Bild wählen.")

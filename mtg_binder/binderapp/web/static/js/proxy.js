@@ -204,7 +204,7 @@ function rueckseitenZeichnen() {
     + `<div class="proxy-kacheln" role="radiogroup" aria-label="Rückseite wählen">${liste.map(kachel).join('')}</div>`
     + `<div class="proxy-zeile"><label class="knopf proxy-datei" for="proxy-rueck-datei">${HOCH}<span>Rückseite hochladen</span></label>`
     + '<input id="proxy-rueck-datei" class="nur-vorleser" type="file" accept="image/png,image/jpeg">'
-    + '<span class="proxy-hinweis">PNG oder JPEG, höchstens 10 MB</span></div>'
+    + '<span class="proxy-hinweis">PNG oder JPEG, höchstens 40 MB</span></div>'
     + '<p class="meldung" role="alert" data-rueck-fehler></p>';
 }
 
@@ -223,7 +223,7 @@ async function rueckseiteHochladen(datei) {
   const fehler = () => z.teil.rueck.querySelector('[data-rueck-fehler]');
   if (!datei) return;
   if (!/^image\/(png|jpeg)$/.test(datei.type)) { meldung(fehler(), 'Bitte ein PNG oder JPEG wählen.'); return; }
-  if (datei.size > 10 * 1048576) { meldung(fehler(), 'Das Bild ist zu groß, höchstens 10 MB.'); return; }
+  if (datei.size > 40 * 1048576) { meldung(fehler(), 'Das Bild ist zu groß, höchstens 40 MB.'); return; }
   meldung(fehler(), 'Wird hochgeladen …');
   try {
     const eintrag = await senden(`/api/proxy/rueckseiten?name=${encodeURIComponent(datei.name)}`,

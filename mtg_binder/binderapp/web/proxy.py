@@ -14,7 +14,7 @@ und gesetztem `BINDER_PROXY` (das Add-on setzt es, am PC gibt es den Bereich nic
     GET    /api/proxy/pdfs                    die letzten 50 PDFs
     GET    /api/proxy/pdf/{datei}             Download
     GET    /api/proxy/rueckseiten             Rückseiten (mit dem neutralen Beispiel)
-    POST   /api/proxy/rueckseiten?name=       Bild als Rumpf (PNG oder JPEG, höchstens 10 MB)
+    POST   /api/proxy/rueckseiten?name=       Bild als Rumpf (PNG oder JPEG, höchstens 40 MB)
     GET    /api/proxy/rueckseite/{id}/bild    das Bild
     DELETE /api/proxy/rueckseite/{id}         eine hochgeladene Rückseite entfernen
 """

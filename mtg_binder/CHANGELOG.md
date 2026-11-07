@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.27.1
+- Eigene Rückseiten dürfen jetzt bis 40 MB groß sein (vorher 10 MB). Hochauflösende Rückseiten mit 300 dpi waren
+  zu groß.
+
 ## 0.27.0
 - Proxys aus deinen Decks: Im Bereich „Proxys“ gibt es „Aus Deck übernehmen“, in der Deckansicht den Knopf „Proxys
   drucken“. Vorgewählt sind die fehlenden und die als Proxy markierten Karten (per Haken auch vorhandene Karten und
