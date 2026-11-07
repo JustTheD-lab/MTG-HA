@@ -163,7 +163,7 @@ def _handle_card(scryfall, optionen: dict, vorne: Path, doppelt: Path):
     """`get_handle_card` mit Schlüsselwörtern, wie `fetch.py` sie füllt; nur bekannte Namen."""
     werte = {
         "ignore_set_and_collector_number": bool(optionen.get("sets_ignorieren")),
-        "prefer_older_sets": False, "prefer_sets": (), "ignore_sets": [],
+        "prefer_older_sets": bool(optionen.get("erster_druck")), "prefer_sets": (), "ignore_sets": [],
         "prefer_showcase": False, "prefer_extra_art": bool(optionen.get("extra_art")),
         "prefer_ub": False, "ignore_ub": False, "prefer_langs": None, "tokens": False,
         "front_img_dir": str(vorne), "double_sided_dir": str(doppelt),

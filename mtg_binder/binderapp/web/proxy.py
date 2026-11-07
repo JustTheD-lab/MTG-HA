@@ -6,7 +6,8 @@ und gesetztem `BINDER_PROXY` (das Add-on setzt es, am PC gibt es den Bereich nic
     POST   /api/proxy/stand/zurueck           vorherigen Stand verwenden
     POST   /api/proxy/pruefen                 {"text", "format"?, "sets_ignorieren"?}  Vorschau, schreibt nichts
     POST   /api/proxy/auftrag                 {"text", "format", "name", "rueckseite", "sets_ignorieren", "extra_art",
-                                               "versatz" (Standard true: Kalibrierung einrechnen)}
+                                               "versatz" (Standard true: Kalibrierung einrechnen),
+                                               "druckwahl": "liste" | "guenstig" | "erster"}
     GET    /api/proxy/auftrag/{id}            Zustand und Fortschritt
     POST   /api/proxy/auftrag/{id}/weiter     {"weiter": true|false}  PDF ohne die fehlenden Karten oder abbrechen
     GET    /api/proxy/decks                   Decks der App für „Aus Deck übernehmen“ (id, name)
@@ -70,6 +71,10 @@ def routen(h) -> list[Route]:
     def _ablage_ok() -> bool:
         return h.bilder_ok()
 
+    def _preisdatei() -> Path:
+        # wie Secret Lair: der tägliche Abruf legt den ganzen Price Guide neben die Datenbank
+        return Path(h.datenbank).parent / "preise" / "price_guide_1.json"
+
     def _bereit() -> pa.Dienst:
         d = _dienst()
         d.ablage_ok = _ablage_ok
@@ -83,6 +88,8 @@ def routen(h) -> list[Route]:
                              "ablage": _ablage_ok(), "katalog": h.katalog_pfad is not None
                              and Path(h.katalog_pfad).exists(), "rueckseiten": d.rueckseiten(),
                              "kalibrierung": d.kalibrierung(),
+                             "guenstig_moeglich": h.katalog_pfad is not None and Path(h.katalog_pfad).exists()
+                             and _preisdatei().is_file(),
                              "formate": [{"name": n, "titel": t} for n, t in pa.FORMATNAMEN.items()],
                              "hinweis": "Nur für Casual und Playtesting. Proxys bleiben als Proxy erkennbar."})
 
@@ -125,7 +132,7 @@ def routen(h) -> list[Route]:
         d = _bereit()
         daten = await h.json_daten(request)
         a = await run_in_threadpool(d.neu, daten.get("text"), daten.get("format"), daten.get("name"),
-                                    daten.get("rueckseite"), daten)
+                                    daten.get("rueckseite"), daten, h.katalog_pfad, _preisdatei())
         return JSONResponse(a, status_code=202)
 
     @_fehler_umwandeln

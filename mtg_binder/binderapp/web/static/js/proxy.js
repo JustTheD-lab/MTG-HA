@@ -17,9 +17,11 @@ const LADEN = sym('<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>', 18);
 const DRUCKHINWEIS = 'Drucken: Tatsächliche Größe / 100 %, beidseitig an der langen Kante. '
   + 'Schneiden in Silhouette Studio: Vorlage a4-standard-v5, Maschine „Cameo 5“ (3-Punkt-Passermarken).';
 const LIZENZ = 'MIT-Lizenz, © Alan Cha; Proxys nur für Casual und Playtesting.';
-const LAUFEND = ['wartet', 'laedt', 'baut'];
+const LAUFEND = ['wartet', 'waehlt', 'laedt', 'baut'];
+const DRUCKWAHL = { liste: 'Wie in der Liste', guenstig: 'Günstigster Druck', erster: 'Erster Druck' };
 const ZUSTAENDE = {
-  wartet: 'Wartet auf den PC …', laedt: 'Kartenbilder werden geladen …', fehlende: 'Einige Karten fehlen',
+  wartet: 'Wartet …', waehlt: 'Günstigste Drucke werden gesucht …', laedt: 'Kartenbilder werden geladen …',
+  fehlende: 'Einige Karten fehlen',
   baut: 'PDF wird gebaut …', fertig: 'Fertig', abgebrochen: 'Abgebrochen', fehler: 'Fehler',
 };
 const STATUS = {
@@ -92,6 +94,11 @@ function eingabeHtml(formate) {
     + `<select id="proxy-format" class="feld">${optionen}</select></div></div>`
     + '<label class="proxy-haken"><input type="checkbox" id="proxy-sets"><span>Sets ignorieren</span></label>'
     + '<label class="proxy-haken"><input type="checkbox" id="proxy-extra"><span>Extra-Art bevorzugen</span></label>'
+    + '<div class="proxy-felder"><div><label class="etikett feld-etikett" for="proxy-druckwahl">Druck bevorzugen</label>'
+    + `<select id="proxy-druckwahl" class="feld">${Object.entries(DRUCKWAHL).map(([w, t]) => `<option value="${w}">`
+      + `${esc(t)}</option>`).join('')}</select></div></div>`
+    + '<p class="proxy-hinweis">Gilt für Zeilen ohne Set und Nummer, mit „Sets ignorieren“ für alle. Günstigster Druck:'
+    + ' Cardmarket Ø 7 Tage, nur englische Drucke mit gutem Scan.</p>'
     + '<div class="proxy-zeile"><button type="button" class="knopf knopf-haupt proxy-pruefen" data-pruefen>Prüfen</button>'
     + '<span class="proxy-hinweis" role="status" data-pruef-status></span></div>'
     + '<p class="meldung" role="alert" data-pruef-fehler></p>';
@@ -308,6 +315,27 @@ function laeuft(z) {
   return Boolean(z.auftrag) && (LAUFEND.includes(z.auftrag.zustand) || z.auftrag.zustand === 'fehlende');
 }
 
+const euro = (n) => Number(n).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+
+/** Was „Günstigster Druck“ je Zeile gewählt hat: Summe offen, Einzelheiten zum Aufklappen. */
+function gewaehltHtml(a) {
+  const g = a.gewaehlt ?? [];
+  if (a.druckwahl !== 'guenstig' || !g.length) return '';
+  const guenstig = g.filter((x) => x.art === 'guenstig');
+  const ohne = g.filter((x) => x.art === 'ohne');
+  const summe = guenstig.reduce((s, x) => s + x.anzahl * (x.preis ?? 0), 0);
+  const zeile = (x) => `<li class="proxy-zeile-karte${x.art === 'ohne' ? ' proxy-auffaellig' : ''}">`
+    + `<span class="proxy-kartenname">${zahl(x.anzahl)} × ${esc(x.name)}</span><span class="proxy-status">`
+    + (x.art === 'guenstig' ? `${esc(String(x.set).toUpperCase())} ${esc(x.nummer)} · ${esc(euro(x.preis))}`
+      : x.art === 'liste' ? `${esc(String(x.set).toUpperCase())} ${esc(x.nummer)} · aus der Liste`
+        : `ohne Vorzug: ${esc(x.grund || '')}`)
+    + '</span></li>';
+  return '<details class="proxy-mehr"><summary>'
+    + `Günstigster Druck für ${zahl(guenstig.length)} von ${zahl(g.length)} Zeilen, zusammen rund ${esc(euro(summe))}`
+    + `${ohne.length ? ` · ${zahl(ohne.length)} ohne Vorzug` : ''}</summary>`
+    + `<ul class="proxy-liste">${g.map(zeile).join('')}</ul></details>`;
+}
+
 function auftragHtml(a) {
   const text = ZUSTAENDE[a.zustand] ?? a.zustand;
   const kopf = `<h3 class="proxy-unter">${esc(a.name || 'Deck')}</h3>`;
@@ -331,10 +359,12 @@ function auftragHtml(a) {
     const z = a.zeiten ?? {};
     return `${kopf}<a class="knopf knopf-haupt proxy-gross" href="${esc(adresse(`api/proxy/pdf/${encodeURIComponent(a.pdf)}`))}"`
       + ` download="${esc(a.pdf)}">${LADEN}<span>PDF herunterladen<small>${esc(a.pdf)}</small></span></a>`
-      + `<p class="proxy-hinweis">Laden ${esc(sek(z.laden_s))} · PDF ${esc(sek(z.pdf_s))} · gesamt ${esc(sek(z.gesamt_s))}`
+      + `<p class="proxy-hinweis">${z.waehlen_s != null ? `Druckwahl ${esc(sek(z.waehlen_s))} · ` : ''}`
+      + `Laden ${esc(sek(z.laden_s))} · PDF ${esc(sek(z.pdf_s))} · gesamt ${esc(sek(z.gesamt_s))}`
       + `${a.cache ? ` · ${zahl(a.cache.treffer)} aus dem Zwischenspeicher, ${zahl(a.cache.neu)} neu geladen` : ''}</p>`
       + ((a.fehlende ?? []).length
         ? `<p class="proxy-warnung" role="note">Ohne: ${esc(a.fehlende.map((x) => x.name).join(', '))}</p>` : '')
+      + gewaehltHtml(a)
       + druckhinweisHtml();
   }
   const grund = a.zustand === 'fehler' ? (a.meldung || 'Beim Erzeugen ist ein Fehler aufgetreten.') : (a.meldung || '');
@@ -372,7 +402,8 @@ async function erzeugen() {
     const name = z.feld.name.value.trim() || 'Deck';
     const a = await senden('/api/proxy/auftrag', { daten: {
       text: z.geprueftText, format: v.format, name, rueckseite: z.rueckseite,
-      sets_ignorieren: z.geprueftSets, extra_art: z.feld.extra.checked, versatz: z.versatzAn } });
+      sets_ignorieren: z.geprueftSets, extra_art: z.feld.extra.checked, versatz: z.versatzAn,
+      druckwahl: z.feld.druckwahl.value } });
     if (Z !== z) return;
     z.auftrag = a;
     erzeugenZeichnen();
@@ -689,6 +720,8 @@ function verdrahten(bereich) {
       aenderung();
     } else if (t.id === 'proxy-versatz') {
       z.versatzAn = t.checked;
+    } else if (t.id === 'proxy-druckwahl') {
+      vorliebe('proxy.druckwahl', t.value);
     }
   });
   z.feld.text.addEventListener('input', aenderung);
@@ -763,7 +796,16 @@ export async function zeigen(wurzel, parameter) {
   const e = z.teil.eingabe;
   z.feld = { text: e.querySelector('#proxy-text'), name: e.querySelector('#proxy-name'), format: e.querySelector('#proxy-format'),
     sets: e.querySelector('#proxy-sets'), extra: e.querySelector('#proxy-extra'), knopf: e.querySelector('[data-pruefen]'),
-    status: e.querySelector('[data-pruef-status]'), fehler: e.querySelector('[data-pruef-fehler]') };
+    status: e.querySelector('[data-pruef-status]'), fehler: e.querySelector('[data-pruef-fehler]'),
+    druckwahl: e.querySelector('#proxy-druckwahl') };
+  // Günstigster Druck braucht Katalog und Preise; die zuletzt gewählte Art bleibt gemerkt
+  const guenstig = z.feld.druckwahl.querySelector('option[value="guenstig"]');
+  if (!daten.guenstig_moeglich) {
+    guenstig.disabled = true;
+    guenstig.textContent = 'Günstigster Druck (Katalog oder Preise fehlen)';
+  }
+  const gemerkt = vorliebe('proxy.druckwahl');
+  if (gemerkt in DRUCKWAHL && !(gemerkt === 'guenstig' && !daten.guenstig_moeglich)) z.feld.druckwahl.value = gemerkt;
   verdrahten(bereich);
   rueckseitenZeichnen();
   erzeugenZeichnen();

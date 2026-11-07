@@ -165,6 +165,10 @@ für Casual und Playtesting gedacht und bleiben als Proxy erkennbar.
 4. Drucken: **Tatsächliche Größe / 100 %**, beidseitig an der **langen Kante**. Schneiden in Silhouette Studio mit der
    Vorlage `a4-standard-v5`, Maschine **„Cameo 5“**.
 
+- **Druck bevorzugen:** „Wie in der Liste“, „Günstigster Druck“ (Cardmarket Ø 7 Tage aus dem täglichen Price Guide,
+  ohne diesen Wert Low; nur englische Papierdrucke, deren Scryfall-Bild ein guter Scan ist) oder „Erster Druck“
+  (ältester normaler Druck ohne Promos). Gilt für Zeilen ohne Set und Nummer, mit „Sets ignorieren“ für alle. Der
+  günstigste Druck braucht den Katalog und einen ersten Preisabruf; nach dem PDF steht je Zeile, was gewählt wurde.
 - **Kalibrierung (Vorder- und Rückseite):** Liegen die Rückseiten im Druck verschoben, hilft die Tafel
   „Kalibrierung“. Den Kalibrierbogen von Silhouette Card Maker herunterladen und wie die Proxys drucken (100 %,
   beidseitig an der langen Kante, gleicher Karton). Gegen Licht halten und das Quadrat suchen, bei dem Vorder- und

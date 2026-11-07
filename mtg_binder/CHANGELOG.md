@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.29.0
+- Proxys: Neue Auswahl **„Druck bevorzugen“**: wie in der Liste, **günstigster Druck** oder **erster Druck**.
+- Günstigster Druck: nach dem Cardmarket-Preis Ø 7 Tage (ohne ihn Low) aus dem täglichen Price Guide, nur englische
+  Papierdrucke mit gutem Scan (bei Scryfall nachgefragt). Nach dem PDF zeigt die App je Zeile, welcher Druck gewählt
+  wurde, und die Summe.
+- Erster Druck: der älteste normale Druck (ohne Promos), über Silhouette Card Maker.
+- Beides gilt für Zeilen ohne Set und Nummer, mit „Sets ignorieren“ für alle Zeilen.
+
 ## 0.28.0
 - Proxys: **Kalibrierung** von Vorder- und Rückseite aus der Oberfläche. Kalibrierbogen (A4) von Silhouette Card Maker
   herunterladen, das passende Feld eintragen, fertig; der Bogen kommt immer mit dem gespeicherten Versatz, so lassen

@@ -24,9 +24,12 @@ import struct
 import threading
 import time
 import uuid
+from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from binderapp.db.datenbank import verbinden
+from binderapp.proxy import druckwahl
 from binderapp.proxy import staende as st
 
 log = logging.getLogger("binderapp.proxy")
@@ -60,6 +63,9 @@ WINKEL_MAX = 5.0
 ABLESEN_MAX = 50           # ein Feld des Bogens liegt bei ±9 (waagerecht) und ±14 (senkrecht)
 KALIBRIERUNG_ZEIT = 3 * 60
 KALIBRIERUNG_LEER = {"x": 0, "y": 0, "winkel": 0.0}
+# Druck bevorzugen (Wunsch des Nutzers 07.11.2026): wie in der Liste, günstigster (proxy/druckwahl.py) oder erster
+# Druck (prefer_older_sets von SCM)
+DRUCKWAHL = ("liste", "guenstig", "erster")
 PDF_MUSTER = re.compile(r"^[0-9]{8}-[0-9]{6}-[A-Za-z0-9_\-]{1,60}\.pdf$")
 
 
@@ -257,7 +263,10 @@ class Auftrag:
     optionen: dict
     rueckseite: str
     versatz: dict | None = None        # Kalibrierung beim Anlegen (None: abgeschaltet oder nicht kalibriert)
-    zustand: str = "wartet"           # wartet → laedt → (fehlende) → baut → fertig | abgebrochen | fehler
+    gewaehlt: list | None = None       # günstigster Druck: was je Zeile gewählt wurde (druckwahl.waehlen)
+    _katalog: Path | None = None
+    _preisdatei: Path | None = None
+    zustand: str = "wartet"          # wartet → laedt → (fehlende) → baut → fertig | abgebrochen | fehler
     fertig: int = 0
     gesamt: int = 0
     fehlende: list = field(default_factory=list)
@@ -272,7 +281,8 @@ class Auftrag:
     def anzeige(self) -> dict:
         return {"id": self.id, "name": self.name, "format": self.format, "zustand": self.zustand,
                 "fertig": self.fertig, "gesamt": self.gesamt, "fehlende": self.fehlende, "meldung": self.meldung,
-                "pdf": self.pdf, "stand": self.stand, "zeiten": self.zeiten, "cache": self.cache, "versatz": self.versatz}
+                "pdf": self.pdf, "stand": self.stand, "zeiten": self.zeiten, "cache": self.cache, "versatz": self.versatz,
+                "druckwahl": self.optionen.get("druckwahl", "liste"), "gewaehlt": self.gewaehlt}
 
 
 class Dienst:
@@ -353,10 +363,19 @@ class Dienst:
                 "zu_viele": exemplare > KARTEN_MAX, "hoechstens": KARTEN_MAX, "katalog": kat is not None}
 
     # Auftrag
-    def neu(self, text, format_name, name, rueckseite, optionen: dict) -> dict:
+    def neu(self, text, format_name, name, rueckseite, optionen: dict, katalog: Path | None = None,
+            preisdatei: Path | None = None) -> dict:
         text = text_pruefen(text)
         if format_name not in FORMATNAMEN:
             raise Proxyfehler("Unbekanntes Format.")
+        druckwahl = optionen.get("druckwahl") or "liste"
+        if druckwahl not in DRUCKWAHL:
+            raise Proxyfehler("Unbekannte Druckwahl.")
+        if druckwahl == "guenstig" and not (katalog and Path(katalog).is_file()):
+            raise Proxyfehler("Für den günstigsten Druck fehlt der Katalog.", 409)
+        if druckwahl == "guenstig" and not (preisdatei and Path(preisdatei).is_file()):
+            raise Proxyfehler("Für den günstigsten Druck fehlen die Preise von Cardmarket (der tägliche Abruf "
+                              "ist noch nicht gelaufen).", 409)
         if not self.ablage_ok():
             raise Proxyfehler("Das Netzlaufwerk ist nicht erreichbar: Ohne Ablage für das PDF geht es gerade nicht.", 409)
         self._rueckseite_pfad(rueckseite)
@@ -366,8 +385,10 @@ class Dienst:
                 raise Proxyfehler("Es läuft schon ein Proxy-Auftrag. Bitte warten, bis er fertig ist.", 409)
             a = Auftrag(uuid.uuid4().hex[:12], deckname(name), text, format_name,
                         {"sets_ignorieren": bool(optionen.get("sets_ignorieren")),
-                         "extra_art": bool(optionen.get("extra_art"))}, rueckseite or BEISPIEL_ID,
-                        versatz=self.kalibrierung_werte() if optionen.get("versatz", True) is not False else None)
+                         "extra_art": bool(optionen.get("extra_art")), "druckwahl": druckwahl,
+                         "erster_druck": druckwahl == "erster"}, rueckseite or BEISPIEL_ID,
+                        versatz=self.kalibrierung_werte() if optionen.get("versatz", True) is not False else None,
+                        _katalog=katalog, _preisdatei=preisdatei)
             self.auftrag = a
         threading.Thread(target=self._ausfuehren, args=(a,), name="Proxyauftrag", daemon=True).start()
         return a.anzeige()
@@ -406,7 +427,29 @@ class Dienst:
         finally:
             shutil.rmtree(arbeit, ignore_errors=True)
 
+    def _guenstig_waehlen(self, a: Auftrag, arbeit: Path) -> None:
+        """Liste auf den günstigsten Druck je Zeile umschreiben (proxy/druckwahl.py); danach lädt SCM genau diese."""
+        a.zustand = "waehlt"
+        (arbeit / "liste.txt").write_text(a.text, encoding="utf-8")
+        r = self._lauf("erkennen", ["--liste", str(arbeit / "liste.txt")], ERKENNEN_ZEIT, arbeit, a)
+        if not r.get("ok"):
+            raise RuntimeError("Die Liste ließ sich nicht lesen: " + str(r.get("fehler")))
+        karten = (r.get("formate", {}).get(a.format) or {}).get("karten") or []
+        if not karten:
+            raise RuntimeError("Die Liste enthält im gewählten Format keine Karten.")
+        with closing(verbinden(a._katalog, nur_lesen=True)) as kat:
+            try:
+                neu = druckwahl.waehlen(kat, a._preisdatei, karten, bool(a.optionen.get("sets_ignorieren")))
+            except druckwahl.Druckwahlfehler as f:
+                raise RuntimeError(f"Günstigster Druck: {f}") from None
+        a.text, a.format, a.gewaehlt = neu["text"], neu["format"], neu["gewaehlt"]
+        a.optionen = {**a.optionen, "sets_ignorieren": False}   # die Liste nennt jetzt den Druck
+
     def _laden_und_bauen(self, a: Auftrag, arbeit: Path, beginn: float) -> None:
+        if a.optionen.get("druckwahl") == "guenstig":
+            self._guenstig_waehlen(a, arbeit)
+            a.zeiten["waehlen_s"] = round(time.monotonic() - beginn, 1)
+        start_laden = time.monotonic()
         a.zustand = "laedt"
         (arbeit / "liste.txt").write_text(a.text, encoding="utf-8")
         vorne, doppelt, hinten = arbeit / "vorne", arbeit / "doppelt", arbeit / "hinten"
@@ -422,7 +465,7 @@ class Dienst:
         beobachter.start()
         with self.staende.sperre:   # kein Umschalten des Stands, solange er rechnet
             r = self._lauf("laden", argumente, LADEN_ZEIT, arbeit, a)
-        a.zeiten["laden_s"] = round(time.monotonic() - beginn, 1)
+        a.zeiten["laden_s"] = round(time.monotonic() - start_laden, 1)
         if not r.get("ok"):
             raise RuntimeError("Bilder laden gescheitert: " + str(r.get("fehler")))
         a.cache = r.get("cache") or {}
@@ -464,7 +507,8 @@ class Dienst:
             "name": a.name, "erstellt": time.strftime("%Y-%m-%dT%H:%M:%S"), "karten": exemplare,
             "doppelseitig": sum(1 for _ in doppelt.iterdir()), "seiten": r.get("seiten"), "bytes": r.get("bytes"),
             "stand": a.stand, "fehlende": [f["name"] for f in a.fehlende], "rueckseite": a.rueckseite,
-            "format": a.format, "versatz": a.versatz}, ensure_ascii=False), encoding="utf-8")
+            "format": a.format, "versatz": a.versatz, "druckwahl": a.optionen.get("druckwahl", "liste")},
+            ensure_ascii=False), encoding="utf-8")
         pdfs_aufraeumen(ziel)
         a.pdf, a.zustand = dateiname, "fertig"
         a.zeiten["gesamt_s"] = round(time.monotonic() - beginn, 1)
