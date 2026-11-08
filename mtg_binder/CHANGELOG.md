@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.32.2
+- Sortierregeln und Fächer: **einzelne Bedingungen kopieren.** Jede Bedingung hat neben „nicht“ einen eigenen
+  Kopierknopf; „Einfügen“ nennt dann die Bedingung („Bedingung „Preis“ aus Fach „Länder“ einfügen“). Der bisherige
+  Knopf unter den Bedingungen heißt jetzt „Alle kopieren“.
+
 ## 0.32.1
 - Behoben: Das Update auf 0.32.0 konnte scheitern, wenn PyPI beim Bauen zu langsam antwortete („Read timed out“).
   Die Pakete werden jetzt mit Wiederholungen geladen und bleiben bei späteren Updates im Zwischenspeicher, statt bei

@@ -3,8 +3,8 @@
 // Die Regeln gelten von oben nach unten, die erste passende bestimmt die Kiste. Passt keine, bleibt die Karte im
 // Scan-Eingang. Die Seite zeigt die Regeln als Karten „Wenn … → Kiste“ (ein-/ausschalten, Reihenfolge, Bearbeiten,
 // Löschen) und eine Probe: eine Karte der Sammlung wählen und sehen, welche Regel für sie greift und warum.
-// Bedingungen lassen sich kopieren (an der Regelkarte und in jedem Editor) und in jedem Editor einfügen, auch in den
-// Fächern einer Kiste (Wunsch des Nutzers, 08.11.2026).
+// Bedingungen lassen sich kopieren (alle an der Regelkarte und im Editor, einzeln an jeder Bedingung) und in jedem
+// Editor einfügen, auch in den Fächern einer Kiste (Wunsch des Nutzers, 08.11.2026).
 //
 // Weitere Ausgänge für andere Ansichten:
 //   bedingungenEditor(container, beschreibung, bedingungen, { leerText }) → { werte(), hinzufuegen() }
@@ -225,20 +225,23 @@ export function bedingungenEditor(container, beschreibung, bedingungen = [],
   const leer = el('p', 'regeln-hinweis regeln-bed-leer', esc(leerText));
   const knoepfe = el('div', 'regeln-bed-knoepfe');
   const neu = knopfEl('knopf regeln-bed-neu', `${SYM.plus}<span>Bedingung hinzufügen</span>`);
-  const kopieren = knopfEl('knopf regeln-bed-kopieren', `${SYM.kopieren}<span>Kopieren</span>`);
-  kopieren.title = 'Bedingungen kopieren, um sie in eine andere Regel oder ein Fach einzufügen';
+  const kopieren = knopfEl('knopf regeln-bed-kopieren', `${SYM.kopieren}<span>Alle kopieren</span>`);
+  kopieren.title = 'Alle Bedingungen kopieren, um sie in eine andere Regel oder ein Fach einzufügen';
   const einfuegen = knopfEl('knopf regeln-bed-einfuegen', `${SYM.einfuegen}<span>Einfügen</span>`);
   const status = el('p', 'regeln-hinweis regeln-bed-status');
   status.setAttribute('role', 'status');
   knoepfe.append(neu, kopieren, einfuegen);
   container.append(liste, leer, knoepfe, status);
   const zeilen = [];
+  const zeileWert = (z) => ({ feld: z.wahl.value, ...z.lesen(), ...(an(z.nicht) ? { nicht: true } : {}) });
 
   const ablageZeigen = () => {
     einfuegen.hidden = !ablage;
     if (!ablage) return;
-    einfuegen.setAttribute('aria-label', `${anzahlText(ablage.bedingungen.length)} aus ${ablage.quelle} einfügen`);
-    einfuegen.title = `${anzahlText(ablage.bedingungen.length)} aus ${ablage.quelle} einfügen`;
+    const was = ablage.bedingungen.length === 1 ? `Bedingung „${felder[ablage.bedingungen[0].feld]?.name ?? '?'}“`
+      : anzahlText(ablage.bedingungen.length);
+    einfuegen.setAttribute('aria-label', `${was} aus ${ablage.quelle} einfügen`);
+    einfuegen.title = `${was} aus ${ablage.quelle} einfügen`;
   };
   // Der Editor hört auf neue Ablagen (anderes Fach im selben Dialog). Ist er nicht mehr im Dokument, meldet er sich ab.
   const aufAblage = () => {
@@ -251,6 +254,7 @@ export function bedingungenEditor(container, beschreibung, bedingungen = [],
     zeilen.forEach((z, i) => {
       z.wahl.setAttribute('aria-label', `Feld der Bedingung ${i + 1}`);
       z.nicht.setAttribute('aria-label', `Bedingung ${i + 1} verneinen`);
+      z.kopie.setAttribute('aria-label', `Bedingung ${i + 1} kopieren`);
       z.weg.setAttribute('aria-label', `Bedingung ${i + 1} entfernen`);
     });
     leer.hidden = zeilen.length > 0;
@@ -268,16 +272,22 @@ export function bedingungenEditor(container, beschreibung, bedingungen = [],
     nicht.classList.add('regeln-nicht');
     nicht.title = 'Bedingung umkehren: Die Karte darf nicht so sein';
     nicht.addEventListener('click', () => umschalten(nicht));
+    const kopie = knopfEl('knopf knopf-sym regeln-bed-kopie', SYM.kopieren);
+    kopie.title = 'Nur diese Bedingung kopieren';
     const weg = knopfEl('knopf knopf-sym regeln-bed-weg', SYM.kreuz);
-    kopf.append(wahl, nicht, weg);
+    kopf.append(wahl, nicht, kopie, weg);
     const koerper = el('div', 'regeln-bed-koerper');
     wurzel.append(kopf, koerper);
-    const z = { wurzel, wahl, nicht, weg, lesen: () => ({}) };
+    const z = { wurzel, wahl, nicht, kopie, weg, lesen: () => ({}) };
     const bauen = (feld, wert) => {
       koerper.replaceChildren();
       z.lesen = BAUER[felder[feld].art](koerper, feld, felder[feld], beschreibung, wert ?? {});
     };
     wahl.addEventListener('change', () => bauen(wahl.value, null));
+    kopie.addEventListener('click', () => {
+      ablageSetzen([zeileWert(z)], quelle());
+      status.textContent = `Bedingung „${felder[wahl.value].name}“ kopiert. Einfügen geht in jeder Regel und in den Fächern jeder Kiste.`;
+    });
     weg.addEventListener('click', () => {
       zeilen.splice(zeilen.indexOf(z), 1);
       wurzel.remove();
@@ -291,7 +301,7 @@ export function bedingungenEditor(container, beschreibung, bedingungen = [],
     return z;
   }
 
-  const werte = () => zeilen.map((z) => ({ feld: z.wahl.value, ...z.lesen(), ...(an(z.nicht) ? { nicht: true } : {}) }));
+  const werte = () => zeilen.map(zeileWert);
 
   neu.addEventListener('click', () => { status.textContent = ''; hinzufuegen().wahl.focus(); });
   kopieren.addEventListener('click', () => {
