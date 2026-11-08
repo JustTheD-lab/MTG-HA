@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.32.1
+- Behoben: Das Update auf 0.32.0 konnte scheitern, wenn PyPI beim Bauen zu langsam antwortete („Read timed out“).
+  Die Pakete werden jetzt mit Wiederholungen geladen und bleiben bei späteren Updates im Zwischenspeicher, statt bei
+  jeder neuen Version neu geladen zu werden.
+
 ## 0.32.0
 - Sortierregeln und Fächer: **Bedingungen kopieren und einfügen.** An jeder Regel und in jedem Bedingungs-Editor
   (Regel bearbeiten, Fächer einer Kiste) gibt es „Kopieren“; „Einfügen“ hängt die kopierten Bedingungen in jeder

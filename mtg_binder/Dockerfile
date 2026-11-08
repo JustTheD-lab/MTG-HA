@@ -3,15 +3,19 @@
 # Abbild, sondern je Stand in ein eigenes venv unter /data/proxy (binderapp/proxy/staende.py).
 FROM python:3.12-slim-bookworm
 
-ARG BUILD_VERSION=0.0.0
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
-    BINDER_VERSION=${BUILD_VERSION}
+    PYTHONPATH=/app
 
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Vor ARG BUILD_VERSION, damit die Pakete im Zwischenspeicher bleiben: Ein ARG davor zwingt jeden RUN nach einem
+# Versionssprung neu zu laufen (Update 0.32.0 am 08.11.2026 scheiterte an einer Zeitüberschreitung bei PyPI).
+# Wiederholungen und längere Wartezeit fangen ein langsames Netz ab.
+RUN pip install --no-cache-dir --retries 10 --timeout 60 -r /app/requirements.txt
+
+ARG BUILD_VERSION=0.0.0
+ENV BINDER_VERSION=${BUILD_VERSION}
 COPY binderapp /app/binderapp
 
 CMD ["python", "-m", "binderapp.addon"]
