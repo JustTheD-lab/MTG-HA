@@ -273,7 +273,8 @@
 }
 
 /* Etikett der dunklen Kisten (Metall). Farbige Kisten (feste Farbe oder Farbrad) bekommen ihre Farbe als --kf
-   über das style-Attribut (js/farbrad.js, kistenAussehen); ihr Etikett bleibt Messing. */
+   über das style-Attribut (js/farbrad.js, kistenAussehen); ihr Etikett bleibt Messing, die Farbe zeigt das
+   Lesezeichen (.regal-kiste-band). */
 .regal-ek-messing { --ek: var(--messing); }
 .regal-ek-silber  { --ek: #b9bdc4; }
 .regal-ek-kupfer  { --ek: #c07a52; }
@@ -312,14 +313,22 @@
 }
 @media (hover: hover) { .regal-kiste:hover .regal-kiste-front { border-color: var(--messing-dunkel); background: var(--flaeche-3); } }
 
-/* Farbige Kiste: der ganze Körper in der gewählten Farbe, Zahlen in passender Schriftfarbe */
-.regal-kiste-farbig .regal-kiste-front { background: var(--kf); border-color: var(--kf-kante); }
-.regal-kiste-farbig .regal-kiste-zahlen, .regal-kiste-farbig .regal-kiste-posten { color: var(--kt2); }
-.regal-kiste-farbig .regal-kiste-karten { color: var(--kt); }
-.regal-kiste-farbig .regal-kiste-kanten { margin: 0 6px; }
-@media (hover: hover) {
-  .regal-kiste-farbig:hover .regal-kiste-front { background: var(--kf); border-color: var(--messing-dunkel); filter: brightness(1.08); }
+/* Farbige Kiste: ein Lesezeichen in der Farbe hängt oben aus den Karten über die Front, mit V-Kerbe am Ende.
+   Der Schatten sitzt am äußeren Element, die Form am inneren (clip-path schnitte sonst den Schatten ab). */
+.regal-kiste-band { display: none; }
+.regal-kiste-farbig .regal-kiste-band {
+  display: block; position: absolute; z-index: 2; top: -6px; left: 18px; width: 12px; height: 36px; pointer-events: none;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.55));
 }
+.regal-kiste-farbig .regal-kiste-band::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    linear-gradient(90deg, var(--kf-kante) 0 1px, rgba(0, 0, 0, 0.14) 1px 3px, transparent 3px calc(100% - 3px),
+      rgba(0, 0, 0, 0.14) calc(100% - 3px) calc(100% - 1px), var(--kf-kante) calc(100% - 1px)),
+    var(--kf);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 6px), 0 100%);
+}
+/* Das Band endet knapp über dem Etikett: Kanten 18 px + Abstand der Front 14 px, Band ab -6 px */
 
 /* Messing-Etikett mit dem Namen */
 .regal-kiste-etikett {
@@ -331,18 +340,14 @@
   font-size: 0.88rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.22; overflow-wrap: anywhere;
 }
 
-/* Karten und Posten: am Handy zwei Zeilen, auf breiten Bildschirmen eine Zeile mit Mittelpunkt */
+/* Karten, Posten und Wert je in einer Zeile (in einer Zeile nebeneinander lief der Text aus der Kiste) */
 .regal-kiste-zahlen {
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; max-width: 100%;
   font-size: 0.66rem; letter-spacing: 0.05em; font-variant-numeric: tabular-nums;
 }
 .regal-kiste-karten { color: var(--text-2); font-weight: 600; white-space: nowrap; }
 .regal-kiste-posten { white-space: nowrap; }
-.regal-kiste-trenner { display: none; }
-@media (min-width: 700px) {
-  .regal-kiste-zahlen { flex-direction: row; justify-content: center; gap: 0; }
-  .regal-kiste-trenner { display: inline; white-space: pre; }
-}
+.regal-kiste-wert { margin-top: 3px; font-size: 0.76rem; letter-spacing: 0.02em; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .regal-sammlung { transition: none; } }
 
 /* Nach vorn ziehen und zurückstellen: nur transform und opacity */

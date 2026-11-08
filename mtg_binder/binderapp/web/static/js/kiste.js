@@ -847,7 +847,7 @@ function fachkastenZeichnen() {
   const aussehen = kistenAussehen(s.kopf.etikettfarbe);
   s.wurzel.querySelector('.fachkasten-platz').innerHTML = `<div class="fachkasten ${aussehen.klasse}" style="${aussehen.stil}">`
     + `<ol class="fachkasten-reihen" aria-label="Fächer der Kiste">${liste.map((f, i) => fachReiheHtml(f, i, liste.length)).join('')}</ol>`
-    + `<div class="fachkasten-front" aria-hidden="true"><span class="regal-kiste-etikett"><span class="regal-kiste-name">${esc(s.kopf.name)}</span></span></div>`
+    + `<div class="fachkasten-front" aria-hidden="true"><span class="regal-kiste-band"></span><span class="regal-kiste-etikett"><span class="regal-kiste-name">${esc(s.kopf.name)}</span></span></div>`
     + '</div>';
 }
 

@@ -92,7 +92,8 @@ export function rueckenStil(farbe) {
     + (hell ? '--r-text:#1d1b18;--r-text-2:rgba(29,27,24,0.7);--r-linie:rgba(29,27,24,0.2);' : '');
 }
 
-/** Kiste im Regal: Klasse und Stil. Metall = dunkle Kiste mit Metalletikett, sonst ist die ganze Kiste farbig. */
+/** Kiste im Regal: Klasse und Stil. Metall = dunkle Kiste mit Metalletikett, sonst dunkle Kiste mit Messingetikett
+    und einem Lesezeichen in der Farbe (--kf, Kante --kf-kante). */
 export function kistenAussehen(farbe) {
   const f = String(farbe ?? '').toLowerCase();
   const fest = KISTENFARBEN.find((k) => k.wert === f);
@@ -101,8 +102,7 @@ export function kistenAussehen(farbe) {
   const hell = istHell(hex);
   return {
     klasse: 'regal-ek-messing regal-kiste-farbig',
-    stil: `--kf:${hex};--kf-kante:${mischen(hex, hell ? '#000000' : '#ffffff', 0.22)};`
-      + (hell ? '--kt:#1d1b18;--kt2:rgba(29,27,24,0.72);' : '--kt:#f4ece4;--kt2:rgba(244,236,228,0.72);'),
+    stil: `--kf:${hex};--kf-kante:${mischen(hex, hell ? '#000000' : '#ffffff', 0.22)};`,
   };
 }
 

@@ -109,21 +109,21 @@ function textKiste(k) {
     + (k.wert != null ? `, Wert ${euro(k.wert)}` : '');
 }
 
-/** Eine Kiste in Vorderansicht: oben angedeutete Kartenkanten, davor die Front mit Etikett (dunkel mit
-    Metalletikett oder ganz in der gewählten Farbe). */
+/** Eine Kiste in Vorderansicht: oben angedeutete Kartenkanten, davor die dunkle Front mit Etikett. Metallfarben
+    färben das Etikett, jede andere Farbe zeigt sich als Lesezeichen, das aus den Karten hängt (Wunsch des Nutzers,
+    08.11.2026: vorher war die ganze Kiste farbig). Darunter Karten, Posten und Wert je in einer eigenen Zeile. */
 function kisteHtml(k) {
   const aussehen = kistenAussehen(k.etikettfarbe);
   return `<li class="regal-kistenplatz"><button type="button" class="regal-kiste ${aussehen.klasse}"`
     + ` data-kiste="${k.id}" aria-label="${esc(textKiste(k))}"${aussehen.stil ? ` style="${aussehen.stil}"` : ''}>`
     + '<span class="regal-kiste-kanten" aria-hidden="true"></span>'
+    + '<span class="regal-kiste-band" aria-hidden="true"></span>'
     + '<span class="regal-kiste-front">'
     + `<span class="regal-kiste-etikett"><span class="regal-kiste-name">${esc(k.name)}</span></span>`
     + '<span class="regal-kiste-zahlen etikett">'
     + `<span class="regal-kiste-karten">${esc(mehrzahl(k.karten, 'Karte', 'Karten'))}</span>`
-    + '<span class="regal-kiste-trenner" aria-hidden="true"> · </span>'
     + `<span class="regal-kiste-posten">${esc(mehrzahl(k.posten, 'Posten', 'Posten'))}</span>`
-    + (k.wert != null ? `<span class="regal-kiste-trenner" aria-hidden="true"> · </span><span class="regal-kiste-wert wert">`
-      + `${esc(euro(k.wert, { rund: k.wert >= 100 }))}</span>` : '')
+    + (k.wert != null ? `<span class="regal-kiste-wert wert">${esc(euro(k.wert, { rund: k.wert >= 100 }))}</span>` : '')
     + '</span></span></button></li>';
 }
 

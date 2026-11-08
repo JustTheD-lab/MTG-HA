@@ -446,7 +446,8 @@
   border: 1px solid var(--linie-stark); border-radius: var(--radius-klein); background: var(--flaeche-2);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 -6px 14px rgba(0, 0, 0, 0.35);
 }
-.fachkasten.regal-kiste-farbig .fachkasten-front { border-color: var(--kf-kante); background: var(--kf); }
+/* Farbe der Kiste als Lesezeichen links an der Front (Form in css/regal.css, .regal-kiste-band) */
+.fachkasten-front .regal-kiste-band { top: -4px; left: 18px; height: 34px; }
 .fachkasten-front .regal-kiste-etikett { min-width: 44%; max-width: 100%; text-align: center; }
 
 /* Herausziehen: Das Fach hebt sich, die anderen treten zurück (nur transform und opacity) */

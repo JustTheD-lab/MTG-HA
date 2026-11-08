@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.32.3
+- Regal: Farbige Kisten sind wieder dunkel wie die anderen; die Farbe zeigt ein schmales **Lesezeichen**, das oben aus
+  den Karten hängt (auch vorn an der Kiste mit Fächern). Karten, Posten und Wert stehen je in einer eigenen Zeile,
+  vorher lief die Zeile auf breiten Bildschirmen aus der Kiste.
+
 ## 0.32.2
 - Sortierregeln und Fächer: **einzelne Bedingungen kopieren.** Jede Bedingung hat neben „nicht“ einen eigenen
   Kopierknopf; „Einfügen“ nennt dann die Bedingung („Bedingung „Preis“ aus Fach „Länder“ einfügen“). Der bisherige
