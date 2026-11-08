@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.32.5
+- Regal: Das Lesezeichen der farbigen Kisten ist jetzt ein **Leseband wie in einem alten Buch**: breiter, gerippte
+  Seide mit feinen Querrippen, dunkleren Webkanten und mattem Glanz, knickt über die Oberkante der Kiste und fällt
+  über das Etikett, mit V-Schnitt und goldener Steppnaht.
+
 ## 0.32.4
 - Regal: Das Lesezeichen der farbigen Kisten ist jetzt ein **Stoffband**: breiter, kommt zwischen den Karten heraus und
   fällt bis auf das Etikett, matte Farbe mit feinem Gewebe und goldener Steppnaht an beiden Rändern.

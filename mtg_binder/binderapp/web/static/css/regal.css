@@ -313,15 +313,17 @@
 }
 @media (hover: hover) { .regal-kiste:hover .regal-kiste-front { border-color: var(--messing-dunkel); background: var(--flaeche-3); } }
 
-/* Farbige Kiste: ein Lesezeichen aus Stoff in der Farbe kommt zwischen den Karten heraus und fällt vorn über die
-   Front bis auf das Etikett, mit V-Kerbe am Ende. Stoff: matte Farbe, feines Köpergewebe, Schatten an der Austrittsstelle,
-   goldene Steppnaht an beiden Rändern. Der Schatten sitzt am äußeren Element, Form und Gewebe am inneren
-   (clip-path schnitte sonst den Schatten ab), die Naht liegt darüber. Wunsch des Nutzers, 08.11.2026. */
+/* Farbige Kiste: ein Leseband wie in einem alten Buch kommt zwischen den Karten heraus, knickt über die Oberkante
+   der Front und fällt über das Etikett, mit V-Schnitt am Ende. Stoff: gerippte Seide (feine Querrippen), matter
+   Glanz in der Mitte, dunklere Webkanten, Knickschatten an der Kante der Front, goldene Steppnaht an beiden
+   Rändern (Wunsch des Nutzers, 08./09.11.2026). Der Schatten sitzt am äußeren Element, Form und Gewebe am inneren
+   (clip-path schnitte sonst den Schatten ab), die Naht liegt darüber. */
 .regal-kiste-band { display: none; }
 .regal-kiste-farbig .regal-kiste-band {
-  --band-kerbe: 7px;
-  display: block; position: absolute; z-index: 2; top: 4px; left: 15px; width: 17px; height: 46px; pointer-events: none;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
+  --band-kerbe: 9px;
+  --band-knick: 14px;   /* Abstand von der Oberkante des Bands bis zur Kante der Front (Kanten 18 px, Band ab 4 px) */
+  display: block; position: absolute; z-index: 2; top: 4px; left: 14px; width: 22px; height: 58px; pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)) drop-shadow(1px 3px 4px rgba(0, 0, 0, 0.35));
   /* oben blendet das Band zwischen den Kartenkanten ein */
   -webkit-mask-image: linear-gradient(180deg, transparent, #000 9px);
   mask-image: linear-gradient(180deg, transparent, #000 9px);
@@ -329,30 +331,37 @@
 .regal-kiste-farbig .regal-kiste-band::before,
 .regal-kiste-farbig .regal-kiste-band::after {
   content: ""; position: absolute; inset: 0;
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - var(--band-kerbe)), 0 100%);
 }
 .regal-kiste-farbig .regal-kiste-band::before {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - var(--band-kerbe)), 0 100%);
   background:
-    repeating-linear-gradient(60deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 2.5px),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.08) 0 1px, transparent 1px 2px),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.1)),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.22), transparent 28% 72%, rgba(0, 0, 0, 0.22)),
+    /* Knick über der Kante der Front: Schatten davor, Lichtkante danach */
+    linear-gradient(180deg, transparent calc(var(--band-knick) - 3px), rgba(0, 0, 0, 0.38) var(--band-knick),
+      rgba(255, 255, 255, 0.10) calc(var(--band-knick) + 2px), transparent calc(var(--band-knick) + 6px)),
+    /* gerippte Seide: Querrippen alle 2 px */
+    repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0 1px, rgba(255, 255, 255, 0.04) 1px 2px),
+    /* feine Längsfäden */
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.07) 0 1px, transparent 1px 3px),
+    /* Webkanten dunkler, matter Glanz leicht links der Mitte */
+    linear-gradient(90deg, rgba(0, 0, 0, 0.42) 0 1.5px, rgba(0, 0, 0, 0.16) 1.5px 3px, rgba(255, 255, 255, 0.10) 38%,
+      rgba(255, 255, 255, 0.03) 60%, rgba(0, 0, 0, 0.16) calc(100% - 3px), rgba(0, 0, 0, 0.42) calc(100% - 1.5px)),
+    /* oben dunkler, wo es aus den Karten kommt */
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0) 30%),
     var(--kf);
-  filter: saturate(0.82);
+  filter: saturate(0.8);
 }
-/* Steppnaht: zwei gestrichelte Messinglinien 3 px innen, sie enden vor der Kerbe */
+/* Steppnaht: zwei gestrichelte goldene Linien 4 px innen, sie enden vor dem V-Schnitt */
 .regal-kiste-farbig .regal-kiste-band::after {
-  inset: 0 3px calc(var(--band-kerbe) + 3px);
-  clip-path: none;
+  inset: 2px 4px calc(var(--band-kerbe) + 4px);
   background:
     repeating-linear-gradient(180deg, var(--messing-hell) 0 3px, transparent 3px 5px) left / 1px 100% no-repeat,
     repeating-linear-gradient(180deg, var(--messing-hell) 0 3px, transparent 3px 5px) right / 1px 100% no-repeat;
-  opacity: 0.75;
+  opacity: 0.7;
 }
 /* Das Band liegt auf dem linken Ende des Etiketts: links Platz für das Band, rechts etwas mehr als sonst, damit der
    Name fast mittig bleibt und am Handy nicht unnötig umbricht */
-.regal-kiste-farbig .regal-kiste-etikett { padding-left: 26px; padding-right: 12px; }
-@media (min-width: 700px) { .regal-kiste-farbig .regal-kiste-etikett { padding-right: 26px; } }
+.regal-kiste-farbig .regal-kiste-etikett { padding-left: 32px; padding-right: 6px; }
+@media (min-width: 700px) { .regal-kiste-farbig .regal-kiste-etikett { padding-right: 32px; } }
 
 /* Messing-Etikett mit dem Namen */
 .regal-kiste-etikett {
