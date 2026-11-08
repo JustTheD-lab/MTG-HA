@@ -313,22 +313,46 @@
 }
 @media (hover: hover) { .regal-kiste:hover .regal-kiste-front { border-color: var(--messing-dunkel); background: var(--flaeche-3); } }
 
-/* Farbige Kiste: ein Lesezeichen in der Farbe hängt oben aus den Karten über die Front, mit V-Kerbe am Ende.
-   Der Schatten sitzt am äußeren Element, die Form am inneren (clip-path schnitte sonst den Schatten ab). */
+/* Farbige Kiste: ein Lesezeichen aus Stoff in der Farbe kommt zwischen den Karten heraus und fällt vorn über die
+   Front bis auf das Etikett, mit V-Kerbe am Ende. Stoff: matte Farbe, feines Köpergewebe, Schatten an der Austrittsstelle,
+   goldene Steppnaht an beiden Rändern. Der Schatten sitzt am äußeren Element, Form und Gewebe am inneren
+   (clip-path schnitte sonst den Schatten ab), die Naht liegt darüber. Wunsch des Nutzers, 08.11.2026. */
 .regal-kiste-band { display: none; }
 .regal-kiste-farbig .regal-kiste-band {
-  display: block; position: absolute; z-index: 2; top: -6px; left: 18px; width: 12px; height: 36px; pointer-events: none;
-  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.55));
+  --band-kerbe: 7px;
+  display: block; position: absolute; z-index: 2; top: 4px; left: 15px; width: 17px; height: 46px; pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
+  /* oben blendet das Band zwischen den Kartenkanten ein */
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 9px);
+  mask-image: linear-gradient(180deg, transparent, #000 9px);
+}
+.regal-kiste-farbig .regal-kiste-band::before,
+.regal-kiste-farbig .regal-kiste-band::after {
+  content: ""; position: absolute; inset: 0;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - var(--band-kerbe)), 0 100%);
 }
 .regal-kiste-farbig .regal-kiste-band::before {
-  content: ""; position: absolute; inset: 0;
   background:
-    linear-gradient(90deg, var(--kf-kante) 0 1px, rgba(0, 0, 0, 0.14) 1px 3px, transparent 3px calc(100% - 3px),
-      rgba(0, 0, 0, 0.14) calc(100% - 3px) calc(100% - 1px), var(--kf-kante) calc(100% - 1px)),
+    repeating-linear-gradient(60deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 2.5px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.08) 0 1px, transparent 1px 2px),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.1)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.22), transparent 28% 72%, rgba(0, 0, 0, 0.22)),
     var(--kf);
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 6px), 0 100%);
+  filter: saturate(0.82);
 }
-/* Das Band endet knapp über dem Etikett: Kanten 18 px + Abstand der Front 14 px, Band ab -6 px */
+/* Steppnaht: zwei gestrichelte Messinglinien 3 px innen, sie enden vor der Kerbe */
+.regal-kiste-farbig .regal-kiste-band::after {
+  inset: 0 3px calc(var(--band-kerbe) + 3px);
+  clip-path: none;
+  background:
+    repeating-linear-gradient(180deg, var(--messing-hell) 0 3px, transparent 3px 5px) left / 1px 100% no-repeat,
+    repeating-linear-gradient(180deg, var(--messing-hell) 0 3px, transparent 3px 5px) right / 1px 100% no-repeat;
+  opacity: 0.75;
+}
+/* Das Band liegt auf dem linken Ende des Etiketts: links Platz für das Band, rechts etwas mehr als sonst, damit der
+   Name fast mittig bleibt und am Handy nicht unnötig umbricht */
+.regal-kiste-farbig .regal-kiste-etikett { padding-left: 26px; padding-right: 12px; }
+@media (min-width: 700px) { .regal-kiste-farbig .regal-kiste-etikett { padding-right: 26px; } }
 
 /* Messing-Etikett mit dem Namen */
 .regal-kiste-etikett {

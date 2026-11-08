@@ -1,5 +1,9 @@
 # Änderungen
 
+## 0.32.4
+- Regal: Das Lesezeichen der farbigen Kisten ist jetzt ein **Stoffband**: breiter, kommt zwischen den Karten heraus und
+  fällt bis auf das Etikett, matte Farbe mit feinem Gewebe und goldener Steppnaht an beiden Rändern.
+
 ## 0.32.3
 - Regal: Farbige Kisten sind wieder dunkel wie die anderen; die Farbe zeigt ein schmales **Lesezeichen**, das oben aus
   den Karten hängt (auch vorn an der Kiste mit Fächern). Karten, Posten und Wert stehen je in einer eigenen Zeile,
