@@ -49,7 +49,7 @@
 }
 .regeln-aktionen { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px;
   padding-top: 8px; border-top: 1px solid var(--linie); }
-.regeln-aktionen-rechts { display: flex; gap: 6px; }
+.regeln-aktionen-rechts { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* Schalter an/aus */
 .regeln-schalter {
@@ -84,7 +84,9 @@
 .regeln-bed-kopf { display: flex; align-items: center; gap: 8px; }
 .regeln-bed-feld { flex: 1; min-width: 0; }
 .regeln-bed-koerper { display: grid; gap: 8px; }
-.regeln-bed-neu { margin-top: 10px; }
+.regeln-bed-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.regeln-bed-status { margin: 6px 0 0; }
+.regeln-bed-status:empty, .regeln-status:empty { display: none; }
 .regeln-bed-leer { margin-top: 8px; }
 .regeln-pillen { display: flex; flex-wrap: wrap; gap: 6px; }
 .regeln-pille { min-height: 40px; padding: 0 0.9em; font-size: 0.9rem; }

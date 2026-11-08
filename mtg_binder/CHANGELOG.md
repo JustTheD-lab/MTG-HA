@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.32.0
+- Sortierregeln und Fächer: **Bedingungen kopieren und einfügen.** An jeder Regel und in jedem Bedingungs-Editor
+  (Regel bearbeiten, Fächer einer Kiste) gibt es „Kopieren“; „Einfügen“ hängt die kopierten Bedingungen in jeder
+  anderen Regel oder jedem Fach an, auch in einer anderen Kiste. Gespeichert wird erst mit „Speichern“; die Ablage
+  hält bis zum Neuladen der Seite.
+
 ## 0.31.2
 - Behoben: Von Hand hinzugefügte Karten zeigten kein Bild, solange der PC noch kein Vorschaubild geliefert hat. Der
   Lesetisch nimmt dann das Bild direkt von Scryfall (das kannte er bisher gar nicht). Die Kistenansicht konnte das

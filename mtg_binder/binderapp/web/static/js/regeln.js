@@ -3,6 +3,8 @@
 // Die Regeln gelten von oben nach unten, die erste passende bestimmt die Kiste. Passt keine, bleibt die Karte im
 // Scan-Eingang. Die Seite zeigt die Regeln als Karten „Wenn … → Kiste“ (ein-/ausschalten, Reihenfolge, Bearbeiten,
 // Löschen) und eine Probe: eine Karte der Sammlung wählen und sehen, welche Regel für sie greift und warum.
+// Bedingungen lassen sich kopieren (an der Regelkarte und in jedem Editor) und in jedem Editor einfügen, auch in den
+// Fächern einer Kiste (Wunsch des Nutzers, 08.11.2026).
 //
 // Weitere Ausgänge für andere Ansichten:
 //   bedingungenEditor(container, beschreibung, bedingungen, { leerText }) → { werte(), hinzufuegen() }
@@ -25,10 +27,26 @@ const SYM = {
   kreuz: sym('<path d="M6 6l12 12M18 6L6 18"/>'),
   hoch: sym('<path d="M12 19V6M6 12l6-6 6 6"/>'),
   runter: sym('<path d="M12 5v13M6 12l6 6 6-6"/>'),
+  kopieren: sym('<rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a1 1 0 0 1 1-1h9"/>'),
+  einfuegen: sym('<rect x="5" y="5" width="14" height="15" rx="2"/><path d="M9 5V3.5h6V5M9 11h6M9 15h4"/>'),
 };
 
 let Z = null;          // Zustand der gerade gezeigten Seite
 let zaehler = 0;       // für eindeutige Namen von Auswahlgruppen
+
+// ---------------------------------------------------------------- Ablage für Bedingungen
+//
+// „Bedingungen kopieren“ legt die Bedingungen einer Regel oder eines Fachs hier ab, „Bedingungen einfügen“ hängt sie in
+// jedem Editor an (Regeln, Fächer jeder Kiste). Die Ablage lebt nur bis zum Neuladen der Seite; sie schreibt nichts.
+
+let ablage = null;     // { quelle, bedingungen } oder null
+
+const anzahlText = (n) => `${n} ${n === 1 ? 'Bedingung' : 'Bedingungen'}`;
+
+function ablageSetzen(bedingungen, quelle) {
+  ablage = bedingungen.length ? { quelle, bedingungen: JSON.parse(JSON.stringify(bedingungen)) } : null;
+  window.dispatchEvent(new CustomEvent('binder:ablage'));
+}
 
 function el(tag, klasse, html) {
   const e = document.createElement(tag);
@@ -198,14 +216,36 @@ const BAUER = {
   },
 };
 
-/** Baut den Editor in `container`. `bedingungen` im Format der Schnittstelle (leer = keine). */
-export function bedingungenEditor(container, beschreibung, bedingungen = [], { leerText = 'Keine Bedingung: Das passt immer.' } = {}) {
+/** Baut den Editor in `container`. `bedingungen` im Format der Schnittstelle (leer = keine).
+    `quelle()` nennt beim Kopieren, woher die Bedingungen stammen (z. B. „Fach „Länder““). */
+export function bedingungenEditor(container, beschreibung, bedingungen = [],
+  { leerText = 'Keine Bedingung: Das passt immer.', quelle = () => 'diesem Editor' } = {}) {
   const felder = beschreibung.felder;
   const liste = el('div', 'regeln-bed-liste');
   const leer = el('p', 'regeln-hinweis regeln-bed-leer', esc(leerText));
+  const knoepfe = el('div', 'regeln-bed-knoepfe');
   const neu = knopfEl('knopf regeln-bed-neu', `${SYM.plus}<span>Bedingung hinzufügen</span>`);
-  container.append(liste, leer, neu);
+  const kopieren = knopfEl('knopf regeln-bed-kopieren', `${SYM.kopieren}<span>Kopieren</span>`);
+  kopieren.title = 'Bedingungen kopieren, um sie in eine andere Regel oder ein Fach einzufügen';
+  const einfuegen = knopfEl('knopf regeln-bed-einfuegen', `${SYM.einfuegen}<span>Einfügen</span>`);
+  const status = el('p', 'regeln-hinweis regeln-bed-status');
+  status.setAttribute('role', 'status');
+  knoepfe.append(neu, kopieren, einfuegen);
+  container.append(liste, leer, knoepfe, status);
   const zeilen = [];
+
+  const ablageZeigen = () => {
+    einfuegen.hidden = !ablage;
+    if (!ablage) return;
+    einfuegen.setAttribute('aria-label', `${anzahlText(ablage.bedingungen.length)} aus ${ablage.quelle} einfügen`);
+    einfuegen.title = `${anzahlText(ablage.bedingungen.length)} aus ${ablage.quelle} einfügen`;
+  };
+  // Der Editor hört auf neue Ablagen (anderes Fach im selben Dialog). Ist er nicht mehr im Dokument, meldet er sich ab.
+  const aufAblage = () => {
+    if (!container.isConnected) { window.removeEventListener('binder:ablage', aufAblage); return; }
+    ablageZeigen();
+  };
+  window.addEventListener('binder:ablage', aufAblage);
 
   const nummerieren = () => {
     zeilen.forEach((z, i) => {
@@ -214,6 +254,7 @@ export function bedingungenEditor(container, beschreibung, bedingungen = [], { l
       z.weg.setAttribute('aria-label', `Bedingung ${i + 1} entfernen`);
     });
     leer.hidden = zeilen.length > 0;
+    kopieren.disabled = zeilen.length === 0;
   };
 
   function hinzufuegen(start = null) {
@@ -250,14 +291,29 @@ export function bedingungenEditor(container, beschreibung, bedingungen = [], { l
     return z;
   }
 
-  neu.addEventListener('click', () => hinzufuegen().wahl.focus());
+  const werte = () => zeilen.map((z) => ({ feld: z.wahl.value, ...z.lesen(), ...(an(z.nicht) ? { nicht: true } : {}) }));
+
+  neu.addEventListener('click', () => { status.textContent = ''; hinzufuegen().wahl.focus(); });
+  kopieren.addEventListener('click', () => {
+    const w = werte();
+    if (!w.length) return;
+    ablageSetzen(w, quelle());
+    status.textContent = `${anzahlText(w.length)} kopiert. Einfügen geht in jeder Regel und in den Fächern jeder Kiste.`;
+  });
+  einfuegen.addEventListener('click', () => {
+    if (!ablage) return;
+    const passend = ablage.bedingungen.filter((b) => felder[b.feld]);
+    const erste = passend.map((b) => hinzufuegen(b))[0];
+    const fehlt = ablage.bedingungen.length - passend.length;
+    status.textContent = `${anzahlText(passend.length)} eingefügt.`
+      + (fehlt ? ` ${anzahlText(fehlt)} mit unbekanntem Feld ${fehlt === 1 ? 'ließ' : 'ließen'} sich nicht einfügen.` : '');
+    erste?.wahl.focus();
+  });
   for (const b of bedingungen) { if (felder[b.feld]) hinzufuegen(b); }
   nummerieren();
+  ablageZeigen();
 
-  return {
-    hinzufuegen,
-    werte: () => zeilen.map((z) => ({ feld: z.wahl.value, ...z.lesen(), ...(an(z.nicht) ? { nicht: true } : {}) })),
-  };
+  return { hinzufuegen, werte };
 }
 
 // ---------------------------------------------------------------- Seite „Sortierregeln“
@@ -290,6 +346,8 @@ function regelHtml(r, i, gesamt, schreiben) {
       + '<span class="regeln-aktionen-rechts">'
       + `<button type="button" class="knopf knopf-sym" data-aktion="hoch" aria-label="Regel „${name}“ nach oben"${i === 0 ? ' disabled' : ''}>${SYM.hoch}</button>`
       + `<button type="button" class="knopf knopf-sym" data-aktion="runter" aria-label="Regel „${name}“ nach unten"${i === gesamt - 1 ? ' disabled' : ''}>${SYM.runter}</button>`
+      + `<button type="button" class="knopf knopf-sym" data-aktion="kopieren" aria-label="Bedingungen der Regel „${name}“ kopieren"`
+      + ` title="Bedingungen kopieren"${r.gueltig && r.bedingungen.length ? '' : ' disabled'}>${SYM.kopieren}</button>`
       + `<button type="button" class="knopf knopf-sym" data-aktion="bearbeiten" aria-label="Regel „${name}“ bearbeiten">${SYM.stift}</button>`
       + `<button type="button" class="knopf knopf-sym" data-aktion="loeschen" aria-label="Regel „${name}“ löschen">${SYM.muell}</button>`
       + '</span></div>'
@@ -403,7 +461,8 @@ async function regelDialog(regel) {
     if (regel?.kiste_id && kisten.some((k) => k.id === regel.kiste_id)) kiste.value = String(regel.kiste_id);
   }
   const editor = bedingungenEditor(form.querySelector('.regeln-bed-platz'), beschreibung, regel?.gueltig ? regel.bedingungen : [],
-    { leerText: 'Keine Bedingung: Die Regel passt auf jede Karte.' });
+    { leerText: 'Keine Bedingung: Die Regel passt auf jede Karte.',
+      quelle: () => (name.value.trim() ? `Regel „${name.value.trim()}“` : 'einer neuen Regel') });
 
   const d = dialog({ titel: regel ? 'Regel bearbeiten' : 'Neue Regel', klasse: 'regeln-dialog', inhalt: form, voll: true });
   const abbrechen = knopfEl('knopf', 'Abbrechen');
@@ -512,6 +571,7 @@ export async function zeigen(wurzel) {
     + '<h1 class="regeln-titel">Sortierregeln</h1><div class="regeln-anmelden"></div></header>'
     + '<p class="regeln-erklaerung">Von oben nach unten: Die erste passende Regel bestimmt die Kiste. Passt keine, bleibt die Karte im Scan-Eingang.</p>'
     + '<p class="meldung regeln-meldung" role="alert"></p>'
+    + '<p class="regeln-hinweis regeln-status" role="status"></p>'
     + '<div class="regeln-inhalt"></div>';
   wurzel.replaceChildren(bereich);
   bereich.querySelector('.regeln-zurueck').addEventListener('click', () => zurueck('#/'));
@@ -546,7 +606,7 @@ export async function zeigen(wurzel) {
     + '<div class="regeln-ergebnis" aria-live="polite"></div></section>';
 
   const z = {
-    daten, bereich, meldung: meldungEl, liste: inhalt.querySelector('.regeln-liste'), leer: inhalt.querySelector('.regeln-leer'),
+    daten, bereich, meldung: meldungEl, status: bereich.querySelector('.regeln-status'), liste: inhalt.querySelector('.regeln-liste'), leer: inhalt.querySelector('.regeln-leer'),
     neueRegel: inhalt.querySelector('.regeln-neu'), suche: inhalt.querySelector('#regeln-suche'),
     treffer: inhalt.querySelector('#regeln-treffer'), trefferStatus: inhalt.querySelector('#regeln-treffer-status'),
     ergebnis: inhalt.querySelector('.regeln-ergebnis'), suchlauf: 0, trefferListe: [], probeKarte: null, uhr: 0,
@@ -570,6 +630,11 @@ export async function zeigen(wurzel) {
     if (aktion === 'schalter') await aktivSchalten(r);
     else if (aktion === 'hoch') await verschieben(r, -1);
     else if (aktion === 'runter') await verschieben(r, 1);
+    else if (aktion === 'kopieren') {
+      ablageSetzen(r.bedingungen, `Regel „${r.name}“`);
+      z.status.textContent = `${anzahlText(r.bedingungen.length)} der Regel „${r.name}“ kopiert. `
+        + 'Einfügen geht beim Bearbeiten jeder Regel und in den Fächern jeder Kiste.';
+    }
     else if (aktion === 'bearbeiten') { if (await regelDialog(r)) await nachladen({ id: r.id, aktion: 'bearbeiten' }); }
     else if (aktion === 'loeschen') await loeschen(r);
   });
@@ -660,7 +725,8 @@ export async function faecherBearbeiten(kisteId, kisteName) {
     }
     li.append(platz);
     const editor = bedingungenEditor(platz, beschreibung, start?.bedingungen ?? [],
-      { leerText: 'Keine Bedingung: Das Fach nimmt den Rest auf.' });
+      { leerText: 'Keine Bedingung: Das Fach nimmt den Rest auf.',
+        quelle: () => `Fach „${name.value.trim() || 'ohne Namen'}“ (Kiste „${kisteName}“)` });
     const f = { li, nr, name, hoch, runter, weg, editor };
     hoch.addEventListener('click', () => bewegen(f, -1, 'hoch'));
     runter.addEventListener('click', () => bewegen(f, 1, 'runter'));
