@@ -124,19 +124,29 @@ gehört, zum Beispiel „Preis (Ø 7 Tage) ab 5 € → Spezial“ oder „Farbe
 
 ## Secret Lair
 
-Der Knopf **„Secret Lair“** oben rechts unter **„Sets“** zeigt kommende Drops und die der letzten 12 Monate. Die Werte sind
-Summen aus Cardmarket (Ø 7 Tage, sonst Low, ohne Foil) und keine Kaufempfehlung.
+Der Knopf **„Secret Lair“** oben rechts unter **„Sets“** zeigt kommende Drops und alle seit 2019, nach Jahr gegliedert.
+Filter oben: Suche nach Namen, Jahr, kommend oder bereits im Verkauf, Wunsch, Schnäppchen, „Besitze ich“. Der
+Umschalter **Nicht-Foil/Foil** wählt die Ausführung aller Zahlen (das Gerät merkt sich die Wahl). Die Werte sind Summen
+aus Cardmarket (Ø 7 Tage, sonst Low) und keine Kaufempfehlung.
 
-- **Teuerste Reprints:** je Karte der teuerste andere Nonfoil-Druck, zusammengezählt. **Günstigste Reprints** entsprechend.
-- **Drucke einzeln bei Cardmarket:** die Secret-Lair-Drucke des Drops zusammen (Ø 7 Tage, sonst Low, ohne Foil und
+- **Teuerste Reprints:** je Karte der teuerste andere Druck in der gewählten Ausführung, zusammengezählt.
+  **Günstigste Reprints** entsprechend.
+- **Drucke einzeln bei Cardmarket:** die Secret-Lair-Drucke des Drops zusammen (Ø 7 Tage, sonst Low, ohne
   Bonuskarten), sobald sie bei Cardmarket einen Preis haben; „5 von 6 Karten“, wenn noch nicht alle einen haben.
+- **Schnäppchen −NN %:** Der ganze Drop kostet bei Cardmarket ab höchstens 80 % seiner Drucke einzeln (gleiche
+  Ausführung). Die Schwelle stellst du oben ein. Hat nicht jede Karte einen Preis, gibt es nie ein Schnäppchen.
+- **Eigene Secret Lairs:** Auf der Seite eines Drops trägst du unter „Meine Käufe“ jeden Kauf ein (Nicht-Foil oder
+  Foil, Anzahl, Preis je Stück, Kaufdatum, wenn bekannt), mit Ändern, Löschen und Rückgängig. Der heutige Wert ist der
+  ganze Drop bei Cardmarket in der gekauften Ausführung (Trend, sonst ab), sonst die Summe der Drucke einzeln; die
+  Grundlage steht dabei. Oben in der Ansicht steht die Summe aller eigenen Drops mit Gewinn oder Verlust, dazu eine
+  Kachel im Dashboard. Ein Kauf ohne Preis hat keinen Wert und zählt beim Gewinn nicht mit.
 - **Drop bei Cardmarket:** der ganze Drop als Produkt bei Cardmarket (ab und Trend, auch Foil), auf der Seite des
   Drops beide Fassungen (mit und ohne „Set“) mit Link.
 - **Basic Lands** zählen nur gegen andere Secret Lairs, sonst stünden Sammlerdrucke im Vergleich.
 - **Bilder:** Ein Drop zeigt je Karte die Secret-Lair-Fassung und beide Reprints. Sie kommen direkt von Scryfall, ein
   Tipp vergrößert sie.
-- **Kosten:** Oben stellst du ein, was ein Drop dich mit Versand kostet; je Drop lässt sich das ändern. Wizards nennt
-  nur Dollarpreise.
+- **Kosten:** Oben stellst du ein, was ein Drop dich mit Versand kostet, für Nicht-Foil und Foil getrennt; je Drop lässt
+  sich das ändern. Wizards nennt nur Dollarpreise.
 
 Das Add-on gleicht einmal täglich ab und braucht dafür den Kartenkatalog. **Kurz vor dem Verkauf ist die Liste oft
 unvollständig:** Scryfall kennt dann nur einen Teil der Karten und keinen Namen des Drops. Die App gruppiert die Karten
@@ -144,8 +154,8 @@ dann nach Tag und Nummer, nebeneinanderliegende Drops können dabei verschmelzen
 Verkaufstag und die Karten aus der Ankündigung von Wizards ein, je Zeile eine, gern mit „2x“ oder einem Zusatz wie
 `Eerie Interlude as "Beam Us Up"`. Sobald Scryfall die Drucke kennt, verbindet die App sie.
 
-Die Preise dieser Drops speichert das Add-on täglich, auch wenn du die Karten nicht besitzt. Nach einigen Tagen zeigt ein
-Drop darum seinen Verlauf seit dem Verkauf.
+Die Preise der Drops der letzten 12 Monate und deiner eigenen Drops speichert das Add-on täglich, auch wenn du die
+Karten nicht besitzt. Nach einigen Tagen zeigt ein Drop darum seinen Verlauf seit dem Verkauf.
 
 ## Proxys drucken
 

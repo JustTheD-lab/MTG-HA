@@ -345,7 +345,8 @@ CREATE TABLE IF NOT EXISTS dienst (
 );
 
 -- Secret-Lair-Drops (ab Version 12, secretlair/drops.py): keine Sammlung, sondern Marktdaten, deshalb ohne Historie.
--- Die App bewertet Drops der letzten 12 Monate und kommende; ihre Preise landen zusätzlich im Verlauf `preis`.
+-- Die App bewertet alle Drops seit 2019 (ab Version 18, vorher 12 Monate); die Preise der Drops der letzten 12 Monate
+-- und der eigenen Drops landen zusätzlich im Verlauf `preis`.
 CREATE TABLE IF NOT EXISTS secret_drop (
     id         INTEGER PRIMARY KEY,
     schluessel TEXT NOT NULL UNIQUE,       -- wiki:<Name>, mtgjson:<Name>, scryfall:<Tag>:<erste Nummer>, hand:<Kennung>
@@ -357,6 +358,8 @@ CREATE TABLE IF NOT EXISTS secret_drop (
     -- ab Version 15 (Wunsch des Nutzers, 09.11.2026)
     datum_eigen INTEGER NOT NULL DEFAULT 0 CHECK (datum_eigen IN (0, 1)),   -- Verkaufstag vom Nutzer: der Abgleich lässt ihn
     wunsch     INTEGER NOT NULL DEFAULT 0 CHECK (wunsch IN (0, 1)),   -- der Nutzer möchte ihn kaufen (Home Assistant erinnert)
+    -- ab Version 18: eigene Kosten dieses Drops in Foil, NULL = Standard für Foil
+    kosten_foil REAL,
     angelegt   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
 );
 
@@ -381,7 +384,17 @@ CREATE TABLE IF NOT EXISTS secret_karte (
     guenstig_id   TEXT,
     guenstig_nummer TEXT,
     -- ab Version 16: Bonuskarte oder Promo des Drops (zählt nicht zu seinem Wert)
-    bonus         INTEGER NOT NULL DEFAULT 0 CHECK (bonus IN (0, 1))
+    bonus         INTEGER NOT NULL DEFAULT 0 CHECK (bonus IN (0, 1)),
+    -- ab Version 18 (Wunsch des Nutzers, 09.11.2026): dasselbe für Foil (Ø 7 Tage Foil, sonst ab Foil)
+    preis_foil    REAL,
+    teuer_foil    REAL,
+    teuer_foil_set TEXT,
+    teuer_foil_nummer TEXT,
+    teuer_foil_id TEXT,
+    guenstig_foil REAL,
+    guenstig_foil_set TEXT,
+    guenstig_foil_nummer TEXT,
+    guenstig_foil_id TEXT
 );
 
 -- ab Version 17 (Wunsch des Nutzers, 09.11.2026): der Drop als Cardmarket-Produkt, mit und ohne Endung „Set“
@@ -398,14 +411,31 @@ CREATE TABLE IF NOT EXISTS secret_produkt (
     UNIQUE (drop_id, cardmarket_id)
 );
 
+-- ab Version 18 (Wunsch des Nutzers, 09.11.2026): eigene Secret Lairs. Nutzerdaten, darum mit Historie (Rückgängig
+-- über schritte.py). Kein ON DELETE CASCADE: Ein Drop mit Käufen lässt sich nicht löschen; der Abgleich hängt Käufe
+-- vorher an den Drop mit den meisten gleichen Drucken um oder behält den alten Drop.
+CREATE TABLE IF NOT EXISTS secret_kauf (
+    id         INTEGER PRIMARY KEY,
+    nutzer_id  INTEGER NOT NULL REFERENCES nutzer(id),
+    drop_id    INTEGER NOT NULL REFERENCES secret_drop(id),
+    foil       INTEGER NOT NULL DEFAULT 0 CHECK (foil IN (0, 1)),
+    anzahl     INTEGER NOT NULL DEFAULT 1 CHECK (anzahl >= 1),
+    preis      REAL NOT NULL CHECK (preis >= 0),   -- Kaufpreis je Stück in Euro
+    datum      TEXT,                               -- Kaufdatum JJJJ-MM-TT, darf fehlen
+    angelegt   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    geaendert  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS secret_wert (
-    name  TEXT PRIMARY KEY,                -- kosten (Standard in Euro), abgleich, bewertet, fehler, uhrzeit,
+    name  TEXT PRIMARY KEY,                -- kosten, kosten_foil (Standard in Euro), schnaeppchen (Schwelle in Prozent),
+                                           -- abgleich, bewertet, fehler, uhrzeit,
                                            -- wiki, wiki_stand, cm_produkte (gemerkte Quellen)
     wert  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS i_secret_karte_drop ON secret_karte(drop_id);
 CREATE INDEX IF NOT EXISTS i_secret_produkt_drop ON secret_produkt(drop_id);
+CREATE INDEX IF NOT EXISTS i_secret_kauf_drop ON secret_kauf(drop_id);
 CREATE INDEX IF NOT EXISTS i_seite_binder   ON seite(binder_id, nummer);
 CREATE INDEX IF NOT EXISTS i_tasche_seite   ON tasche(seite_id);
 CREATE INDEX IF NOT EXISTS i_karte_tasche   ON karte(tasche_id);
@@ -445,4 +475,4 @@ CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 -- ab Version 14: Ausschnitt je Scan-Foto
 CREATE INDEX IF NOT EXISTS i_scan_foto_karte  ON scan_foto(karte_id);
 
-PRAGMA user_version = 17;
+PRAGMA user_version = 18;

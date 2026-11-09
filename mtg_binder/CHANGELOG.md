@@ -1,5 +1,22 @@
 # Änderungen
 
+## 0.36.0
+- Secret Lair: **Umschalter Nicht-Foil/Foil** oben in der Ansicht (merkt sich das Gerät). Alle Zahlen zeigen dann die
+  gewählte Ausführung: Drucke einzeln, teuerste und günstigste Reprints, ganzer Drop bei Cardmarket, Faktor,
+  Schnäppchen. Für Foil gibt es eigene Kosten je Drop.
+- Secret Lair: **alle Drops seit 2019** statt nur der letzten 12 Monate, nach Jahr gegliedert, mit Filtern: Suche nach
+  Namen, Jahr, kommend oder bereits im Verkauf, Wunsch, Schnäppchen, „Besitze ich“. Den täglichen Preisverlauf speichert
+  das Add-on weiter nur für Drops der letzten 12 Monate und für eigene.
+- Secret Lair: **Schnäppchen.** Kostet der ganze Drop bei Cardmarket ab höchstens 80 % seiner Drucke einzeln (gleiche
+  Ausführung), steht „Schnäppchen −NN %“ in der Liste und auf der Seite des Drops. Die Schwelle ist einstellbar. Hat
+  nicht jede Karte des Drops einen Preis, gibt es kein Schnäppchen.
+- Secret Lair: **eigene Secret Lairs.** Auf der Seite eines Drops trägst du Käufe ein (Ausführung, Anzahl, Preis je
+  Stück, Kaufdatum), auch mehrere, mit Rückgängig. Die App zeigt je Kauf und je Drop Kaufpreis, heutigen Wert und
+  Gewinn oder Verlust in Euro und Prozent, oben in der Ansicht die Summe aller eigenen Drops und im Dashboard eine
+  Kachel. Der Wert ist der ganze Drop bei Cardmarket (Trend, sonst ab), sonst die Drucke einzeln; die Grundlage steht
+  dabei. Der Abgleich verliert keinen Kauf.
+- Datenbank Version 18 (wird beim Start automatisch umgestellt). Nach dem Update gleicht das Add-on einmal neu ab.
+
 ## 0.35.2
 - Secret Lair: Was die Drucke eines Drops einzeln bei Cardmarket zusammen kosten, heißt jetzt **„Drucke einzeln bei
   Cardmarket“** (vorher „Dieser Drop heute“) und steht auf der Seite des Drops auch im Abschnitt „Bei Cardmarket“

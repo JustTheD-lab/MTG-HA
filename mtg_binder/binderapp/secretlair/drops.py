@@ -17,8 +17,9 @@ Quellen und was sie taugen (gemessen am Star-Trek-Drop, vier Tage vor dem Verkau
 - **Von Hand:** Der Nutzer fügt die Kartenliste aus der Ankündigung von Wizards ein. Sobald der Katalog die Drucke
   kennt, verbindet der Abgleich sie, und sie verschwinden aus den automatischen Gruppen.
 
-Bewertung je Karte aus der Preisdatei des Tages (Ø 7 Tage, sonst Low, nur Nonfoil):
-- `teuer`: teuerster anderer Druck derselben Karte (Wunsch des Nutzers), `guenstig`: günstigster.
+Bewertung je Karte aus der Preisdatei des Tages (Ø 7 Tage, sonst Low), ab Version 18 für Nicht-Foil und Foil getrennt:
+- `teuer`: teuerster anderer Druck derselben Karte (Wunsch des Nutzers), `guenstig`: günstigster; Foil-Werte in den
+  Spalten `*_foil` aus den Foil-Preisen (ein Druck ohne Foil-Preis zählt dort nicht).
 - Basic Lands zählen nur gegen andere Secret Lairs: Sammlerdrucke wie Guru-Länder ergäben keinen sinnvollen Vergleich.
 - Sets der Art `memorabilia` (zum Beispiel Weltmeisterschaftsdecks) zählen nicht, das sind keine spielbaren Drucke.
 
@@ -29,6 +30,12 @@ Bewertung je Karte aus der Preisdatei des Tages (Ø 7 Tage, sonst Low, nur Nonfo
 Verkaufsbeginn (Wunsch des Nutzers, 09.11.2026): Tag des Drops plus eine Uhrzeit für alle Drops (Einstellung,
 Standard 17:00 Ortszeit). Den Tag kann der Nutzer je Drop ändern (`datum_eigen`), der Abgleich lässt ihn dann.
 Drops mit `wunsch` möchte der Nutzer kaufen; Home Assistant bekommt den Beginn des nächsten als Zeitstempel.
+
+Ab Version 18 (Wunsch des Nutzers, 09.11.2026): alle Drops seit 2019; der tägliche Preisverlauf nur für Drops der
+letzten 12 Monate und eigene (`abruf.sammlung_ids`). Schnäppchen: der ganze Drop bei Cardmarket mit ab-Preis höchstens
+`schnaeppchen` Prozent (Standard 80) der Summe seiner Drucke einzeln, gleiche Ausführung, nur wenn alle Drucke ohne
+Bonuskarten einen Preis haben. Eigene Secret Lairs (`secret_kauf`, Nutzerdaten mit Historie): je Kauf Ausführung,
+Anzahl, Preis je Stück, Kaufdatum; Wert heute = ganzer Drop bei Cardmarket (Trend, sonst ab), sonst Summe der Drucke.
 """
 from __future__ import annotations
 
@@ -43,19 +50,23 @@ from contextlib import closing
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
+from binderapp.db import schritte
 from binderapp.db.datenbank import schreiben, verbinden, version
 from binderapp.katalog.suche import normalisiere
 from binderapp.preise import abruf
 from binderapp.secretlair import cardmarket, wiki
 
 MTGJSON = "https://mtgjson.com/api/v5/SLD.json"
-FENSTER_TAGE = 365     # Antwort des Nutzers: Drops der letzten 12 Monate
+BEGINN = "2019-01-01"  # Antwort des Nutzers (09.11.2026): alle Drops seit 2019 (vorher 12 Monate)
+VERLAUF_TAGE = 365     # täglicher Preisverlauf nur für Drops der letzten 12 Monate (und eigene)
+SCHNAEPPCHEN = 80      # Standard: ganzer Drop höchstens so viel Prozent der Drucke einzeln
+QUELLE_ABGLEICH = "secretlair"   # Historie: Käufe, die der Abgleich an einen anderen Drop hängt
 ALT = 20 * 3600        # ab diesem Alter wird neu abgeglichen
 # Fassung des Abgleichs: erhöhen, wenn er neue Quellen oder Regeln bekommt. Ist die gespeicherte älter, gleicht der
 # Thread nach dem Start sofort ab, statt bis zu 20 Stunden zu warten (Befund 09.11.2026: nach dem Update auf 0.35.0
 # hatte kein Drop ein Cardmarket-Produkt, weil der Katalog erst beim nächsten Abgleich geladen worden wäre).
 # 2: MTG Wiki, Bonuskarten (0.34.0); 3: Cardmarket-Produkte (0.35.0)
-FASSUNG = 3
+FASSUNG = 4
 TAKT = 3600
 ZEIT = 120             # Sekunden für den Download
 NAME_MAX = 80
@@ -221,9 +232,28 @@ def _start(g: dict, drucke: dict) -> str:
     return g.get("tag") or min(tage)
 
 
+def _mit_kaeufen(con) -> set[int]:
+    if version(con) < 18:
+        return set()
+    return {z[0] for z in con.execute("SELECT DISTINCT drop_id FROM secret_kauf")}
+
+
+def kaeufe_umhaengen(con, von: int, nach: int) -> int:
+    """Hängt alle Käufe eines Drops an einen anderen (in der Transaktion des Aufrufers), mit Historie."""
+    schritt = schritte.neuer_schritt()
+    zeilen = con.execute("SELECT id, nutzer_id FROM secret_kauf WHERE drop_id = ?", (von,)).fetchall()
+    for z in zeilen:
+        schritte.aendern_genau(con, z["nutzer_id"], "secret_kauf", z["id"], {"drop_id": nach}, schritt=schritt,
+                               quelle=QUELLE_ABGLEICH)
+    return len(zeilen)
+
+
 def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int]) -> None:
     """Gleicht die automatischen Drops ab. Ein Drop behält Name vom Nutzer und Kosten, auch wenn er seinen Schlüssel
-    wechselt, zum Beispiel wenn MTGJSON den Namen nachliefert."""
+    wechselt, zum Beispiel wenn MTGJSON den Namen nachliefert.
+
+    Käufe gehen nie verloren (Antwort des Nutzers, 09.11.2026): Fällt ein Drop mit Käufen weg, wandern sie zum neuen
+    Drop mit den meisten gleichen Drucken; teilt keiner einen Druck mit ihm, bleibt der alte Drop stehen."""
     alt = {}
     for z in con.execute("SELECT id, schluessel, umbenannt FROM secret_drop WHERE quelle <> 'hand'"):
         if z["id"] not in behalten:
@@ -245,8 +275,11 @@ def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int
         if n and n * 2 >= min(len(ids), len(frei[i]["karten"])):
             zuordnung[platz] = i
             del frei[i]
+    gekauft = _mit_kaeufen(con)
     for i in frei:
-        con.execute("DELETE FROM secret_drop WHERE id = ?", (i,))
+        if i not in gekauft:
+            con.execute("DELETE FROM secret_drop WHERE id = ?", (i,))
+    neu_karten: dict[int, set[str]] = {}
     for platz, g in enumerate(gruppen):
         verkauf = _start(g, drucke)
         drop = zuordnung.get(platz)
@@ -259,21 +292,31 @@ def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int
                         " name = CASE WHEN umbenannt THEN name ELSE ? END WHERE id = ?",
                         (g["schluessel"], g["quelle"], verkauf, g["name"], drop))
             con.execute("DELETE FROM secret_karte WHERE drop_id = ?", (drop,))
+        neu_karten[drop] = {sid for sid, *_ in g["karten"]}
         for sid, anzahl, bonus in g["karten"]:
             d = drucke[sid]
             con.execute("INSERT INTO secret_karte (drop_id, name, oracle_id, scryfall_id, nummer, cardmarket_id, anzahl,"
                         " bonus) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         (drop, d["name"], d["oracle_id"], sid, d["nummer"], d["cardmarket_id"], anzahl, bonus))
+    for i in frei:
+        if i not in gekauft:
+            continue
+        n, ziel = max(((len(frei[i]["karten"] & ids), d) for d, ids in neu_karten.items()), default=(0, None))
+        if n:
+            kaeufe_umhaengen(con, i, ziel)
+            con.execute("DELETE FROM secret_drop WHERE id = ?", (i,))
+        else:
+            log.warning("Secret Lair: Drop %s hat Käufe, aber keinen Nachfolger; er bleibt stehen.", i)
 
 
 def abgleichen(con, kat, decks: list[dict] | None, heute: date, wiki_daten: dict | None = None) -> None:
-    """Trägt die Drops der letzten 12 Monate und die kommenden ein (in der Transaktion des Aufrufers). `decks` ist
+    """Trägt alle Drops seit 2019 und die kommenden ein (in der Transaktion des Aufrufers). `decks` ist
     None, wenn MTGJSON gerade nicht erreichbar war: Dann bleiben die Drops aus MTGJSON, wie sie sind. Ohne
     `wiki_daten` gilt der zuletzt gemerkte Stand des Wikis.
 
     Reihenfolge je Karte: eingefügter Drop, MTG Wiki, MTGJSON, sonst Gruppe nach Tag und Nummer (Scryfall).
     Bonuskarten hängen am Drop, den Wiki oder MTGJSON nennen, sonst fallen sie weg."""
-    grenze = (heute - timedelta(days=FENSTER_TAGE)).isoformat()
+    grenze = BEGINN
     drucke = {z["scryfall_id"]: dict(z) for z in kat.execute(
         "SELECT scryfall_id, oracle_id, name, nummer, nummer_zahl, erschienen, cardmarket_id FROM druck"
         " WHERE set_code = ? AND erschienen >= ?", (SET, grenze))}
@@ -332,15 +375,32 @@ def abgleichen(con, kat, decks: list[dict] | None, heute: date, wiki_daten: dict
     _gruppen_schreiben(con, liste_, drucke, behalten)
     # Cardmarket-Produkte der Drops aus dem gemerkten Katalog (`einmal` merkt ihn vorher frisch)
     cardmarket.zuordnen(con, cardmarket.aus_text(wert_lesen(con, "cm_produkte")))
-    con.execute("DELETE FROM secret_drop WHERE quelle <> 'hand' AND verkauf < ?", (grenze,))
+    gekauft = _mit_kaeufen(con)   # Drops mit Käufen bleiben immer
+    for z in con.execute("SELECT id FROM secret_drop WHERE quelle <> 'hand' AND verkauf < ?", (grenze,)).fetchall():
+        if z[0] not in gekauft:
+            con.execute("DELETE FROM secret_drop WHERE id = ?", (z[0],))
 
 
 # ---------------------------------------------------------------- Bewertung
 
-def _preis(z: tuple) -> float | None:
-    """Nonfoil-Wert einer Zeile aus `abruf.einlesen`: (Produkt, low, avg7, low_foil, avg7_foil)."""
-    wert = z[2] if z[2] else z[1]
+def _preis(z: tuple, foil: bool = False) -> float | None:
+    """Wert einer Zeile aus `abruf.einlesen`: (Produkt, low, avg7, low_foil, avg7_foil); Ø 7 Tage, sonst ab."""
+    wert = (z[4] or z[3]) if foil else (z[2] or z[1])
     return wert if wert else None
+
+
+def _vergleich(drucke, preise: dict, karte, nur_sld: bool):
+    """(teuerster, günstigster) anderer Druck als (Preis, Druck) oder None."""
+    werte = [(preise[d["cardmarket_id"]], d) for d in drucke
+             if d["scryfall_id"] != karte["scryfall_id"] and preise.get(d["cardmarket_id"])
+             and (not nur_sld or d["set_code"] == SET)]
+    return max(werte, key=lambda w: w[0], default=None), min(werte, key=lambda w: w[0], default=None)
+
+
+def _felder(teuer, guenstig) -> tuple:
+    return (teuer and teuer[0], teuer and teuer[1]["set_code"], teuer and teuer[1]["nummer"],
+            teuer and teuer[1]["scryfall_id"], guenstig and guenstig[0], guenstig and guenstig[1]["set_code"],
+            guenstig and guenstig[1]["nummer"], guenstig and guenstig[1]["scryfall_id"])
 
 
 def bewerten(con, kat, roh: bytes) -> int:
@@ -353,21 +413,23 @@ def bewerten(con, kat, roh: bytes) -> int:
             " AND cardmarket_id IS NOT NULL AND COALESCE(set_art, '') <> 'memorabilia'", (oracle,)).fetchall()
     ids = {d["cardmarket_id"] for liste in andere.values() for d in liste}
     ids |= {k["cardmarket_id"] for k in karten if k["cardmarket_id"]}
-    preise = {z[0]: _preis(z) for z in abruf.einlesen(roh, ids)[2]}
+    zeilen = abruf.einlesen(roh, ids)[2]
+    preise = {z[0]: _preis(z) for z in zeilen}
+    preise_foil = {z[0]: _preis(z, foil=True) for z in zeilen}
+    foil = version(con) >= 18
     for k in karten:
         drucke = andere.get(k["oracle_id"], [])
-        nur_sld = any("Basic" in (d["typzeile"] or "") for d in drucke)
-        werte = [(preise[d["cardmarket_id"]], d) for d in drucke
-                 if d["scryfall_id"] != k["scryfall_id"] and preise.get(d["cardmarket_id"])
-                 and (not nur_sld or d["set_code"] == SET)]
-        teuer = max(werte, key=lambda w: w[0], default=None)
-        guenstig = min(werte, key=lambda w: w[0], default=None)
+        nur_sld = any("Basic" in (d["typzeile"] or "") for d in drucke)   # gilt auch für Foil
         con.execute("UPDATE secret_karte SET preis = ?, teuer = ?, teuer_set = ?, teuer_nummer = ?, teuer_id = ?,"
                     " guenstig = ?, guenstig_set = ?, guenstig_nummer = ?, guenstig_id = ?, nur_sld = ? WHERE id = ?",
-                    (preise.get(k["cardmarket_id"]), teuer and teuer[0], teuer and teuer[1]["set_code"],
-                     teuer and teuer[1]["nummer"], teuer and teuer[1]["scryfall_id"], guenstig and guenstig[0],
-                     guenstig and guenstig[1]["set_code"], guenstig and guenstig[1]["nummer"],
-                     guenstig and guenstig[1]["scryfall_id"], int(nur_sld), k["id"]))
+                    (preise.get(k["cardmarket_id"]), *_felder(*_vergleich(drucke, preise, k, nur_sld)), int(nur_sld),
+                     k["id"]))
+        if foil:
+            con.execute("UPDATE secret_karte SET preis_foil = ?, teuer_foil = ?, teuer_foil_set = ?,"
+                        " teuer_foil_nummer = ?, teuer_foil_id = ?, guenstig_foil = ?, guenstig_foil_set = ?,"
+                        " guenstig_foil_nummer = ?, guenstig_foil_id = ? WHERE id = ?",
+                        (preise_foil.get(k["cardmarket_id"]), *_felder(*_vergleich(drucke, preise_foil, k, nur_sld)),
+                         k["id"]))
     cardmarket.preise_schreiben(con, roh)
     wert_setzen(con, "bewertet", _jetzt())
     return len(karten)
@@ -484,16 +546,32 @@ def tag_setzen(con, drop_id: int, verkauf: str | None, kat=None) -> str | None:
 # ---------------------------------------------------------------- Lesen
 
 SQL_DROPS = """
-SELECT d.id, d.name, d.quelle, d.verkauf, d.datum_eigen, d.wunsch, d.kosten,
+SELECT d.id, d.name, d.quelle, d.verkauf, d.datum_eigen, d.wunsch, d.kosten, {kosten_foil} AS kosten_foil,
        COALESCE(SUM(k.id IS NOT NULL AND k.bonus = 0), 0) AS karten, SUM(CASE WHEN k.bonus = 0 THEN k.anzahl END) AS exemplare,
        SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * k.teuer END) AS teuer,
        SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * k.guenstig END) AS guenstig,
        SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * k.preis END) AS wert,
        COALESCE(SUM(k.bonus = 0 AND k.preis IS NOT NULL), 0) AS mit_preis,
-       COALESCE(SUM(k.bonus = 0 AND k.teuer IS NULL), 0) AS ohne_vergleich, COALESCE(SUM(k.bonus), 0) AS bonus
+       COALESCE(SUM(k.bonus = 0 AND k.teuer IS NULL), 0) AS ohne_vergleich, COALESCE(SUM(k.bonus), 0) AS bonus,
+       {foil}
 FROM secret_drop d LEFT JOIN secret_karte k ON k.drop_id = d.id {wo} GROUP BY d.id
 ORDER BY d.verkauf IS NULL DESC, d.verkauf DESC, d.id DESC
 """
+# Dieselben Summen für Foil (ab Version 18)
+SQL_FOIL = """SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * k.teuer_foil END) AS teuer_foil,
+       SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * k.guenstig_foil END) AS guenstig_foil,
+       SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * k.preis_foil END) AS wert_foil,
+       COALESCE(SUM(k.bonus = 0 AND k.preis_foil IS NOT NULL), 0) AS mit_preis_foil,
+       COALESCE(SUM(k.bonus = 0 AND k.teuer_foil IS NULL), 0) AS ohne_vergleich_foil"""
+SQL_OHNE_FOIL = ("NULL AS teuer_foil, NULL AS guenstig_foil, NULL AS wert_foil, 0 AS mit_preis_foil,"
+                 " COALESCE(SUM(k.bonus = 0), 0) AS ohne_vergleich_foil")
+NUR_EIGENE = "WHERE d.id IN (SELECT drop_id FROM secret_kauf)"
+
+
+def _sql(con, wo: str = "") -> str:
+    neu = version(con) >= 18
+    return SQL_DROPS.format(wo=wo, foil=SQL_FOIL if neu else SQL_OHNE_FOIL,
+                            kosten_foil="d.kosten_foil" if neu else "NULL")
 
 
 def _rund(wert) -> float | None:
@@ -504,51 +582,182 @@ def _jetzt_zeit(jetzt: datetime | None) -> datetime:
     return jetzt if jetzt is not None else datetime.now(timezone.utc)
 
 
-def _drop(z, standard: float | None, uhr: str, jetzt: datetime, tz) -> dict:
-    d = dict(z)
-    kosten = d["kosten"] if d["kosten"] is not None else standard
-    for f in ("teuer", "guenstig", "wert"):
-        d[f] = _rund(d[f])
+def schnaeppchen(produkte: list[dict], summe: float | None, vollstaendig: bool, foil: bool,
+                 schwelle: float) -> dict | None:
+    """Der ganze Drop bei Cardmarket mit ab-Preis höchstens `schwelle` Prozent der Summe seiner Drucke einzeln
+    (gleiche Ausführung). Nur wenn alle Drucke ohne Bonuskarten einen Preis haben, sonst nie (Antwort des Nutzers).
+    Von beiden Fassungen (mit und ohne „Set“) zählt die mit dem größten Abschlag."""
+    if not vollstaendig or not summe:
+        return None
+    beste = None
+    for p in produkte:
+        ab = p["low_foil"] if foil else p["low"]
+        if ab and ab <= summe * schwelle / 100:
+            abschlag = round((1 - ab / summe) * 100)
+            if beste is None or ab < beste["ab"]:
+                beste = {"abschlag": abschlag, "ab": ab, "summe": _rund(summe), "cardmarket_id": p["cardmarket_id"],
+                         "name": p["name"]}
+    return beste
+
+
+def _ausfuehrung(z, foil: bool, standard: float | None, produkte: list[dict], schwelle: float) -> dict:
+    """Zahlen einer Ausführung (Nicht-Foil oder Foil) eines Drops."""
+    s = "_foil" if foil else ""
+    eigen = z["kosten_foil"] if foil else z["kosten"]
+    kosten = eigen if eigen is not None else standard
+    teuer = _rund(z["teuer" + s])
+    return {"teuer": teuer, "guenstig": _rund(z["guenstig" + s]), "wert": _rund(z["wert" + s]),
+            "mit_preis": z["mit_preis" + s], "ohne_vergleich": z["ohne_vergleich" + s], "kosten_eigen": eigen,
+            "kosten": kosten, "faktor": round(teuer / kosten, 2) if kosten and teuer is not None else None,
+            "schnaeppchen": schnaeppchen(produkte, z["wert" + s], z["karten"] > 0 and z["mit_preis" + s] == z["karten"],
+                                         foil, schwelle)}
+
+
+def stueckwert(a: dict, produkte: list[dict], karten: int, foil: bool) -> tuple[float | None, str | None]:
+    """Heutiger Wert eines gekauften Drops in der gekauften Ausführung und die Grundlage dafür (Antwort des
+    Nutzers): der ganze Drop bei Cardmarket (Trend, sonst ab; zuerst das Produkt ohne „Set“), sonst die Summe der
+    Drucke einzeln (Ø 7 Tage, sonst ab)."""
+    for p in sorted(produkte, key=lambda p: p["set_fassung"]):
+        trend, ab = (p["trend_foil"], p["low_foil"]) if foil else (p["trend"], p["low"])
+        if trend or ab:
+            return (trend or ab), f"ganzer Drop bei Cardmarket, {'Trend' if trend else 'ab'}"
+    if a["wert"] is not None:
+        teil = "" if a["mit_preis"] == karten else f", nur {a['mit_preis']} von {karten} Karten mit Preis"
+        return a["wert"], f"Drucke einzeln, Ø 7 Tage, sonst ab{teil}"
+    return None, None
+
+
+def _summe(kaeufe: list[dict]) -> dict:
+    """Kaufpreis, Wert, Gewinn/Verlust über Käufe. Gewinn und Prozent nur über Käufe mit heutigem Wert."""
+    mit = [k for k in kaeufe if k["wert"] is not None]
+    kauf_mit = sum(k["kaufpreis"] for k in mit)
+    wert = sum(k["wert"] for k in mit) if mit else None
+    gewinn = None if wert is None else _rund(wert - kauf_mit)
+    return {"exemplare": sum(k["anzahl"] for k in kaeufe), "kaufpreis": _rund(sum(k["kaufpreis"] for k in kaeufe)),
+            "wert": _rund(wert), "gewinn": gewinn,
+            "prozent": round(gewinn / kauf_mit * 100, 1) if gewinn is not None and kauf_mit else None,
+            "ohne_wert": len(kaeufe) - len(mit)}
+
+
+def _kaeufe_lesen(con, drop_id: int | None = None) -> dict[int, list[dict]]:
+    if version(con) < 18:
+        return {}
+    wo, werte = ("WHERE drop_id = ?", (drop_id,)) if drop_id is not None else ("", ())
+    aus: dict[int, list[dict]] = {}
+    for z in con.execute(f"SELECT id, drop_id, foil, anzahl, preis, datum FROM secret_kauf {wo}"
+                         " ORDER BY datum IS NULL, datum, id", werte):
+        aus.setdefault(z["drop_id"], []).append({k: z[k] for k in z.keys() if k != "drop_id"})
+    return aus
+
+
+def _besitz(d: dict, kaeufe: list[dict]) -> dict | None:
+    if not kaeufe:
+        return None
+    liste_ = []
+    for k in kaeufe:
+        foil = bool(k["foil"])
+        stueck, grundlage = stueckwert(d["foil"] if foil else d, d["produkte"], d["karten"], foil)
+        wert = None if stueck is None else stueck * k["anzahl"]
+        kaufpreis = k["preis"] * k["anzahl"]
+        liste_.append({**k, "foil": foil, "stueckwert": _rund(stueck), "grundlage": grundlage,
+                       "kaufpreis": _rund(kaufpreis), "wert": _rund(wert),
+                       "gewinn": None if wert is None else _rund(wert - kaufpreis),
+                       "prozent": round((wert - kaufpreis) / kaufpreis * 100, 1) if wert is not None and kaufpreis else None})
+    return {**_summe(liste_), "kaeufe": liste_}
+
+
+def _drop(z, standard: float | None, standard_foil: float | None, uhr: str, jetzt: datetime, tz,
+          produkte: list[dict], schwelle: float, kaeufe: list[dict]) -> dict:
+    d = {k: z[k] for k in ("id", "name", "quelle", "verkauf", "karten", "exemplare", "bonus")}
+    d.update(_ausfuehrung(z, False, standard, produkte, schwelle))
+    d["foil"] = _ausfuehrung(z, True, standard_foil, produkte, schwelle)
     start = beginn(d["verkauf"], uhr, tz)
-    d.update(kosten_eigen=d["kosten"], kosten=kosten, kommend=start is None or start > jetzt,
-             beginn=start.isoformat() if start else None, wunsch=bool(d["wunsch"]), datum_eigen=bool(d["datum_eigen"]),
-             faktor=round(d["teuer"] / kosten, 2) if kosten and d["teuer"] is not None else None)
+    d.update(kommend=start is None or start > jetzt, beginn=start.isoformat() if start else None,
+             wunsch=bool(z["wunsch"]), datum_eigen=bool(z["datum_eigen"]), produkte=produkte)
+    d["besitz"] = _besitz(d, kaeufe)
     return d
 
 
-def standard_kosten(con) -> float | None:
-    wert = wert_lesen(con, "kosten")
+def standard_kosten(con, foil: bool = False) -> float | None:
+    wert = wert_lesen(con, "kosten_foil" if foil else "kosten")
     return float(wert) if wert else None
+
+
+def schwelle(con) -> float:
+    """Schwelle für „Schnäppchen“ in Prozent (Einstellung, Standard 80)."""
+    wert = wert_lesen(con, "schnaeppchen")
+    return float(wert) if wert else float(SCHNAEPPCHEN)
 
 
 def _produkte(con) -> dict[int, list[dict]]:
     return cardmarket.lesen_je_drop(con) if version(con) >= 17 else {}
 
 
-def liste(con, jetzt: datetime | None = None) -> list[dict]:
-    standard, uhr, tz = standard_kosten(con), uhrzeit(con), zone()
-    produkte = _produkte(con)
-    return [{**_drop(z, standard, uhr, _jetzt_zeit(jetzt), tz), "produkte": produkte.get(z["id"], [])}
-            for z in con.execute(SQL_DROPS.format(wo=""))]
+def liste(con, jetzt: datetime | None = None, nur_eigene: bool = False) -> list[dict]:
+    standard, standard_foil, uhr, tz = standard_kosten(con), standard_kosten(con, True), uhrzeit(con), zone()
+    produkte, kaeufe, grenze = _produkte(con), _kaeufe_lesen(con), schwelle(con)
+    if nur_eigene and version(con) < 18:
+        return []
+    return [_drop(z, standard, standard_foil, uhr, _jetzt_zeit(jetzt), tz, produkte.get(z["id"], []), grenze,
+                  kaeufe.get(z["id"], []))
+            for z in con.execute(_sql(con, NUR_EIGENE if nur_eigene else ""))]
+
+
+def besitz_gesamt(drops_: list[dict]) -> dict | None:
+    """Summe aller eigenen Drops (oben in der Ansicht und im Dashboard)."""
+    eigene = [d for d in drops_ if d.get("besitz")]
+    if not eigene:
+        return None
+    return {**_summe([k for d in eigene for k in d["besitz"]["kaeufe"]]), "drops": len(eigene)}
 
 
 def einzeln(con, drop_id: int, jetzt: datetime | None = None) -> dict | None:
-    z = con.execute(SQL_DROPS.format(wo="WHERE d.id = ?"), (drop_id,)).fetchone()
+    z = con.execute(_sql(con, "WHERE d.id = ?"), (drop_id,)).fetchone()
     if z is None or z["id"] is None:
         return None
-    d = _drop(z, standard_kosten(con), uhrzeit(con), _jetzt_zeit(jetzt), zone())
-    d["produkte"] = _produkte(con).get(drop_id, [])
+    d = _drop(z, standard_kosten(con), standard_kosten(con, True), uhrzeit(con), _jetzt_zeit(jetzt), zone(),
+              _produkte(con).get(drop_id, []), schwelle(con), _kaeufe_lesen(con, drop_id).get(drop_id, []))
+    d["schwelle"] = schwelle(con)
+    foil = ("preis_foil, teuer_foil, teuer_foil_set, teuer_foil_nummer, teuer_foil_id, guenstig_foil, guenstig_foil_set,"
+            " guenstig_foil_nummer, guenstig_foil_id, ") if version(con) >= 18 else ""
     d["liste"] = [dict(k) for k in con.execute(
         "SELECT name, nummer, anzahl, preis, teuer, teuer_set, teuer_nummer, teuer_id, guenstig, guenstig_set,"
-        " guenstig_nummer, guenstig_id, nur_sld, scryfall_id, bonus"
+        f" guenstig_nummer, guenstig_id, {foil}nur_sld, scryfall_id, bonus"
         " FROM secret_karte WHERE drop_id = ? ORDER BY bonus, teuer IS NULL, teuer DESC, name", (drop_id,))]
-    # Verlauf nur aus echten Abrufen, mit Foil-Preisen hat er nichts zu tun
-    verlauf = [(t, _rund(w)) for t, w in con.execute(
-        "SELECT p.tag, SUM(k.anzahl * COALESCE(p.avg7, p.low)) FROM preis p JOIN secret_karte k"
-        " ON k.cardmarket_id = p.cardmarket_id WHERE k.drop_id = ? AND k.bonus = 0 GROUP BY p.tag ORDER BY p.tag",
-        (drop_id,)) if w]
-    d["verlauf"] = {"erster": verlauf[0], "letzter": verlauf[-1], "tage": len(verlauf)} if verlauf else None
+    # Verlauf nur aus echten Abrufen, je Ausführung
+    for schluessel, ausdruck in (("verlauf", "COALESCE(p.avg7, p.low)"), ("verlauf_foil", "COALESCE(p.avg7_foil, p.low_foil)")):
+        verlauf = [(t, _rund(w)) for t, w in con.execute(
+            f"SELECT p.tag, SUM(k.anzahl * {ausdruck}) FROM preis p JOIN secret_karte k"
+            " ON k.cardmarket_id = p.cardmarket_id WHERE k.drop_id = ? AND k.bonus = 0 GROUP BY p.tag ORDER BY p.tag",
+            (drop_id,)) if w]
+        d[schluessel] = {"erster": verlauf[0], "letzter": verlauf[-1], "tage": len(verlauf)} if verlauf else None
     return d
+
+
+# ---------------------------------------------------------------- Eigene Secret Lairs
+
+KAUF_FELDER = ("foil", "anzahl", "preis", "datum")
+
+
+def kauf_anlegen(con, nutzer: int, drop_id: int, felder: dict) -> tuple[int, str]:
+    """Neuer Kauf (in der Transaktion des Aufrufers); gibt (ID, Schritt) für Rückgängig zurück."""
+    schritt = schritte.neuer_schritt()
+    kauf = schritte.einfuegen(con, nutzer, "secret_kauf", {"nutzer_id": nutzer, "drop_id": drop_id,
+                                                          **{k: felder[k] for k in KAUF_FELDER}}, schritt=schritt)
+    return kauf, schritt
+
+
+def kauf_aendern(con, nutzer: int, kauf: int, felder: dict) -> str:
+    schritt = schritte.neuer_schritt()
+    schritte.aendern_genau(con, nutzer, "secret_kauf", kauf, {k: felder[k] for k in KAUF_FELDER if k in felder},
+                           schritt=schritt)
+    return schritt
+
+
+def kauf_loeschen(con, nutzer: int, kauf: int) -> str:
+    schritt = schritte.neuer_schritt()
+    schritte.loeschen(con, nutzer, "secret_kauf", kauf, schritt=schritt)
+    return schritt
 
 
 def stand(con) -> dict:
@@ -569,7 +778,9 @@ def fuer_home_assistant(con, jetzt: datetime | None = None, wuensche: bool = Tru
             kommend += 1
             if z["wunsch"] and start is not None:
                 liste_.append({"name": z["name"], "beginn": start.isoformat()})
-    z = con.execute("SELECT name FROM secret_drop ORDER BY id DESC LIMIT 1").fetchone()
+    # Neuester nach Verkaufstag (unbekannter Tag zuerst), bei gleichem Tag der zuletzt aufgenommene: Seit Version 18
+    # nimmt der Abgleich auch alte Drops neu auf, die höchste ID allein wäre dann ein Drop von 2019
+    z = con.execute("SELECT name FROM secret_drop ORDER BY verkauf IS NULL DESC, verkauf DESC, id DESC LIMIT 1").fetchone()
     return {"secret_kommend": kommend, "secret_neuester": z[0] if z else None,
             "secret_wuensche": len(liste_), "secret_wunsch_naechster": liste_[0]["beginn"] if liste_ else None,
             "secret_wunsch_name": liste_[0]["name"] if liste_ else None, "secret_wuensche_liste": liste_}

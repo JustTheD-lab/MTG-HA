@@ -1,16 +1,20 @@
 // Secret-Lair-Drops (nur im Add-on). Zeigt Zahlen zum Vergleich, keine Kaufempfehlung.
 //
-//   #/secretlair      Liste: kommende Drops, dann die der letzten 12 Monate
-//   #/secretlair/5    ein Drop: Karten mit Vergleichswerten, Kosten, Name, Verkaufstag, Wunsch
+//   #/secretlair      Liste: kommende Drops, dann alle seit 2019 nach Jahr, mit Filtern
+//   #/secretlair/5    ein Drop: Karten mit Vergleichswerten, Kosten, Name, Verkaufstag, Wunsch, eigene Käufe
 //
 // Verkaufsbeginn = Tag des Drops + Uhrzeit für alle Drops (Einstellung, Standard 17:00). Den Tag kann der Nutzer
 // je Drop ändern; Drops mit Wunsch meldet das Add-on an Home Assistant (Sensor „Secret Lair nächster Wunsch“).
 //
-// Vergleichswert ist der teuerste Nonfoil-Reprint je Karte (Wunsch des Nutzers). Daten: web/secretlair.py.
+// Vergleichswert ist der teuerste Reprint je Karte (Wunsch des Nutzers). Der Umschalter Nicht-Foil/Foil oben (gemerkt
+// je Gerät) wählt die Ausführung aller Zahlen; der Server liefert beide (`d` und `d.foil`). „Schnäppchen“: der ganze
+// Drop bei Cardmarket ab höchstens N % der Drucke einzeln (Schwelle einstellbar). Eigene Käufe sind Nutzerdaten mit
+// Rückgängig über /api/schritt/{id}/rueckgaengig. Daten: web/secretlair.py.
 
-import { holen, senden, esc, gehe, zurueck, euro, scryfallBild } from './gemeinsam.js';
+import { holen, senden, esc, gehe, zurueck, euro, scryfallBild, vorliebe } from './gemeinsam.js';
 import { dialog, bestaetigen } from './dialog.js';
 import { angemeldet } from './anmeldung.js';
+import { toastZeigen } from './deck.js';
 
 const ZURUECK = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"'
   + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg>';
@@ -20,8 +24,51 @@ const QUELLEN = {
 
 let wurzelMerk = null;
 let gezeigt = undefined;   // Nummer des Drops oder null für die Liste
+// Filter der Liste: leben bis zum Neuladen, damit „Zurück“ von einem Drop dieselbe Auswahl zeigt
+const filter = { suche: '', jahr: '', status: '', wunsch: false, schnaeppchen: false, besitz: false };
 
 const geld = (w) => (w === null || w === undefined ? '–' : euro(w));
+
+/** Gewählte Ausführung (gemerkt je Gerät). */
+const istFoil = () => vorliebe('secretlair.foil') === '1';
+/** Zahlen der gewählten Ausführung: oben im Drop Nicht-Foil, in `d.foil` dasselbe für Foil. */
+const zahlen = (d) => (istFoil() ? d.foil : d);
+const ausfuehrungText = (foil) => (foil ? 'Foil' : 'Nicht-Foil');
+
+/** „+12,30 €“ / „−4,00 €“ mit Prozent; Klasse für Farbe und Pfeil-Text für Vorleser. */
+function gewinnHtml(gewinn, prozent) {
+  if (gewinn === null || gewinn === undefined) return '–';
+  const art = gewinn > 0 ? 'sl-plus' : gewinn < 0 ? 'sl-minus' : '';
+  const zeichen = gewinn > 0 ? '+' : gewinn < 0 ? '−' : '±';
+  const p = prozent === null || prozent === undefined ? ''
+    : ` (${zeichen}${Math.abs(prozent).toLocaleString('de-DE', { maximumFractionDigits: 1 })} %)`;
+  return `<span class="${art}">${zeichen}${esc(euro(Math.abs(gewinn)))}${esc(p)}</span>`;
+}
+
+/** Marke „Schnäppchen −23 %“ der gewählten Ausführung, sonst leer. */
+function schnaeppchenHtml(d) {
+  const s = zahlen(d).schnaeppchen;
+  return s ? `<span class="sl-marke sl-schnaeppchen">Schnäppchen −${s.abschlag} %</span>` : '';
+}
+
+/** Umschalter Nicht-Foil/Foil; ein Wechsel merkt sich die Wahl und zeichnet neu. */
+function umschalter() {
+  const box = document.createElement('div');
+  box.className = 'sl-segmente';
+  box.setAttribute('role', 'group');
+  box.setAttribute('aria-label', 'Ausführung');
+  for (const foil of [false, true]) {
+    const b = knopf(ausfuehrungText(foil), 'knopf sl-segment');
+    b.setAttribute('aria-pressed', String(istFoil() === foil));
+    b.addEventListener('click', async () => {
+      if (istFoil() === foil) return;
+      vorliebe('secretlair.foil', foil ? '1' : '0');
+      await neuZeigen();
+    });
+    box.append(b);
+  }
+  return box;
+}
 
 function datum(tag) {
   if (!tag) return 'Verkaufstag unbekannt';
@@ -59,23 +106,26 @@ const CARDMARKET = 'https://www.cardmarket.com/de/Magic/Products?idProduct=';
 const abTrend = (low, trend) => [low != null ? `ab ${geld(low)}` : null, trend != null ? `Trend ${geld(trend)}` : null]
   .filter(Boolean).join(' · ');
 
-/** Kurzform für die Liste: das Produkt ohne „Set“, sonst das andere. */
+/** Kurzform für die Liste: das Produkt ohne „Set“, sonst das andere, in der gewählten Ausführung. */
 function cardmarketKurz(d) {
   const p = (d.produkte || []).find((x) => !x.set_fassung) || (d.produkte || [])[0];
-  return p ? abTrend(p.low, p.trend) : '';
+  if (!p) return '';
+  return istFoil() ? abTrend(p.low_foil, p.trend_foil) : abTrend(p.low, p.trend);
 }
 
-/** Summe der Secret-Lair-Drucke dieses Drops bei Cardmarket (Ø 7 Tage, sonst ab; ohne Foil und Bonuskarten). */
+/** Summe der Secret-Lair-Drucke dieses Drops bei Cardmarket (Ø 7 Tage, sonst ab; ohne Bonuskarten). */
 function druckeText(d) {
-  if (d.wert === null || d.wert === undefined) return '–';
-  return d.mit_preis < d.karten ? `${geld(d.wert)} (${d.mit_preis} von ${d.karten} Karten)` : geld(d.wert);
+  const a = zahlen(d);
+  if (a.wert === null || a.wert === undefined) return '–';
+  return a.mit_preis < d.karten ? `${geld(a.wert)} (${a.mit_preis} von ${d.karten} Karten)` : geld(a.wert);
 }
 
 function werteHtml(d) {
+  const a = zahlen(d);
   const reihen = [
-    ['Teuerste Reprints', geld(d.teuer)], ['Günstigste Reprints', geld(d.guenstig)],
-    ['Drucke einzeln bei Cardmarket', druckeText(d)], ['Deine Kosten', geld(d.kosten)],
-    ['Teuerste Reprints ÷ Kosten', d.faktor === null ? '–' : `${d.faktor.toLocaleString('de-DE')} ×`],
+    ['Teuerste Reprints', geld(a.teuer)], ['Günstigste Reprints', geld(a.guenstig)],
+    ['Drucke einzeln bei Cardmarket', druckeText(d)], ['Deine Kosten', geld(a.kosten)],
+    ['Teuerste Reprints ÷ Kosten', a.faktor === null ? '–' : `${a.faktor.toLocaleString('de-DE')} ×`],
   ];
   const cm = cardmarketKurz(d);
   if (cm) reihen.push(['Drop bei Cardmarket', cm]);
@@ -84,12 +134,66 @@ function werteHtml(d) {
 
 const WUNSCH = '<span class="sl-wunsch"><span aria-hidden="true">★</span> Wunsch</span>';
 
+/** Marke „Besitze ich“ mit Gewinn/Verlust, sonst leer. */
+function besitzMarke(d) {
+  const b = d.besitz;
+  if (!b) return '';
+  return `<span class="sl-marke sl-besitz">${b.exemplare} im Besitz · ${gewinnHtml(b.gewinn, b.prozent)}</span>`;
+}
+
 function eintragHtml(d) {
-  const ohne = d.ohne_vergleich ? ` · ${d.ohne_vergleich} ohne Vergleich` : '';
+  const ohneZahl = zahlen(d).ohne_vergleich;
+  const ohne = ohneZahl ? ` · ${ohneZahl} ohne Vergleich` : '';
   const tag = d.kommend ? beginnText(d) : datum(d.verkauf);
   return `<li><a class="sl-drop${d.wunsch ? ' sl-drop-wunsch' : ''}" href="#/secretlair/${d.id}"><span class="sl-kopf">`
-    + `<span class="sl-name">${esc(d.name)}</span>${d.wunsch ? WUNSCH : ''}`
+    + `<span class="sl-name">${esc(d.name)}</span>${d.wunsch ? WUNSCH : ''}${schnaeppchenHtml(d)}${besitzMarke(d)}`
     + `<span class="sl-datum">${esc(tag)} · ${d.karten} Karten${esc(ohne)}</span></span>${werteHtml(d)}</a></li>`;
+}
+
+/** Summe aller eigenen Drops oben in der Liste. */
+function besitzHtml(b) {
+  if (!b) return '';
+  const ohne = b.ohne_wert ? ` ${b.ohne_wert} ${b.ohne_wert === 1 ? 'Kauf hat' : 'Käufe haben'} noch keinen Wert und zählen beim Gewinn nicht mit.` : '';
+  return '<section class="sl-besitz-summe" aria-label="Eigene Secret Lairs">'
+    + `<h2 class="etikett sl-abschnitt">Eigene Secret Lairs (${b.drops} ${b.drops === 1 ? 'Drop' : 'Drops'}, ${b.exemplare} Stück)</h2>`
+    + '<dl class="sl-werte">'
+    + `<div><dt>Kaufpreis</dt><dd>${esc(geld(b.kaufpreis))}</dd></div>`
+    + `<div><dt>Wert heute</dt><dd>${esc(geld(b.wert))}</dd></div>`
+    + `<div><dt>Gewinn / Verlust</dt><dd>${gewinnHtml(b.gewinn, b.prozent)}</dd></div></dl>`
+    + `<p class="sl-hinweis">Wert je Kauf in der gekauften Ausführung: der ganze Drop bei Cardmarket (Trend, sonst ab), sonst die Drucke einzeln.${esc(ohne)}</p>`
+    + '</section>';
+}
+
+/** Jahr des Verkaufstags oder „unbekannt“. */
+const jahrVon = (d) => (d.verkauf ? d.verkauf.slice(0, 4) : 'unbekannt');
+
+function passt(d) {
+  if (filter.suche && !d.name.toLocaleLowerCase('de-DE').includes(filter.suche.toLocaleLowerCase('de-DE'))) return false;
+  if (filter.jahr && jahrVon(d) !== filter.jahr) return false;
+  if (filter.status === 'kommend' && !d.kommend) return false;
+  if (filter.status === 'verkauft' && d.kommend) return false;
+  if (filter.wunsch && !d.wunsch) return false;
+  if (filter.schnaeppchen && !zahlen(d).schnaeppchen) return false;
+  if (filter.besitz && !d.besitz) return false;
+  return true;
+}
+
+/** Filterleiste: Suche, Jahr, kommend/verkauft, Wunsch, Schnäppchen, Besitze ich. */
+function filterHtml(jahre) {
+  const option = (wert, text, aktiv) => `<option value="${esc(wert)}"${aktiv === wert ? ' selected' : ''}>${esc(text)}</option>`;
+  const haken = (name, text) => `<label class="sl-haken"><input type="checkbox" data-filter="${name}"`
+    + `${filter[name] ? ' checked' : ''}> ${esc(text)}</label>`;
+  return '<div class="sl-filter" role="search">'
+    + '<label class="sl-feld"><span class="etikett">Suche</span>'
+    + `<input class="feld" type="search" data-filter="suche" placeholder="Name des Drops" autocomplete="off" value="${esc(filter.suche)}"></label>`
+    + '<label class="sl-feld"><span class="etikett">Jahr</span><select class="feld" data-filter="jahr">'
+    + option('', 'Alle Jahre', filter.jahr) + jahre.map((j) => option(j, j === 'unbekannt' ? 'Tag unbekannt' : j, filter.jahr)).join('')
+    + '</select></label>'
+    + '<label class="sl-feld"><span class="etikett">Verkauf</span><select class="feld" data-filter="status">'
+    + option('', 'Alle', filter.status) + option('kommend', 'Kommend', filter.status) + option('verkauft', 'Bereits im Verkauf', filter.status)
+    + '</select></label>'
+    + `<div class="sl-haken-reihe">${haken('wunsch', 'Wunsch')}${haken('schnaeppchen', 'Schnäppchen')}${haken('besitz', 'Besitze ich')}</div>`
+    + '</div>';
 }
 
 async function einfuegen() {
@@ -196,12 +300,14 @@ async function listeZeigen(wurzel) {
   const r = await holen('/api/secretlair');
   const bereich = document.createElement('div');
   bereich.className = 'sets';
-  const kommend = r.drops.filter((d) => d.kommend);
-  // Einzelne Bonuskarten ohne Drop gehen in der Liste nur unter; bei kommenden Drops bleiben sie sichtbar
-  const einzeln = (d) => d.quelle === 'scryfall' && d.karten <= 2;
-  const verkauft = r.drops.filter((d) => !d.kommend && !einzeln(d));
-  const ausgeblendet = r.drops.filter((d) => !d.kommend && einzeln(d)).length;
-  bereich.append(kopf('Secret Lair', `${kommend.length} kommend · ${verkauft.length} seit einem Jahr`, '#/sets'));
+  // Einzelne Bonuskarten ohne Drop gehen in der Liste nur unter; bei kommenden und eigenen Drops bleiben sie sichtbar
+  const einzeln = (d) => d.quelle === 'scryfall' && d.karten <= 2 && !d.besitz;
+  const sichtbar = r.drops.filter((d) => d.kommend || !einzeln(d));
+  const ausgeblendet = r.drops.length - sichtbar.length;
+  const kommendZahl = sichtbar.filter((d) => d.kommend).length;
+  bereich.append(kopf('Secret Lair', `${kommendZahl} kommend · ${sichtbar.length - kommendZahl} seit 2019`, '#/sets'));
+  bereich.append(umschalter());
+  bereich.insertAdjacentHTML('beforeend', besitzHtml(r.besitz));
 
   const werkzeug = document.createElement('div');
   werkzeug.className = 'sl-werkzeug';
@@ -211,10 +317,25 @@ async function listeZeigen(wurzel) {
       const e = await einfuegen();
       if (e) gehe(`#/secretlair/${e.id}`);
     });
-    const kosten = knopf(`Kosten je Drop: ${geld(r.kosten)}`);
+    const foil = istFoil();
+    const kosten = knopf(`Kosten je Drop (${ausfuehrungText(foil)}): ${geld(foil ? r.kosten_foil : r.kosten)}`);
     kosten.addEventListener('click', async () => {
-      const e = await kostenFragen('Kosten je Drop', 'Was dich ein Drop ohne Foil kostet, mit Versand. Leer heißt: keine Kosten rechnen.', r.kosten);
-      if (e) { await senden('/api/secretlair/kosten', { daten: e }); await neuZeigen(); }
+      const e = await kostenFragen(`Kosten je Drop (${ausfuehrungText(foil)})`,
+        `Was dich ein Drop in ${ausfuehrungText(foil)} kostet, mit Versand. Leer heißt: keine Kosten rechnen.`,
+        foil ? r.kosten_foil : r.kosten);
+      if (e) {
+        await senden('/api/secretlair/kosten', { daten: foil ? { kosten_foil: e.kosten } : e });
+        await neuZeigen();
+      }
+    });
+    const schwelle = knopf(`Schnäppchen ab −${100 - r.schnaeppchen} %`);
+    schwelle.addEventListener('click', async () => {
+      const neu = await feldFragen({
+        titel: 'Schnäppchen', etikett: 'Höchstens so viel Prozent der Drucke einzeln', typ: 'number', wert: r.schnaeppchen,
+        text: 'Ein Drop gilt als Schnäppchen, wenn er bei Cardmarket ab höchstens so viel Prozent der Summe seiner Drucke '
+          + 'einzeln kostet (gleiche Ausführung). Ohne Preis für jede Karte gibt es nie ein Schnäppchen.',
+      });
+      if (neu) { await senden('/api/secretlair/schnaeppchen', { daten: { prozent: Math.round(Number(neu)) } }); await neuZeigen(); }
     });
     const uhr = knopf(`Verkauf ab ${r.uhrzeit} Uhr`);
     uhr.addEventListener('click', async () => {
@@ -232,29 +353,47 @@ async function listeZeigen(wurzel) {
         auf.textContent = f.message;
       }
     });
-    werkzeug.append(neu, kosten, uhr, auf);
+    werkzeug.append(neu, kosten, schwelle, uhr, auf);
   }
   bereich.append(werkzeug);
 
   const hinweise = document.createElement('div');
   hinweise.innerHTML = `<p class="sl-hinweis">Zuletzt abgeglichen: ${esc(zeitText(r.stand.abgleich))}. `
     + 'Namen und Verkaufstage kommen aus MTG Wiki, sonst aus MTGJSON und Scryfall. '
-    + 'Die Werte sind Summen aus Cardmarket (Ø 7 Tage, ohne Foil, ohne Bonuskarten), keine Kaufempfehlung.'
+    + `Die Werte sind Summen aus Cardmarket (Ø 7 Tage, sonst ab, ${ausfuehrungText(istFoil())}, ohne Bonuskarten), keine Kaufempfehlung. `
+    + `Schnäppchen: der ganze Drop ab höchstens ${r.schnaeppchen} % der Drucke einzeln.`
     + `${ausgeblendet ? ` ${ausgeblendet} einzelne Karten ohne Drop sind ausgeblendet.` : ''}</p>`
     + (r.stand.fehler ? `<p class="meldung" role="alert">${esc(r.stand.fehler)}</p>` : '')
     + (r.katalog ? '' : '<p class="meldung" role="alert">Dafür braucht das Add-on den Kartenkatalog. Bitte einmal die Erkennung am PC starten.</p>');
   bereich.append(hinweise);
 
-  for (const [titel, drops] of [['Kommend', [...kommend].reverse()], ['Bereits im Verkauf', verkauft]]) {
-    if (!drops.length) continue;
-    const h = document.createElement('h2');
-    h.className = 'etikett sl-abschnitt';
-    h.textContent = titel;
-    const ul = document.createElement('ul');
-    ul.className = 'sl-liste';
-    ul.innerHTML = drops.map(eintragHtml).join('');
-    bereich.append(h, ul);
-  }
+  const jahre = [...new Set(sichtbar.map(jahrVon))].sort().reverse();
+  const leiste = document.createElement('div');
+  leiste.innerHTML = filterHtml(jahre);
+  const ergebnis = document.createElement('div');
+  ergebnis.setAttribute('aria-live', 'polite');
+  const zeichnen = () => {
+    const treffer = sichtbar.filter(passt);
+    // Kommende zuerst (der nächste oben), dann je Jahr, neueste zuerst
+    const gruppen = [['Kommend', treffer.filter((d) => d.kommend).reverse()]];
+    for (const j of jahre) gruppen.push([j === 'unbekannt' ? 'Tag unbekannt' : j, treffer.filter((d) => !d.kommend && jahrVon(d) === j)]);
+    const teile = [`<p class="sl-hinweis sl-treffer">${treffer.length} von ${sichtbar.length} Drops</p>`];
+    for (const [titel, drops] of gruppen) {
+      if (!drops.length) continue;
+      teile.push(`<h2 class="etikett sl-abschnitt">${esc(titel)} <span class="sl-zahl">(${drops.length})</span></h2>`
+        + `<ul class="sl-liste">${drops.map(eintragHtml).join('')}</ul>`);
+    }
+    if (!treffer.length) teile.push('<p class="hinweis">Kein Drop passt zu den Filtern.</p>');
+    ergebnis.innerHTML = teile.join('');
+  };
+  leiste.addEventListener('input', (e) => {
+    const feld = e.target.closest('[data-filter]');
+    if (!feld) return;
+    filter[feld.dataset.filter] = feld.type === 'checkbox' ? feld.checked : feld.value;
+    zeichnen();
+  });
+  zeichnen();
+  bereich.append(leiste, ergebnis);
   wurzel.replaceChildren(bereich);
 }
 
@@ -263,7 +402,8 @@ function cardmarketHtml(d) {
   const produkte = d.produkte || [];
   // Die Drucke einzeln zusammen, direkt neben dem ganzen Drop (Wunsch des Nutzers)
   const drucke = `<li class="sl-cm"><span class="sl-cm-titel">Die Drucke dieses Drops einzeln</span><dl class="sl-werte">`
-    + `<div><dt>Zusammen (Ø 7 Tage, sonst ab)</dt><dd>${esc(druckeText(d))}</dd></div></dl></li>`;
+    + `<div><dt>Zusammen in ${ausfuehrungText(istFoil())} (Ø 7 Tage, sonst ab)</dt><dd>${esc(druckeText(d))}</dd></div></dl></li>`;
+  const s = zahlen(d).schnaeppchen;
   if (!produkte.length) {
     return '<h2 class="etikett sl-abschnitt">Bei Cardmarket</h2>'
       + `<ul class="sl-liste">${drucke}</ul>`
@@ -272,15 +412,18 @@ function cardmarketHtml(d) {
   }
   const eintrag = (p) => {
     const reihen = [['Nicht-Foil', abTrend(p.low, p.trend) || '–'], ['Foil', abTrend(p.low_foil, p.trend_foil) || '–']];
+    const marke = s && s.cardmarket_id === p.cardmarket_id
+      ? ` <span class="sl-marke sl-schnaeppchen">Schnäppchen −${s.abschlag} %</span>` : '';
     return `<li class="sl-cm"><a class="sl-cm-link" href="${CARDMARKET}${encodeURIComponent(p.cardmarket_id)}" target="_blank"`
       + ` rel="noopener noreferrer">${esc(p.name)}<span class="sl-cm-pfeil" aria-hidden="true"> ↗</span>`
-      + '<span class="nur-vorleser"> (öffnet Cardmarket)</span></a>'
+      + `<span class="nur-vorleser"> (öffnet Cardmarket)</span></a>${marke}`
       + `<dl class="sl-werte">${reihen.map(([t, w]) => `<div><dt>${esc(t)}</dt><dd>${esc(w)}</dd></div>`).join('')}</dl></li>`;
   };
   return '<h2 class="etikett sl-abschnitt">Bei Cardmarket</h2>'
     + `<ul class="sl-liste">${produkte.map(eintrag).join('')}${drucke}</ul>`
     + '<p class="sl-hinweis">Preise aus der täglichen Preisdatei von Cardmarket: der ganze Drop mit ab und Trend, '
-    + 'die Drucke einzeln mit Ø 7 Tage (sonst ab), ohne Foil und Bonuskarten.</p>';
+    + `die Drucke einzeln mit Ø 7 Tage (sonst ab), ohne Bonuskarten. Schnäppchen: der ganze Drop ab höchstens `
+    + `${esc(String(d.schwelle ?? 80))} % der Drucke einzeln in derselben Ausführung, nur wenn jede Karte einen Preis hat.</p>`;
 }
 
 /** Bild eines Drucks mit Preis darunter. Ein Tipp vergrößert es. Die Bilder kommen direkt von Scryfall. */
@@ -296,13 +439,17 @@ function figurHtml(titel, id, name, wert, druck, leer) {
 
 function kartenHtml(d) {
   const druck = (set, nummer) => (set ? `${String(set).toUpperCase()} ${nummer ?? ''}`.trim() : '');
+  const f = istFoil() ? '_foil' : '';
+  const kein = istFoil() ? 'Kein Foil-Reprint' : 'Kein Reprint';
   const karte = (k) => `<li class="sl-karte"><h2 class="sl-kartenname">${k.anzahl > 1 ? `${k.anzahl}× ` : ''}${esc(k.name)}</h2>`
     + (k.bonus ? '<p class="sl-druck">Bonuskarte, zählt nicht zum Wert des Drops</p>' : '')
     + (k.nur_sld ? '<p class="sl-druck">Basic Land: nur gegen andere Secret Lairs</p>' : '')
     + '<div class="sl-figuren">'
-    + figurHtml('Secret Lair', k.scryfall_id, k.name, k.preis, k.nummer ? `SLD ${k.nummer}` : '', 'Noch kein Bild')
-    + figurHtml('Teuerster Reprint', k.teuer_id, k.name, k.teuer, druck(k.teuer_set, k.teuer_nummer), 'Kein Reprint')
-    + figurHtml('Günstigster Reprint', k.guenstig_id, k.name, k.guenstig, druck(k.guenstig_set, k.guenstig_nummer), 'Kein Reprint')
+    + figurHtml('Secret Lair', k.scryfall_id, k.name, k[`preis${f}`], k.nummer ? `SLD ${k.nummer}` : '', 'Noch kein Bild')
+    + figurHtml('Teuerster Reprint', k[`teuer${f}_id`], k.name, k[`teuer${f}`],
+      druck(k[`teuer${f}_set`], k[`teuer${f}_nummer`]), kein)
+    + figurHtml('Günstigster Reprint', k[`guenstig${f}_id`], k.name, k[`guenstig${f}`],
+      druck(k[`guenstig${f}_set`], k[`guenstig${f}_nummer`]), kein)
     + '</div></li>';
   return `<ul class="sl-karten">${d.liste.map(karte).join('')}</ul>`;
 }
@@ -324,6 +471,9 @@ async function dropZeigen(wurzel, id) {
   bereich.className = 'sets';
   const eigen = d.datum_eigen && d.quelle !== 'hand' ? ' · Tag von dir' : '';
   bereich.append(kopf(d.name, `${d.kommend ? beginnText(d) : datum(d.verkauf)}${eigen}`, '#/secretlair'));
+  bereich.append(umschalter());
+  const marken = schnaeppchenHtml(d);
+  if (marken) bereich.insertAdjacentHTML('beforeend', `<p class="sl-marken">${marken}</p>`);
 
   const werkzeug = document.createElement('div');
   werkzeug.className = 'sl-werkzeug';
@@ -333,10 +483,15 @@ async function dropZeigen(wurzel, id) {
       const neu = await nameFragen(d.name);
       if (neu) { await senden(`/api/secretlair/${id}`, { methode: 'PATCH', daten: { name: neu } }); await neuZeigen(); }
     });
-    const kosten = knopf('Kosten ändern');
+    const foil = istFoil();
+    const kosten = knopf(`Kosten ändern (${ausfuehrungText(foil)})`);
     kosten.addEventListener('click', async () => {
-      const e = await kostenFragen('Kosten dieses Drops', 'Leer heißt: die Standardkosten gelten.', d.kosten_eigen);
-      if (e) { await senden(`/api/secretlair/${id}`, { methode: 'PATCH', daten: e }); await neuZeigen(); }
+      const e = await kostenFragen(`Kosten dieses Drops (${ausfuehrungText(foil)})`, 'Leer heißt: die Standardkosten gelten.',
+        zahlen(d).kosten_eigen);
+      if (e) {
+        await senden(`/api/secretlair/${id}`, { methode: 'PATCH', daten: foil ? { kosten_foil: e.kosten } : e });
+        await neuZeigen();
+      }
     });
     const wunsch = knopf(d.wunsch ? '★ Möchte ich kaufen' : '☆ Möchte ich kaufen');
     wunsch.setAttribute('aria-pressed', String(d.wunsch));
@@ -374,20 +529,143 @@ async function dropZeigen(wurzel, id) {
     }
   }
   const inhalt = document.createElement('div');
-  const v = d.verlauf;
+  const v = istFoil() ? d.verlauf_foil : d.verlauf;
+  const ohne = zahlen(d).ohne_vergleich;
   inhalt.innerHTML = werteHtml(d)
-    + `<p class="sl-hinweis">Quelle: ${esc(QUELLEN[d.quelle] ?? d.quelle)}.${d.ohne_vergleich ? ` ${d.ohne_vergleich} Karten ohne Vergleichswert.` : ''}</p>`
-    + (v && v.tage > 1 ? `<p class="sl-hinweis">Verlauf dieses Drops: ${esc(geld(v.erster[1]))} am ${esc(datum(v.erster[0]))}, `
-      + `${esc(geld(v.letzter[1]))} am ${esc(datum(v.letzter[0]))} (${v.tage} Tage).</p>` : '')
-    + cardmarketHtml(d)
+    + `<p class="sl-hinweis">Quelle: ${esc(QUELLEN[d.quelle] ?? d.quelle)}.${ohne ? ` ${ohne} Karten ohne Vergleichswert.` : ''}</p>`
+    + (v && v.tage > 1 ? `<p class="sl-hinweis">Verlauf dieses Drops (${ausfuehrungText(istFoil())}): ${esc(geld(v.erster[1]))} am ${esc(datum(v.erster[0]))}, `
+      + `${esc(geld(v.letzter[1]))} am ${esc(datum(v.letzter[0]))} (${v.tage} Tage).</p>` : '');
+  const kaeufe = kaeufeTeil(d, id);
+  const rest = document.createElement('div');
+  rest.innerHTML = cardmarketHtml(d)
     + '<h2 class="etikett sl-abschnitt">Karten</h2>'
     + kartenHtml(d);
-  inhalt.addEventListener('click', (e) => {
+  rest.addEventListener('click', (e) => {
     const b = e.target.closest('[data-bild]');
     if (b) bildZeigen(b);
   });
-  bereich.append(werkzeug, inhalt);
+  bereich.append(werkzeug, inhalt, kaeufe, rest);
   wurzel.replaceChildren(bereich);
+}
+
+// ---------------------------------------------------------------- Eigene Käufe
+
+let meldungNachher = null;   // { text, schritt } für die Meldung nach dem Neuzeichnen
+
+const kaufDatum = (tag) => (tag ? new Date(`${tag}T00:00:00`).toLocaleDateString('de-DE') : 'Kaufdatum offen');
+
+/** Abschnitt „Meine Käufe“: Summe, je Kauf Kaufpreis, Wert heute, Gewinn/Verlust; Eintragen, Ändern, Löschen. */
+function kaeufeTeil(d, id) {
+  const teil = document.createElement('section');
+  teil.className = 'sl-kaeufe';
+  teil.setAttribute('aria-label', 'Meine Käufe');
+  const b = d.besitz;
+  let html = '<h2 class="etikett sl-abschnitt">Meine Käufe</h2>';
+  if (b) {
+    html += '<dl class="sl-werte">'
+      + `<div><dt>Kaufpreis (${b.exemplare} Stück)</dt><dd>${esc(geld(b.kaufpreis))}</dd></div>`
+      + `<div><dt>Wert heute</dt><dd>${esc(geld(b.wert))}</dd></div>`
+      + `<div><dt>Gewinn / Verlust</dt><dd>${gewinnHtml(b.gewinn, b.prozent)}</dd></div></dl>`
+      + '<ul class="sl-liste sl-kaufliste">' + b.kaeufe.map((k) => '<li class="sl-kauf">'
+        + `<p class="sl-kauf-titel">${k.anzahl}× ${ausfuehrungText(k.foil)} · je ${esc(geld(k.preis))} · ${esc(kaufDatum(k.datum))}</p>`
+        + '<dl class="sl-werte">'
+        + `<div><dt>Kaufpreis</dt><dd>${esc(geld(k.kaufpreis))}</dd></div>`
+        + `<div><dt>Wert heute</dt><dd>${esc(geld(k.wert))}</dd></div>`
+        + `<div><dt>Gewinn / Verlust</dt><dd>${gewinnHtml(k.gewinn, k.prozent)}</dd></div></dl>`
+        + `<p class="sl-druck">${k.grundlage ? `Grundlage: ${esc(k.grundlage)}${k.anzahl > 1 ? `, je Stück ${esc(geld(k.stueckwert))}` : ''}`
+          : `Noch kein Preis für ${ausfuehrungText(k.foil)}: kein Wert, zählt beim Gewinn nicht mit.`}</p>`
+        + (angemeldet() ? `<div class="sl-werkzeug sl-kauf-werkzeug"><button type="button" class="knopf" data-kauf-aendern="${k.id}">Ändern</button>`
+          + `<button type="button" class="knopf knopf-gefahr" data-kauf-loeschen="${k.id}">Löschen</button></div>` : '')
+        + '</li>').join('') + '</ul>';
+  } else {
+    html += '<p class="sl-hinweis">Du hast diesen Drop noch nicht eingetragen.</p>';
+  }
+  teil.innerHTML = html;
+  const box = Object.assign(document.createElement('div'), { hidden: true });
+  box.setAttribute('role', 'status');
+  if (angemeldet()) {
+    const neu = knopf('Kauf eintragen', 'knopf knopf-haupt');
+    neu.addEventListener('click', async () => {
+      const daten = await kaufFragen(null);
+      if (!daten) return;
+      await kaufSenden(box, () => senden(`/api/secretlair/${id}/kauf`, { daten }), 'Kauf eingetragen.');
+    });
+    const reihe = document.createElement('div');
+    reihe.className = 'sl-werkzeug';
+    reihe.append(neu);
+    teil.append(reihe);
+    teil.addEventListener('click', async (e) => {
+      const aendern = e.target.closest('[data-kauf-aendern]');
+      const loeschen = e.target.closest('[data-kauf-loeschen]');
+      if (aendern) {
+        const k = b.kaeufe.find((x) => String(x.id) === aendern.dataset.kaufAendern);
+        const daten = await kaufFragen(k);
+        if (daten) await kaufSenden(box, () => senden(`/api/secretlair/kauf/${k.id}`, { methode: 'PATCH', daten }), 'Kauf geändert.');
+      } else if (loeschen) {
+        const kid = loeschen.dataset.kaufLoeschen;
+        if (await bestaetigen({ titel: 'Kauf löschen?', text: 'Der Kauf wird entfernt. Du kannst es gleich danach rückgängig machen.', ja: 'Löschen', gefahr: true })) {
+          await kaufSenden(box, () => senden(`/api/secretlair/kauf/${kid}`, { methode: 'DELETE' }), 'Kauf gelöscht.');
+        }
+      }
+    });
+  }
+  teil.append(box);
+  if (meldungNachher) {
+    const m = meldungNachher;
+    meldungNachher = null;
+    toastZeigen(box, m.text, { schritt: m.schritt, nachRueck: async () => { await neuZeigen(); } });
+  }
+  return teil;
+}
+
+async function kaufSenden(box, aufruf, text) {
+  let r;
+  try {
+    r = await aufruf();
+  } catch (f) {
+    toastZeigen(box, f.message, { art: 'fehler' });
+    return;
+  }
+  meldungNachher = { text, schritt: r.schritt };
+  await neuZeigen();
+}
+
+/** Dialog für einen Kauf; gibt die Felder zurück oder undefined bei Abbruch. */
+function kaufFragen(alt) {
+  const form = document.createElement('form');
+  form.id = 'sl-kauf';
+  form.noValidate = true;
+  const foil = alt ? alt.foil : istFoil();
+  form.innerHTML = '<fieldset class="sl-ausfuehrung"><legend class="etikett feld-etikett">Ausführung</legend>'
+    + `<label class="sl-haken"><input type="radio" name="sl-foil" value="0"${foil ? '' : ' checked'}> Nicht-Foil</label>`
+    + `<label class="sl-haken"><input type="radio" name="sl-foil" value="1"${foil ? ' checked' : ''}> Foil</label></fieldset>`
+    + '<label class="etikett feld-etikett" for="sl-anzahl">Anzahl</label>'
+    + `<input id="sl-anzahl" class="feld" type="number" min="1" max="999" step="1" inputmode="numeric" value="${alt ? alt.anzahl : 1}">`
+    + '<label class="etikett feld-etikett" for="sl-preis">Kaufpreis je Stück in Euro</label>'
+    + `<input id="sl-preis" class="feld" type="number" min="0" max="10000" step="0.01" inputmode="decimal" value="${alt ? alt.preis : ''}">`
+    + '<label class="etikett feld-etikett" for="sl-datum">Kaufdatum (wenn bekannt)</label>'
+    + `<input id="sl-datum" class="feld" type="date" value="${esc(alt?.datum ?? '')}">`
+    + '<p class="meldung" role="alert" aria-live="assertive"></p>';
+  const d = dialog({ titel: alt ? 'Kauf ändern' : 'Kauf eintragen', klasse: 'dialog-klein', inhalt: form });
+  const abbrechen = knopf('Abbrechen');
+  abbrechen.addEventListener('click', () => d.schliessen());
+  const los = Object.assign(knopf('Speichern', 'knopf knopf-haupt'), { type: 'submit' });
+  los.setAttribute('form', form.id);
+  d.fuss.append(abbrechen, los);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const anzahl = Number(form.querySelector('#sl-anzahl').value);
+    const preisRoh = form.querySelector('#sl-preis').value;
+    const meldung = form.querySelector('.meldung');
+    if (!Number.isInteger(anzahl) || anzahl < 1 || anzahl > 999) { meldung.textContent = 'Die Anzahl muss zwischen 1 und 999 liegen.'; return; }
+    if (preisRoh === '' || Number(preisRoh) < 0) { meldung.textContent = 'Bitte den Kaufpreis je Stück eintragen.'; return; }
+    d.schliessen({
+      foil: form.querySelector('input[name="sl-foil"]:checked').value === '1', anzahl, preis: Number(preisRoh),
+      datum: form.querySelector('#sl-datum').value || null,
+    });
+  });
+  form.querySelector('#sl-preis').focus();
+  return d.fertig;
 }
 
 async function nameFragen(alt) {

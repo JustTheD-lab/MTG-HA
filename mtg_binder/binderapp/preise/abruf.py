@@ -59,12 +59,17 @@ def herunterladen(ziel: Path, url: str = URL, oeffnen=urllib.request.urlopen) ->
 def sammlung_ids(con) -> set[int]:
     """Produkte, deren Preise gespeichert werden: die Sammlung, (ab Version 8) die Decklisten, auch fehlende Karten
     (bei Zeilen ohne Druck alle Drucke der Karte, für den günstigsten Preis), und (ab Version 12) die Secret-Lair-Drops
-    der letzten 12 Monate, damit ab dem Verkaufsstart ein echter Verlauf entsteht."""
+    der letzten 12 Monate, damit ab dem Verkaufsstart ein echter Verlauf entsteht. Ab Version 18 kennt die App alle
+    Drops seit 2019; in den Verlauf kommen weiter nur die der letzten 12 Monate, kommende und (immer) eigene."""
     ids = {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM kartendaten WHERE cardmarket_id IS NOT NULL")}
     if version(con) >= 8:
         ids |= {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM deck_produkt")}
     if version(con) >= 12:
-        ids |= {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM secret_karte WHERE cardmarket_id IS NOT NULL")}
+        grenze = (date.today() - timedelta(days=365)).isoformat()
+        eigene = " OR d.id IN (SELECT drop_id FROM secret_kauf)" if version(con) >= 18 else ""
+        ids |= {z[0] for z in con.execute(
+            "SELECT DISTINCT k.cardmarket_id FROM secret_karte k JOIN secret_drop d ON d.id = k.drop_id"
+            f" WHERE k.cardmarket_id IS NOT NULL AND (d.verkauf IS NULL OR d.verkauf >= ?{eigene})", (grenze,))}
     return ids
 
 

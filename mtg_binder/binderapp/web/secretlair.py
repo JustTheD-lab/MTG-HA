@@ -3,10 +3,16 @@
     GET    /api/secretlair                 alle Drops mit Summen, Standardkosten, Stand des Abgleichs
     GET    /api/secretlair/{id}            ein Drop mit Karten und Verlauf
     POST   /api/secretlair                 {"name", "verkauf"?, "text", "probe"?}  Drop von Hand, mit `probe` nur prüfen
-    PATCH  /api/secretlair/{id}            {"name"?, "kosten"?, "verkauf"?, "wunsch"?}  Kosten: Euro oder null für den
-                                           Standard; Verkaufstag JJJJ-MM-TT oder null (wieder automatisch); Wunsch ja/nein
-    DELETE /api/secretlair/{id}            nur Drops von Hand
-    POST   /api/secretlair/kosten          {"kosten"}  Standardkosten je Drop in Euro, null = keine
+    PATCH  /api/secretlair/{id}            {"name"?, "kosten"?, "kosten_foil"?, "verkauf"?, "wunsch"?}  Kosten: Euro oder
+                                           null für den Standard; Verkaufstag JJJJ-MM-TT oder null (wieder automatisch)
+    DELETE /api/secretlair/{id}            nur Drops von Hand, nur ohne Käufe
+    POST   /api/secretlair/kosten          {"kosten"} oder {"kosten_foil"}  Standardkosten je Drop in Euro, null = keine
+    POST   /api/secretlair/schnaeppchen    {"prozent"}  Schwelle für „Schnäppchen“ (Standard 80)
+    POST   /api/secretlair/{id}/kauf       {"foil", "anzahl", "preis", "datum"?}  eigener Kauf (Preis je Stück in Euro)
+    PATCH  /api/secretlair/kauf/{id}       dieselben Felder, einzeln
+    DELETE /api/secretlair/kauf/{id}
+                                           Käufe sind Nutzerdaten mit Historie; die Antwort nennt den `schritt`,
+                                           Rückgängig über POST /api/schritt/{schritt}/rueckgaengig
     POST   /api/secretlair/uhrzeit         {"uhrzeit": "HH:MM"}  Verkaufsbeginn aller Drops (Standard 17:00)
     POST   /api/secretlair/aktualisieren   Abgleich und Bewertung sofort
 
@@ -27,6 +33,8 @@ from binderapp.secretlair import drops
 from binderapp.web.helfer import Fehler, fehler
 
 KOSTEN_MAX = 10000
+ANZAHL_MAX = 999
+PROZENT = (1, 100)
 TEXT_MAX = 8000
 DATUM = re.compile(r"\d{4}-\d{2}-\d{2}")
 KEIN_KATALOG = "Dafür braucht das Add-on den Kartenkatalog. Bitte einmal die Erkennung am PC starten."
@@ -59,6 +67,35 @@ def _tag(wert) -> str | None:
     raise Fehler("Der Verkaufstag ist ungültig.")
 
 
+def _kauf(d: dict, alles: bool) -> dict:
+    """Felder eines Kaufs aus der Anfrage; `alles` verlangt Ausführung, Anzahl und Preis."""
+    if set(d) - set(drops.KAUF_FELDER) or not d:
+        raise Fehler("Erlaubt sind „foil“, „anzahl“, „preis“ und „datum“.")
+    if alles and not {"foil", "anzahl", "preis"} <= set(d):
+        raise Fehler("Bitte Ausführung, Anzahl und Kaufpreis je Stück angeben.")
+    aus = {}
+    if "foil" in d:
+        if not isinstance(d["foil"], bool):
+            raise Fehler("„foil“ muss ja oder nein sein.")
+        aus["foil"] = int(d["foil"])
+    if "anzahl" in d:
+        if isinstance(d["anzahl"], bool) or not isinstance(d["anzahl"], int) or not 1 <= d["anzahl"] <= ANZAHL_MAX:
+            raise Fehler(f"Die Anzahl muss zwischen 1 und {ANZAHL_MAX} liegen.")
+        aus["anzahl"] = d["anzahl"]
+    if "preis" in d:
+        if d["preis"] is None:
+            raise Fehler("Bitte den Kaufpreis je Stück angeben.")
+        aus["preis"] = round(_kosten(d["preis"]), 2)
+    if "datum" in d:
+        try:
+            aus["datum"] = _tag(d["datum"] or None)
+        except Fehler:
+            raise Fehler("Das Kaufdatum ist ungültig.")
+    elif alles:
+        aus["datum"] = None
+    return aus
+
+
 def routen(h) -> list[Route]:
     preisdatei = Path(h.datenbank).parent / "preise" / "price_guide_1.json"
 
@@ -67,7 +104,10 @@ def routen(h) -> list[Route]:
 
     def uebersicht(request):
         with closing(h.db()) as con:
-            return JSONResponse({"drops": drops.liste(con), "kosten": drops.standard_kosten(con),
+            liste = drops.liste(con)
+            return JSONResponse({"drops": liste, "kosten": drops.standard_kosten(con),
+                                 "kosten_foil": drops.standard_kosten(con, foil=True),
+                                 "schnaeppchen": drops.schwelle(con), "besitz": drops.besitz_gesamt(liste),
                                  "uhrzeit": drops.uhrzeit(con),
                                  "stand": drops.stand(con), "katalog": h.katalog_pfad is not None
                                  and Path(h.katalog_pfad).exists()})
@@ -109,10 +149,11 @@ def routen(h) -> list[Route]:
     async def aendern(request):
         d = await h.json_daten(request)
         drop = _id(request)
-        if set(d) - {"name", "kosten", "verkauf", "wunsch"} or not d:
-            raise Fehler("Erlaubt sind „name“, „kosten“, „verkauf“ und „wunsch“.")
+        if set(d) - {"name", "kosten", "kosten_foil", "verkauf", "wunsch"} or not d:
+            raise Fehler("Erlaubt sind „name“, „kosten“, „kosten_foil“, „verkauf“ und „wunsch“.")
         name = _name(d["name"]) if "name" in d else None
         kosten = _kosten(d.get("kosten"))
+        kosten_foil = _kosten(d.get("kosten_foil"))
         verkauf = _tag(d.get("verkauf"))
         if "wunsch" in d and not isinstance(d["wunsch"], bool):
             raise Fehler("„wunsch“ muss ja oder nein sein.")
@@ -124,6 +165,8 @@ def routen(h) -> list[Route]:
                 con.execute("UPDATE secret_drop SET name = ?, umbenannt = 1 WHERE id = ?", (name, drop))
             if "kosten" in d:
                 con.execute("UPDATE secret_drop SET kosten = ? WHERE id = ?", (kosten, drop))
+            if "kosten_foil" in d:
+                con.execute("UPDATE secret_drop SET kosten_foil = ? WHERE id = ?", (kosten_foil, drop))
             if "wunsch" in d:
                 con.execute("UPDATE secret_drop SET wunsch = ? WHERE id = ?", (int(d["wunsch"]), drop))
             if "verkauf" in d:
@@ -149,6 +192,8 @@ def routen(h) -> list[Route]:
                 raise Fehler("Diesen Drop gibt es nicht.", 404)
             if z["quelle"] != "hand":
                 raise Fehler("Nur Drops von Hand lassen sich löschen, die anderen kommen beim Abgleich wieder.", 409)
+            if con.execute("SELECT 1 FROM secret_kauf WHERE drop_id = ? LIMIT 1", (drop,)).fetchone():
+                raise Fehler("Zu diesem Drop gibt es Käufe. Bitte zuerst die Käufe löschen.", 409)
             con.execute("DELETE FROM secret_drop WHERE id = ?", (drop,))
             return {"id": drop}
         return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
@@ -156,9 +201,56 @@ def routen(h) -> list[Route]:
     @h.schreibend
     async def kosten_setzen(request):
         d = await h.json_daten(request)
-        kosten = _kosten(d.get("kosten"))
-        await run_in_threadpool(h.schreibvorgang, lambda con: drops.wert_setzen(con, "kosten", kosten))
-        return JSONResponse({"kosten": kosten})
+        if len(d) != 1 or not set(d) <= {"kosten", "kosten_foil"}:
+            raise Fehler("Bitte genau „kosten“ oder „kosten_foil“ angeben.")
+        name, = d
+        kosten = _kosten(d[name])
+        await run_in_threadpool(h.schreibvorgang, lambda con: drops.wert_setzen(con, name, kosten))
+        return JSONResponse({name: kosten})
+
+    @h.schreibend
+    async def schwelle_setzen(request):
+        d = await h.json_daten(request)
+        prozent = d.get("prozent")
+        if isinstance(prozent, bool) or not isinstance(prozent, int) or not PROZENT[0] <= prozent <= PROZENT[1]:
+            raise Fehler(f"Die Schwelle muss eine ganze Zahl zwischen {PROZENT[0]} und {PROZENT[1]} Prozent sein.")
+        await run_in_threadpool(h.schreibvorgang, lambda con: drops.wert_setzen(con, "schnaeppchen", prozent))
+        return JSONResponse({"schnaeppchen": prozent})
+
+    @h.schreibend
+    async def kauf_anlegen(request):
+        felder = _kauf(await h.json_daten(request), alles=True)
+        drop = _id(request)
+
+        def arbeit(con):
+            if con.execute("SELECT 1 FROM secret_drop WHERE id = ?", (drop,)).fetchone() is None:
+                raise Fehler("Diesen Drop gibt es nicht.", 404)
+            kauf, schritt = drops.kauf_anlegen(con, h.nutzer, drop, felder)
+            return {"id": kauf, "schritt": schritt}
+        return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
+
+    def _kauf_da(con, kauf: int) -> None:
+        if con.execute("SELECT 1 FROM secret_kauf WHERE id = ? AND nutzer_id = ?", (kauf, h.nutzer)).fetchone() is None:
+            raise Fehler("Diesen Kauf gibt es nicht.", 404)
+
+    @h.schreibend
+    async def kauf_aendern(request):
+        felder = _kauf(await h.json_daten(request), alles=False)
+        kauf = _id(request)
+
+        def arbeit(con):
+            _kauf_da(con, kauf)
+            return {"id": kauf, "schritt": drops.kauf_aendern(con, h.nutzer, kauf, felder)}
+        return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
+
+    @h.schreibend
+    async def kauf_loeschen(request):
+        kauf = _id(request)
+
+        def arbeit(con):
+            _kauf_da(con, kauf)
+            return {"id": kauf, "schritt": drops.kauf_loeschen(con, h.nutzer, kauf)}
+        return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
 
     @h.schreibend
     async def uhrzeit_setzen(request):
@@ -183,6 +275,10 @@ def routen(h) -> list[Route]:
         Route("/secretlair", einfuegen, methods=["POST"]),
         Route("/secretlair/kosten", kosten_setzen, methods=["POST"]),
         Route("/secretlair/uhrzeit", uhrzeit_setzen, methods=["POST"]),
+        Route("/secretlair/schnaeppchen", schwelle_setzen, methods=["POST"]),
+        Route("/secretlair/kauf/{id:int}", kauf_aendern, methods=["PATCH"]),
+        Route("/secretlair/kauf/{id:int}", kauf_loeschen, methods=["DELETE"]),
+        Route("/secretlair/{id:int}/kauf", kauf_anlegen, methods=["POST"]),
         Route("/secretlair/aktualisieren", aktualisieren, methods=["POST"]),
         Route("/secretlair/{id:int}", einer),
         Route("/secretlair/{id:int}", aendern, methods=["PATCH"]),

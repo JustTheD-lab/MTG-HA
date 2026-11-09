@@ -2,7 +2,8 @@
 
     GET /api/dashboard   Kopf (Wert, Veränderung, Zahlen), Verlauf, teuerste Karten, Gewinner und Verlierer je Abstand,
                          Verteilungen (Karten und Euro je Farbe, Seltenheit, Typ, Sprache, Manawert, Preisbereich,
-                         Erkennung, Set), Binder, Kisten und Decks, Zuwachs je Monat, Scans je Tag, kommende Drops
+                         Erkennung, Set), Binder, Kisten und Decks, Zuwachs je Monat, Scans je Tag, kommende Drops,
+                         eigene Secret Lairs (Kaufpreis, Wert, Gewinn/Verlust; ab Version 18)
 
 Dieselben Abfragen wie Regal, Sammlung und Home Assistant (`ha.daten`, `preise.werte`); neu sind nur die Verteilungen.
 Der Verlauf zeigt die **Preisentwicklung des heutigen Bestands**: `preis` kennt nur Produkte, die am jeweiligen Tag zur
@@ -20,6 +21,7 @@ from starlette.routing import Route
 from binderapp.db.datenbank import version
 from binderapp.ha import daten as ha_daten
 from binderapp.preise import werte
+from binderapp.secretlair import drops as secret_drops
 from binderapp.web import kisten as k_
 
 __all__ = ["routen", "verlauf", "verteilungen"]
@@ -175,6 +177,13 @@ def _drops(con, heute: date) -> list[dict]:
             for z in con.execute(SQL_DROPS, (heute.isoformat(), DROPS))]
 
 
+def _secret_besitz(con) -> dict | None:
+    """Summe der eigenen Secret Lairs wie oben in der Secret-Lair-Ansicht (Wunsch des Nutzers, 09.11.2026)."""
+    if version(con) < 18:
+        return None
+    return secret_drops.besitz_gesamt(secret_drops.liste(con, nur_eigene=True))
+
+
 def stand(con) -> tuple:
     """Ändert sich, sobald sich Karten, Kartendaten oder Preise ändern (jede Änderung der Sammlung steht in `historie`)."""
     return tuple(con.execute(
@@ -205,7 +214,8 @@ def _sammlung(con, nutzer: int) -> dict:
 
 def _aktuell(con, nutzer: int, heute: date) -> dict:
     """Der günstige Teil, der sich auch ohne Änderung an den Karten bewegt."""
-    return {"status": ha_daten.status(con, nutzer), "scans": _scans(con, nutzer, heute), "drops": _drops(con, heute)}
+    return {"status": ha_daten.status(con, nutzer), "scans": _scans(con, nutzer, heute), "drops": _drops(con, heute),
+            "secret_besitz": _secret_besitz(con)}
 
 
 def lesen(con, nutzer: int, heute: date | None = None) -> dict:

@@ -23,7 +23,7 @@ QUELLE_REGEL = "sortierregel"
 QUELLE_IMPORT = "manabox"
 QUELLEN = (QUELLE, QUELLE_REGEL, QUELLE_IMPORT)
 # seite und foto: „Seite löschen“ im Lesetisch (07.11.2026) macht aus einer Fotoseite eine Leerseite.
-TABELLEN = ("karte", "tasche", "kiste", "scan_foto", "seite", "foto")
+TABELLEN = ("karte", "tasche", "kiste", "scan_foto", "seite", "foto", "secret_kauf")
 KONFLIKT = "Das lässt sich nicht mehr zurücknehmen: Die Karten wurden inzwischen geändert."
 MUSTER = re.compile(r"^[0-9a-f]{32}$")
 JETZT = "SELECT strftime('%Y-%m-%dT%H:%M:%S', 'now')"

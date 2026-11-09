@@ -292,6 +292,13 @@ function kachelnHtml(d) {
     const k = d.kaufpreis;
     teile.push(kachel('Gegen Kaufpreis', '', `${betrag(k.kauf)} bezahlt für ${karten(k.karten)}`, { inhalt: delta(Math.round((k.wert - k.kauf) * 100) / 100) }));
   }
+  if (d.secret_besitz) {
+    // Eigene Secret Lairs: Gewinn/Verlust gegen den Kaufpreis (Wert wie in der Secret-Lair-Ansicht)
+    const b = d.secret_besitz;
+    const ohne = b.ohne_wert ? ` · ${zahl(b.ohne_wert)} ohne Wert` : '';
+    teile.push(kachel('Eigene Secret Lairs', '', `${betrag(b.kaufpreis)} bezahlt · ${zahl(b.exemplare)} Stück${ohne}`,
+      { inhalt: delta(b.gewinn, b.prozent), ziel: '#/secretlair' }));
+  }
   return `<div class="dash-kacheln">${teile.join('')}</div>`;
 }
 
