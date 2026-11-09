@@ -128,7 +128,10 @@ Der Knopf **„Secret Lair“** oben rechts unter **„Sets“** zeigt kommende 
 Summen aus Cardmarket (Ø 7 Tage, sonst Low, ohne Foil) und keine Kaufempfehlung.
 
 - **Teuerste Reprints:** je Karte der teuerste andere Nonfoil-Druck, zusammengezählt. **Günstigste Reprints** entsprechend.
-- **Dieser Drop heute:** der neue Druck selbst, sobald er bei Cardmarket einen Preis hat.
+- **Drucke einzeln bei Cardmarket:** die Secret-Lair-Drucke des Drops zusammen (Ø 7 Tage, sonst Low, ohne Foil und
+  Bonuskarten), sobald sie bei Cardmarket einen Preis haben; „5 von 6 Karten“, wenn noch nicht alle einen haben.
+- **Drop bei Cardmarket:** der ganze Drop als Produkt bei Cardmarket (ab und Trend, auch Foil), auf der Seite des
+  Drops beide Fassungen (mit und ohne „Set“) mit Link.
 - **Basic Lands** zählen nur gegen andere Secret Lairs, sonst stünden Sammlerdrucke im Vergleich.
 - **Bilder:** Ein Drop zeigt je Karte die Secret-Lair-Fassung und beide Reprints. Sie kommen direkt von Scryfall, ein
   Tipp vergrößert sie.

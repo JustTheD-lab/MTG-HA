@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.35.2
+- Secret Lair: Was die Drucke eines Drops einzeln bei Cardmarket zusammen kosten, heißt jetzt **„Drucke einzeln bei
+  Cardmarket“** (vorher „Dieser Drop heute“) und steht auf der Seite des Drops auch im Abschnitt „Bei Cardmarket“
+  direkt unter dem ganzen Drop. Fehlen einzelne Preise, steht dabei „5 von 6 Karten“.
+
 ## 0.35.1
 - Secret Lair: Nach dem Update auf 0.35.0 hatte kein Drop einen Cardmarket-Preis. Der Abgleich, der den
   Cardmarket-Katalog lädt, lief erst 20 Stunden nach dem letzten. Jetzt gleicht das Add-on nach einem Update mit

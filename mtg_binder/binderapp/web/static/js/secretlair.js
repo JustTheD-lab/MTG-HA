@@ -65,10 +65,16 @@ function cardmarketKurz(d) {
   return p ? abTrend(p.low, p.trend) : '';
 }
 
+/** Summe der Secret-Lair-Drucke dieses Drops bei Cardmarket (Ø 7 Tage, sonst ab; ohne Foil und Bonuskarten). */
+function druckeText(d) {
+  if (d.wert === null || d.wert === undefined) return '–';
+  return d.mit_preis < d.karten ? `${geld(d.wert)} (${d.mit_preis} von ${d.karten} Karten)` : geld(d.wert);
+}
+
 function werteHtml(d) {
   const reihen = [
     ['Teuerste Reprints', geld(d.teuer)], ['Günstigste Reprints', geld(d.guenstig)],
-    ['Dieser Drop heute', geld(d.wert)], ['Deine Kosten', geld(d.kosten)],
+    ['Drucke einzeln bei Cardmarket', druckeText(d)], ['Deine Kosten', geld(d.kosten)],
     ['Teuerste Reprints ÷ Kosten', d.faktor === null ? '–' : `${d.faktor.toLocaleString('de-DE')} ×`],
   ];
   const cm = cardmarketKurz(d);
@@ -255,8 +261,13 @@ async function listeZeigen(wurzel) {
 /** Der Drop als Cardmarket-Produkt: beide Fassungen (mit und ohne „Set“) mit Preisen und Link. */
 function cardmarketHtml(d) {
   const produkte = d.produkte || [];
+  // Die Drucke einzeln zusammen, direkt neben dem ganzen Drop (Wunsch des Nutzers)
+  const drucke = `<li class="sl-cm"><span class="sl-cm-titel">Die Drucke dieses Drops einzeln</span><dl class="sl-werte">`
+    + `<div><dt>Zusammen (Ø 7 Tage, sonst ab)</dt><dd>${esc(druckeText(d))}</dd></div></dl></li>`;
   if (!produkte.length) {
-    return '<h2 class="etikett sl-abschnitt">Bei Cardmarket</h2><p class="sl-hinweis">Cardmarket führt diesen Drop noch nicht, '
+    return '<h2 class="etikett sl-abschnitt">Bei Cardmarket</h2>'
+      + `<ul class="sl-liste">${drucke}</ul>`
+      + '<p class="sl-hinweis">Den ganzen Drop führt Cardmarket noch nicht, '
       + 'oder die App konnte ihn keinem Produkt eindeutig zuordnen.</p>';
   }
   const eintrag = (p) => {
@@ -267,8 +278,9 @@ function cardmarketHtml(d) {
       + `<dl class="sl-werte">${reihen.map(([t, w]) => `<div><dt>${esc(t)}</dt><dd>${esc(w)}</dd></div>`).join('')}</dl></li>`;
   };
   return '<h2 class="etikett sl-abschnitt">Bei Cardmarket</h2>'
-    + `<ul class="sl-liste">${produkte.map(eintrag).join('')}</ul>`
-    + '<p class="sl-hinweis">Preise des versiegelten Drops aus der täglichen Preisdatei von Cardmarket.</p>';
+    + `<ul class="sl-liste">${produkte.map(eintrag).join('')}${drucke}</ul>`
+    + '<p class="sl-hinweis">Preise aus der täglichen Preisdatei von Cardmarket: der ganze Drop mit ab und Trend, '
+    + 'die Drucke einzeln mit Ø 7 Tage (sonst ab), ohne Foil und Bonuskarten.</p>';
 }
 
 /** Bild eines Drucks mit Preis darunter. Ein Tipp vergrößert es. Die Bilder kommen direkt von Scryfall. */
