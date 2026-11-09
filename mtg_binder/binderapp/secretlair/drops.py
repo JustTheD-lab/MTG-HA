@@ -1,5 +1,8 @@
 """Secret-Lair-Drops finden und bewerten (Wunsch des Nutzers, 05.11.2026). Die App zeigt Zahlen, keine Kaufempfehlung.
 
+Cardmarket: Preis des versiegelten Drops und Link über `secretlair/cardmarket.py` (Produktkatalog, gemerkt in
+`secret_wert.cm_produkte`), Preise beim Bewerten aus derselben Preisdatei.
+
 Quellen und was sie taugen (gemessen am Star-Trek-Drop, vier Tage vor dem Verkauf; MTG Wiki am 09.11.2026):
 - **MTG Wiki (`secretlair/wiki.py`, zuerst):** Drop-Name und Verkaufstag je Sammlernummer, neue Superdrops etwa zwei
   Wochen vorher, dazu welche Bonuskarte zu welchem Drop gehört. Ist das Wiki nicht erreichbar, gilt der zuletzt
@@ -40,10 +43,10 @@ from contextlib import closing
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
-from binderapp.db.datenbank import schreiben, verbinden
+from binderapp.db.datenbank import schreiben, verbinden, version
 from binderapp.katalog.suche import normalisiere
 from binderapp.preise import abruf
-from binderapp.secretlair import wiki
+from binderapp.secretlair import cardmarket, wiki
 
 MTGJSON = "https://mtgjson.com/api/v5/SLD.json"
 FENSTER_TAGE = 365     # Antwort des Nutzers: Drops der letzten 12 Monate
@@ -322,6 +325,8 @@ def abgleichen(con, kat, decks: list[dict] | None, heute: date, wiki_daten: dict
     liste_ = [g for g in gruppen.values() if any(not b for _, _, b in g["karten"])] + _laeufe(rest)
     liste_.sort(key=lambda g: (_start(g, drucke), g["schluessel"]))
     _gruppen_schreiben(con, liste_, drucke, behalten)
+    # Cardmarket-Produkte der Drops aus dem gemerkten Katalog (`einmal` merkt ihn vorher frisch)
+    cardmarket.zuordnen(con, cardmarket.aus_text(wert_lesen(con, "cm_produkte")))
     con.execute("DELETE FROM secret_drop WHERE quelle <> 'hand' AND verkauf < ?", (grenze,))
 
 
@@ -358,6 +363,7 @@ def bewerten(con, kat, roh: bytes) -> int:
                      teuer and teuer[1]["nummer"], teuer and teuer[1]["scryfall_id"], guenstig and guenstig[0],
                      guenstig and guenstig[1]["set_code"], guenstig and guenstig[1]["nummer"],
                      guenstig and guenstig[1]["scryfall_id"], int(nur_sld), k["id"]))
+    cardmarket.preise_schreiben(con, roh)
     wert_setzen(con, "bewertet", _jetzt())
     return len(karten)
 
@@ -372,7 +378,7 @@ def bewerten_lauf(datenbank: Path, katalog: Path, preisdatei: Path) -> int:
 
 
 def einmal(datenbank: Path, katalog: Path, preisdatei: Path, oeffnen=urllib.request.urlopen, heute: date | None = None,
-           wiki_laden=None) -> dict:
+           wiki_laden=None, cardmarket_laden=None) -> dict:
     """Abgleich und Bewertung. Ist MTGJSON oder MTG Wiki nicht erreichbar, läuft der Rest trotzdem (beim Wiki mit dem
     gemerkten Stand), der Fehler steht im Stand. `wiki_laden` (Tests): liefert die Daten des Wikis."""
     fehler = []
@@ -386,12 +392,19 @@ def einmal(datenbank: Path, katalog: Path, preisdatei: Path, oeffnen=urllib.requ
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as f:
         wiki_daten = None
         fehler.append(f"MTG Wiki nicht erreichbar: {f}")
+    try:
+        produkte = (cardmarket_laden or (lambda: cardmarket.laden(oeffnen)))()
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as f:
+        produkte = None
+        fehler.append(f"Cardmarket-Katalog nicht erreichbar: {f}")
     for f in fehler:
         log.warning("%s", f)
     with closing(verbinden(katalog, nur_lesen=True)) as kat, closing(verbinden(datenbank)) as con, schreiben(con):
         if wiki_daten is not None:
             wert_setzen(con, "wiki", wiki.als_text(wiki_daten))
             wert_setzen(con, "wiki_stand", _jetzt())
+        if produkte is not None:
+            wert_setzen(con, "cm_produkte", cardmarket.als_text(produkte))
         abgleichen(con, kat, decks, heute or date.today(), wiki_daten)
         wert_setzen(con, "abgleich", _jetzt())
         wert_setzen(con, "fehler", " · ".join(fehler) or None)
@@ -502,9 +515,15 @@ def standard_kosten(con) -> float | None:
     return float(wert) if wert else None
 
 
+def _produkte(con) -> dict[int, list[dict]]:
+    return cardmarket.lesen_je_drop(con) if version(con) >= 17 else {}
+
+
 def liste(con, jetzt: datetime | None = None) -> list[dict]:
     standard, uhr, tz = standard_kosten(con), uhrzeit(con), zone()
-    return [_drop(z, standard, uhr, _jetzt_zeit(jetzt), tz) for z in con.execute(SQL_DROPS.format(wo=""))]
+    produkte = _produkte(con)
+    return [{**_drop(z, standard, uhr, _jetzt_zeit(jetzt), tz), "produkte": produkte.get(z["id"], [])}
+            for z in con.execute(SQL_DROPS.format(wo=""))]
 
 
 def einzeln(con, drop_id: int, jetzt: datetime | None = None) -> dict | None:
@@ -512,6 +531,7 @@ def einzeln(con, drop_id: int, jetzt: datetime | None = None) -> dict | None:
     if z is None or z["id"] is None:
         return None
     d = _drop(z, standard_kosten(con), uhrzeit(con), _jetzt_zeit(jetzt), zone())
+    d["produkte"] = _produkte(con).get(drop_id, [])
     d["liste"] = [dict(k) for k in con.execute(
         "SELECT name, nummer, anzahl, preis, teuer, teuer_set, teuer_nummer, teuer_id, guenstig, guenstig_set,"
         " guenstig_nummer, guenstig_id, nur_sld, scryfall_id, bonus"

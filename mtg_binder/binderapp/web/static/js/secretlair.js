@@ -53,12 +53,26 @@ function kopf(titel, unter, ziel) {
   return header;
 }
 
+// Cardmarket verlinkt die App über die Produktnummer, wie Scryfall (keine geratenen Adressen)
+const CARDMARKET = 'https://www.cardmarket.com/de/Magic/Products?idProduct=';
+
+const abTrend = (low, trend) => [low != null ? `ab ${geld(low)}` : null, trend != null ? `Trend ${geld(trend)}` : null]
+  .filter(Boolean).join(' · ');
+
+/** Kurzform für die Liste: das Produkt ohne „Set“, sonst das andere. */
+function cardmarketKurz(d) {
+  const p = (d.produkte || []).find((x) => !x.set_fassung) || (d.produkte || [])[0];
+  return p ? abTrend(p.low, p.trend) : '';
+}
+
 function werteHtml(d) {
   const reihen = [
     ['Teuerste Reprints', geld(d.teuer)], ['Günstigste Reprints', geld(d.guenstig)],
     ['Dieser Drop heute', geld(d.wert)], ['Deine Kosten', geld(d.kosten)],
     ['Teuerste Reprints ÷ Kosten', d.faktor === null ? '–' : `${d.faktor.toLocaleString('de-DE')} ×`],
   ];
+  const cm = cardmarketKurz(d);
+  if (cm) reihen.push(['Drop bei Cardmarket', cm]);
   return `<dl class="sl-werte">${reihen.map(([t, w]) => `<div><dt>${esc(t)}</dt><dd>${esc(w)}</dd></div>`).join('')}</dl>`;
 }
 
@@ -238,6 +252,25 @@ async function listeZeigen(wurzel) {
   wurzel.replaceChildren(bereich);
 }
 
+/** Der Drop als Cardmarket-Produkt: beide Fassungen (mit und ohne „Set“) mit Preisen und Link. */
+function cardmarketHtml(d) {
+  const produkte = d.produkte || [];
+  if (!produkte.length) {
+    return '<h2 class="etikett sl-abschnitt">Bei Cardmarket</h2><p class="sl-hinweis">Cardmarket führt diesen Drop noch nicht, '
+      + 'oder die App konnte ihn keinem Produkt eindeutig zuordnen.</p>';
+  }
+  const eintrag = (p) => {
+    const reihen = [['Nicht-Foil', abTrend(p.low, p.trend) || '–'], ['Foil', abTrend(p.low_foil, p.trend_foil) || '–']];
+    return `<li class="sl-cm"><a class="sl-cm-link" href="${CARDMARKET}${encodeURIComponent(p.cardmarket_id)}" target="_blank"`
+      + ` rel="noopener noreferrer">${esc(p.name)}<span class="sl-cm-pfeil" aria-hidden="true"> ↗</span>`
+      + '<span class="nur-vorleser"> (öffnet Cardmarket)</span></a>'
+      + `<dl class="sl-werte">${reihen.map(([t, w]) => `<div><dt>${esc(t)}</dt><dd>${esc(w)}</dd></div>`).join('')}</dl></li>`;
+  };
+  return '<h2 class="etikett sl-abschnitt">Bei Cardmarket</h2>'
+    + `<ul class="sl-liste">${produkte.map(eintrag).join('')}</ul>`
+    + '<p class="sl-hinweis">Preise des versiegelten Drops aus der täglichen Preisdatei von Cardmarket.</p>';
+}
+
 /** Bild eines Drucks mit Preis darunter. Ein Tipp vergrößert es. Die Bilder kommen direkt von Scryfall. */
 function figurHtml(titel, id, name, wert, druck, leer) {
   const url = scryfallBild(id);
@@ -334,6 +367,8 @@ async function dropZeigen(wurzel, id) {
     + `<p class="sl-hinweis">Quelle: ${esc(QUELLEN[d.quelle] ?? d.quelle)}.${d.ohne_vergleich ? ` ${d.ohne_vergleich} Karten ohne Vergleichswert.` : ''}</p>`
     + (v && v.tage > 1 ? `<p class="sl-hinweis">Verlauf dieses Drops: ${esc(geld(v.erster[1]))} am ${esc(datum(v.erster[0]))}, `
       + `${esc(geld(v.letzter[1]))} am ${esc(datum(v.letzter[0]))} (${v.tage} Tage).</p>` : '')
+    + cardmarketHtml(d)
+    + '<h2 class="etikett sl-abschnitt">Karten</h2>'
     + kartenHtml(d);
   inhalt.addEventListener('click', (e) => {
     const b = e.target.closest('[data-bild]');

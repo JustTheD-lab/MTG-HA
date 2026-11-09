@@ -384,12 +384,28 @@ CREATE TABLE IF NOT EXISTS secret_karte (
     bonus         INTEGER NOT NULL DEFAULT 0 CHECK (bonus IN (0, 1))
 );
 
+-- ab Version 17 (Wunsch des Nutzers, 09.11.2026): der Drop als Cardmarket-Produkt, mit und ohne Endung „Set“
+CREATE TABLE IF NOT EXISTS secret_produkt (
+    id            INTEGER PRIMARY KEY,
+    drop_id       INTEGER NOT NULL REFERENCES secret_drop(id) ON DELETE CASCADE,
+    cardmarket_id INTEGER NOT NULL,
+    name          TEXT NOT NULL,              -- Name bei Cardmarket
+    set_fassung   INTEGER NOT NULL DEFAULT 0 CHECK (set_fassung IN (0, 1)),   -- Name endet auf „Set“
+    low           REAL,                       -- ab-Preis, Preistrend, dasselbe für Foil (aus der Preisdatei)
+    trend         REAL,
+    low_foil      REAL,
+    trend_foil    REAL,
+    UNIQUE (drop_id, cardmarket_id)
+);
+
 CREATE TABLE IF NOT EXISTS secret_wert (
-    name  TEXT PRIMARY KEY,                -- kosten (Standard in Euro), abgleich, bewertet, fehler
+    name  TEXT PRIMARY KEY,                -- kosten (Standard in Euro), abgleich, bewertet, fehler, uhrzeit,
+                                           -- wiki, wiki_stand, cm_produkte (gemerkte Quellen)
     wert  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS i_secret_karte_drop ON secret_karte(drop_id);
+CREATE INDEX IF NOT EXISTS i_secret_produkt_drop ON secret_produkt(drop_id);
 CREATE INDEX IF NOT EXISTS i_seite_binder   ON seite(binder_id, nummer);
 CREATE INDEX IF NOT EXISTS i_tasche_seite   ON tasche(seite_id);
 CREATE INDEX IF NOT EXISTS i_karte_tasche   ON karte(tasche_id);
@@ -429,4 +445,4 @@ CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 -- ab Version 14: Ausschnitt je Scan-Foto
 CREATE INDEX IF NOT EXISTS i_scan_foto_karte  ON scan_foto(karte_id);
 
-PRAGMA user_version = 16;
+PRAGMA user_version = 17;

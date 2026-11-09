@@ -18,12 +18,13 @@ from pathlib import Path
 SCHEMA = Path(__file__).with_name("schema.sql")
 TABELLEN = {"binder", "seite", "tasche", "kiste", "karte", "foto", "nutzer", "scan_durchgang", "scan_foto",
             "sortierregel", "sortierfach", "deck", "deck_karte", "deck_entnahme"}
-VERSION = 16         # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
+VERSION = 17         # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
                      # 7: Decks (02.11.2026), 8: Deckbau (03.11.2026), 9: Foil und Sets je Scan-Durchgang (04.11.2026),
                      # 10: Messwerte je Scan-Foto (05.11.2026), 11: Kaufpreis (05.11.2026),
                      # 12: Secret-Lair-Drops (05.11.2026), 13: Reprints der Drops mit Druck (06.11.2026),
                      # 14: Ausschnitt je Scan-Foto (06.11.2026), 15: Verkaufstag und Wunsch je Secret-Lair-Drop (09.11.2026),
-                     # 16: Drops aus MTG Wiki und Bonuskarten (09.11.2026)
+                     # 16: Drops aus MTG Wiki und Bonuskarten (09.11.2026),
+                     # 17: Drops als Cardmarket-Produkte (09.11.2026)
 MINDEST = 2          # ältester Stand, mit dem Server und Verarbeiter noch laufen (ohne Kisten)
 WARTEZEIT = 10       # Sekunden Wartezeit, wenn ein anderer Prozess gerade schreibt
 ANZAHL_MAX = 999     # so viele Exemplare höchstens in einem Posten
@@ -210,7 +211,7 @@ def _secret_drop_neu_anlegen(con) -> bool:
 
 
 def migrieren(con) -> list[str]:
-    """Bringt eine Datenbank der Version 1 bis 15 auf Version 16. Wiederholbar: Vorhandenes bleibt, wie es ist.
+    """Bringt eine Datenbank der Version 1 bis 16 auf Version 17. Wiederholbar: Vorhandenes bleibt, wie es ist.
 
     Gibt die ausgeführten Schritte zurück (leer, wenn nichts zu tun war). Daten werden nicht
     verändert; neue Spalten bekommen ihren Standardwert (Fotos: Quelle „import", Seiten: Art „foto",

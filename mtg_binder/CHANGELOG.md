@@ -1,5 +1,13 @@
 # Änderungen
 
+## 0.35.0
+- Secret Lair: **Preis des Drops bei Cardmarket mit Link.** Auf der Seite eines Drops stehen beide Fassungen, die
+  Cardmarket führt (mit und ohne „Set“), je mit „ab“ und Trend für Nicht-Foil und Foil und einem Link zum Produkt;
+  in der Liste eine Zeile „Drop bei Cardmarket“. Die Zuordnung kommt aus dem Produktkatalog von Cardmarket (täglich),
+  die Preise aus der täglichen Preisdatei; ist die Zuordnung unsicher, zeigt die App keine. In der Testkopie: 87 von
+  97 Drops zugeordnet, 80 davon mit Preis.
+- Datenbank Version 17 (wird beim Start automatisch umgestellt).
+
 ## 0.34.0
 - Secret Lair: **Namen und Verkaufstage aus MTG Wiki.** Das Wiki nennt Drops mit Sammlernummern und Tag, neue
   Superdrops etwa zwei Wochen vor dem Verkauf. Reihenfolge: dein eigener Name und Tag, MTG Wiki, MTGJSON (jetzt
