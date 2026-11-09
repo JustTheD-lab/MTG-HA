@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.41.0
+- **Secret Lair, fertige Decks: Das ganze Deck zählt.** Bisher standen bei „Teuerste Reprints“ und „Günstigste
+  Reprints“ nur die Secret-Lair-Karten des Decks, die übrigen Karten der Deckliste fehlten. Jetzt zählen sie mit ihrem
+  Preis im Deck dazu („Ganzes Deck, teuerste Reprints“), auch im Verhältnis zu deinen Kosten.
+- **Neu: „Ganzes Deck, günstigste Drucke“.** Das komplette Deck so billig wie möglich: je Karte der günstigste Druck.
+  In der Liste der weiteren Karten steht je Karte, welcher Druck das ist.
+
 ## 0.40.0
 - **Eigenes Logo:** Binder als Buchrücken im Regal, in den Farben der App (dunkles Leder, Messing). Es erscheint im
   Home-Assistant-Store, als Symbol der Web-App (Browser-Tab und Handy-Startbildschirm, die App lässt sich jetzt auch

@@ -19,6 +19,8 @@ Quellen und was sie taugen (gemessen am Star-Trek-Drop, vier Tage vor dem Verkau
   List, `plst`) und haben je Karte eine feste Ausführung (`isFoil`, meist nur die Secret-Lair-Karten Foil). Die ganze
   Liste zählt zum Wert (`secret_karte.deck` = 1 für die Reprints, `foil` = Ausführung im Produkt); die Scryfall-IDs der
   fremden Karten stehen nur in den Deckdateien von MTGJSON (`decks/<Datei>.json`), gemerkt in `secret_wert.deck_ids`.
+  Seit Fassung 7 (Wunsch des Nutzers, 09.11.2026) zählen die Reprints auch in den Vergleichswerten: mit ihrem Preis im
+  Deck zu „teuer“, mit dem günstigsten Druck zu „guenstig“ (`TEUER_IN`, `GUENSTIG_IN`).
 - **Sonderausgaben** (ab Version 20, Hinweis des Nutzers, 09.11.2026): Manche Drops gibt es zusätzlich mit einem
   besonderen Foil als eigene Drucke (Raised Foil, Confetti Foil, Galaxy Foil mit ★, Foil Etched …). MTGJSON nennt sie
   als eigenes Deck „<Drop> <Art> Edition“. Diese Drucke hängen als `variante` am Grund-Drop und zählen nicht zu seinen
@@ -84,7 +86,8 @@ ALT = 20 * 3600        # ab diesem Alter wird neu abgeglichen
 # Thread nach dem Start sofort ab, statt bis zu 20 Stunden zu warten (Befund 09.11.2026: nach dem Update auf 0.35.0
 # hatte kein Drop ein Cardmarket-Produkt, weil der Katalog erst beim nächsten Abgleich geladen worden wäre).
 # 2: MTG Wiki, Bonuskarten (0.34.0); 3: Cardmarket-Produkte (0.35.0)
-FASSUNG = 6
+# 7: Basic Lands der übrigen Deckkarten gegen alle Drucke (0.41.0)
+FASSUNG = 7
 TAKT = 3600
 ZEIT = 120             # Sekunden für den Download
 NAME_MAX = 80
@@ -617,6 +620,7 @@ def _felder(teuer, guenstig) -> tuple:
 def bewerten(con, kat, roh: bytes) -> int:
     """Schreibt die Vergleichswerte aller Drop-Karten (in der Transaktion des Aufrufers)."""
     stern = "foil_id, foil_cardmarket_id" if version(con) >= 20 else "NULL AS foil_id, NULL AS foil_cardmarket_id"
+    stern += ", deck" if version(con) >= 19 else ", 0 AS deck"
     karten = con.execute(f"SELECT id, drop_id, oracle_id, scryfall_id, cardmarket_id, {stern} FROM secret_karte").fetchall()
     im_drop: dict[int, set] = {}   # Drucke desselben Drops (Sonderausgabe, ★) sind kein Reprint
     for k in karten:
@@ -638,7 +642,9 @@ def bewerten(con, kat, roh: bytes) -> int:
     foil = version(con) >= 18
     for k in karten:
         drucke = [d for d in andere.get(k["oracle_id"], []) if d["scryfall_id"] not in im_drop[k["drop_id"]]]
-        nur_sld = any("Basic" in (d["typzeile"] or "") for d in drucke)   # gilt auch für Foil
+        # Basic Lands nur gegen andere Secret Lairs (gilt auch für Foil); die übrigen Karten eines fertigen Decks sind
+        # gewöhnliche Drucke, dort zählt jeder Druck (günstigster Druck des ganzen Decks)
+        nur_sld = not k["deck"] and any("Basic" in (d["typzeile"] or "") for d in drucke)
         con.execute("UPDATE secret_karte SET preis = ?, teuer = ?, teuer_set = ?, teuer_nummer = ?, teuer_id = ?,"
                     " guenstig = ?, guenstig_set = ?, guenstig_nummer = ?, guenstig_id = ?, nur_sld = ? WHERE id = ?",
                     (preise.get(k["cardmarket_id"]), *_felder(*_vergleich(drucke, preise, k, nur_sld)), int(nur_sld),
@@ -781,24 +787,31 @@ def tag_setzen(con, drop_id: int, verkauf: str | None, kat=None) -> str | None:
 SQL_DROPS = """
 SELECT d.id, d.name, d.quelle, d.verkauf, d.datum_eigen, d.wunsch, d.kosten, {kosten_foil} AS kosten_foil,
        COALESCE(SUM(k.id IS NOT NULL AND k.bonus = 0), 0) AS karten, SUM(CASE WHEN k.bonus = 0 THEN k.anzahl END) AS exemplare,
-       SUM(CASE WHEN k.bonus = 0 AND {deck} = 0 THEN k.anzahl * k.teuer END) AS teuer,
-       SUM(CASE WHEN k.bonus = 0 AND {deck} = 0 THEN k.anzahl * k.guenstig END) AS guenstig,
+       SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * {teuer_nf} END) AS teuer,
+       SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * {guenstig_nf} END) AS guenstig,
        SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * {preis_nf} END) AS wert,
        COALESCE(SUM(k.bonus = 0 AND {preis_nf} IS NOT NULL), 0) AS mit_preis,
-       COALESCE(SUM(k.bonus = 0 AND {deck} = 0 AND k.teuer IS NULL), 0) AS ohne_vergleich, COALESCE(SUM(k.bonus), 0) AS bonus,
+       COALESCE(SUM(k.bonus = 0 AND {teuer_nf} IS NULL), 0) AS ohne_vergleich, COALESCE(SUM(k.bonus), 0) AS bonus,
        COALESCE(SUM(k.bonus = 0 AND {deck} = 1), 0) AS deckkarten, COALESCE(MAX({kfoil} IS NOT NULL), 0) AS fest,
        {foil}
 FROM secret_drop d LEFT JOIN secret_karte k ON k.drop_id = d.id{ohne_variante} {wo} GROUP BY d.id
 ORDER BY d.verkauf IS NULL DESC, d.verkauf DESC, d.id DESC
 """
 # Dieselben Summen für Foil (ab Version 18)
-SQL_FOIL = """SUM(CASE WHEN k.bonus = 0 AND {deck} = 0 THEN k.anzahl * k.teuer_foil END) AS teuer_foil,
-       SUM(CASE WHEN k.bonus = 0 AND {deck} = 0 THEN k.anzahl * k.guenstig_foil END) AS guenstig_foil,
+SQL_FOIL = """SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * {teuer_f} END) AS teuer_foil,
+       SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * {guenstig_f} END) AS guenstig_foil,
        SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * {preis_f} END) AS wert_foil,
        COALESCE(SUM(k.bonus = 0 AND {preis_f} IS NOT NULL), 0) AS mit_preis_foil,
-       COALESCE(SUM(k.bonus = 0 AND {deck} = 0 AND k.teuer_foil IS NULL), 0) AS ohne_vergleich_foil"""
+       COALESCE(SUM(k.bonus = 0 AND {teuer_f} IS NULL), 0) AS ohne_vergleich_foil"""
 # Preis einer Karte in der gewählten Ausführung; Karten fertiger Decks (ab Version 19) immer in ihrer Ausführung im Deck
 PREIS_IN = "(CASE WHEN COALESCE({kfoil}, {modus}) = 1 THEN k.preis_foil ELSE k.preis END)"
+# Vergleichswerte je Karte. Fertige Decks (Wunsch des Nutzers, 09.11.2026): Die übrigen Karten der Deckliste zählen mit
+# ihrem eigenen Preis im Deck zu „teuer“. „guenstig“ ist das ganze Deck so billig wie möglich: je Karte der günstigste
+# Druck; bei den übrigen Karten darf das der Druck im Deck selbst sein, bei den Secret-Lair-Karten zählt ohne anderen
+# Druck der eigene Preis. Der Umschalter Foil wirkt nur auf die Reprints der Secret-Lair-Karten.
+TEUER_IN = "(CASE WHEN {deck} = 1 THEN {preis} ELSE k.teuer{s} END)"
+GUENSTIG_IN = ("(CASE WHEN {deck} = 1 THEN MIN(COALESCE(k.guenstig, {preis}), COALESCE({preis}, k.guenstig))"
+               " WHEN {kfoil} IS NOT NULL THEN COALESCE(k.guenstig{s}, {preis}) ELSE k.guenstig{s} END)")
 SQL_OHNE_FOIL = ("NULL AS teuer_foil, NULL AS guenstig_foil, NULL AS wert_foil, 0 AS mit_preis_foil,"
                  " COALESCE(SUM(k.bonus = 0), 0) AS ohne_vergleich_foil")
 NUR_EIGENE = "WHERE d.id IN (SELECT drop_id FROM secret_kauf)"
@@ -809,6 +822,9 @@ def _sql(con, wo: str = "") -> str:
     teile = {"deck": "k.deck" if decks else "0", "kfoil": "k.foil" if decks else "NULL"}
     teile.update(preis_nf=PREIS_IN.format(modus=0, **teile) if neu else "k.preis",
                  preis_f=PREIS_IN.format(modus=1, **teile))
+    for kurz, s in (("nf", ""), ("f", "_foil")):
+        teile["teuer_" + kurz] = TEUER_IN.format(s=s, preis=teile["preis_" + kurz], **teile)
+        teile["guenstig_" + kurz] = GUENSTIG_IN.format(s=s, preis=teile["preis_" + kurz], **teile)
     return SQL_DROPS.format(wo=wo, foil=(SQL_FOIL if neu else SQL_OHNE_FOIL).format(**teile),
                             kosten_foil="d.kosten_foil" if neu else "NULL",
                             ohne_variante=" AND k.variante IS NULL" if version(con) >= 20 else "", **teile)

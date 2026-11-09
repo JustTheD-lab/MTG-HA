@@ -129,9 +129,11 @@ function varianteText(v) {
 function werteHtml(d) {
   const a = zahlen(d);
   const reihen = [
-    ['Teuerste Reprints', geld(a.teuer)], ['Günstigste Reprints', geld(a.guenstig)],
+    // Fertiges Deck: Die ganze Deckliste zählt (Wunsch des Nutzers), die übrigen Karten mit ihrem Preis im Deck
+    [d.fest ? 'Ganzes Deck, teuerste Reprints' : 'Teuerste Reprints', geld(a.teuer)],
+    [d.fest ? 'Ganzes Deck, günstigste Drucke' : 'Günstigste Reprints', geld(a.guenstig)],
     ['Drucke einzeln bei Cardmarket', druckeText(d)], ['Deine Kosten', geld(a.kosten)],
-    ['Teuerste Reprints ÷ Kosten', a.faktor === null ? '–' : `${a.faktor.toLocaleString('de-DE')} ×`],
+    [d.fest ? 'Ganzes Deck ÷ Kosten' : 'Teuerste Reprints ÷ Kosten', a.faktor === null ? '–' : `${a.faktor.toLocaleString('de-DE')} ×`],
   ];
   const cm = cardmarketKurz(d);
   if (cm) reihen.push(['Drop bei Cardmarket', cm]);
@@ -480,17 +482,24 @@ function kartenHtml(d) {
   }
   if (deck.length) {
     // Die übrigen Karten eines fertigen Decks (meist The List) als knappe Liste, je Karte in ihrer Ausführung im Deck
+    // Günstigster Druck dieser Karte: ein anderer Druck, wenn er weniger kostet als der im Deck
+    const billig = (k, wert) => {
+      if (k.guenstig === null || k.guenstig === undefined) return wert === null || wert === undefined ? '–' : 'dieser Druck';
+      if (wert !== null && wert !== undefined && wert <= k.guenstig) return 'dieser Druck';
+      return `${geld(k.guenstig * k.anzahl)} (${druck(k.guenstig_set, k.guenstig_nummer)})`;
+    };
     const zeile = (k) => {
       const wert = imDeck(k);
       return `<tr><td>${k.anzahl > 1 ? `${k.anzahl}× ` : ''}${esc(k.name)}</td><td>${esc(k.set ?? (k.nummer ? `Nr. ${k.nummer}` : ''))}</td>`
-        + `<td>${ausfuehrungText(Boolean(k.im_deck_foil))}</td><td class="sl-zahl-rechts">${esc(geld(wert === null || wert === undefined ? null : wert * k.anzahl))}</td></tr>`;
+        + `<td>${ausfuehrungText(Boolean(k.im_deck_foil))}</td><td class="sl-zahl-rechts">${esc(geld(wert === null || wert === undefined ? null : wert * k.anzahl))}</td>`
+        + `<td class="sl-zahl-rechts">${esc(billig(k, wert))}</td></tr>`;
     };
     const summe = deck.reduce((n, k) => n + k.anzahl, 0);
     html += `<h2 class="etikett sl-abschnitt">Weitere Karten der Deckliste (${summe})</h2>`
-      + '<p class="sl-hinweis">Reprints aus anderen Sets (meist The List) und Secret-Lair-Karten anderer Drops. Sie zählen zur '
-      + 'Summe der Drucke einzeln, aber nicht zu den Reprints.</p>'
+      + '<p class="sl-hinweis">Reprints aus anderen Sets (meist The List) und Secret-Lair-Karten anderer Drops. Sie zählen mit ihrem '
+      + 'Preis im Deck zum Wert des ganzen Decks. Rechts steht der günstigste Druck der Karte (Nicht-Foil), wenn er weniger kostet.</p>'
       + '<div class="sl-tabelle-rahmen"><table class="sl-tabelle"><thead><tr><th scope="col">Karte</th><th scope="col">Druck</th>'
-      + '<th scope="col">Ausführung</th><th scope="col" class="sl-zahl-rechts">Preis</th></tr></thead>'
+      + '<th scope="col">Ausführung</th><th scope="col" class="sl-zahl-rechts">Preis</th><th scope="col" class="sl-zahl-rechts">Günstigster Druck</th></tr></thead>'
       + `<tbody>${deck.map(zeile).join('')}</tbody></table></div>`;
   }
   return html;
@@ -576,7 +585,9 @@ async function dropZeigen(wurzel, id) {
   inhalt.innerHTML = werteHtml(d)
     + `<p class="sl-hinweis">Quelle: ${esc(QUELLEN[d.quelle] ?? d.quelle)}.${ohne ? ` ${ohne} Karten ohne Vergleichswert.` : ''}</p>`
     + (d.fest ? `<p class="sl-hinweis">Fertiges Deck mit ${d.exemplare} Karten: Die ganze Deckliste zählt, jede Karte in der `
-      + 'Ausführung, in der sie im Deck liegt (laut MTGJSON). Der Umschalter Nicht-Foil/Foil wirkt hier nur auf die Reprints '
+      + 'Ausführung, in der sie im Deck liegt (laut MTGJSON). „Ganzes Deck, teuerste Reprints“ nimmt für die Secret-Lair-Karten den teuersten anderen '
+      + 'Druck und für alle übrigen Karten ihren Preis im Deck. „Ganzes Deck, günstigste Drucke“ ist das Deck so billig wie '
+      + 'möglich: je Karte der günstigste Druck. Der Umschalter Nicht-Foil/Foil wirkt hier nur auf die Reprints '
       + 'der Secret-Lair-Karten und auf deine Kosten.</p>' : '')
     + (v && v.tage > 1 ? `<p class="sl-hinweis">Verlauf dieses Drops (${ausfuehrungText(istFoil())}): ${esc(geld(v.erster[1]))} am ${esc(datum(v.erster[0]))}, `
       + `${esc(geld(v.letzter[1]))} am ${esc(datum(v.letzter[0]))} (${v.tage} Tage).</p>` : '');
