@@ -17,11 +17,11 @@ from pathlib import Path
 SCHEMA = Path(__file__).with_name("schema.sql")
 TABELLEN = {"binder", "seite", "tasche", "kiste", "karte", "foto", "nutzer", "scan_durchgang", "scan_foto",
             "sortierregel", "sortierfach", "deck", "deck_karte", "deck_entnahme"}
-VERSION = 14         # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
+VERSION = 15         # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
                      # 7: Decks (02.11.2026), 8: Deckbau (03.11.2026), 9: Foil und Sets je Scan-Durchgang (04.11.2026),
                      # 10: Messwerte je Scan-Foto (05.11.2026), 11: Kaufpreis (05.11.2026),
                      # 12: Secret-Lair-Drops (05.11.2026), 13: Reprints der Drops mit Druck (06.11.2026),
-                     # 14: Ausschnitt je Scan-Foto (06.11.2026)
+                     # 14: Ausschnitt je Scan-Foto (06.11.2026), 15: Verkaufstag und Wunsch je Secret-Lair-Drop (09.11.2026)
 MINDEST = 2          # ältester Stand, mit dem Server und Verarbeiter noch laufen (ohne Kisten)
 WARTEZEIT = 10       # Sekunden Wartezeit, wenn ein anderer Prozess gerade schreibt
 ANZAHL_MAX = 999     # so viele Exemplare höchstens in einem Posten
@@ -56,7 +56,7 @@ SPALTEN_V3 = {
 
 # Tabellen, die erst später dazukamen (kartendaten ab 3, scan_durchgang ab 5); fehlt eine, legt schema.sql sie
 # vollständig an, statt Spalten anzuhängen
-NEUE_TABELLEN = {"kartendaten", "scan_durchgang", "scan_foto", "deck_karte", "secret_karte"}
+NEUE_TABELLEN = {"kartendaten", "scan_durchgang", "scan_foto", "deck_karte", "secret_karte", "secret_drop"}
 
 # Spalten, die Version 4 anhängt (Preise); die Tabellen preis und preisabruf legt schema.sql an
 SPALTEN_V4 = {
@@ -120,8 +120,15 @@ SPALTEN_V14 = {
         ("ausschnitt", "TEXT"),
     ],
 }
+# Spalten, die Version 15 anhängt (Wunsch des Nutzers, 09.11.2026): Verkaufstag vom Nutzer und Kaufwunsch je Drop
+SPALTEN_V15 = {
+    "secret_drop": [
+        ("datum_eigen", "INTEGER NOT NULL DEFAULT 0 CHECK (datum_eigen IN (0, 1))"),
+        ("wunsch", "INTEGER NOT NULL DEFAULT 0 CHECK (wunsch IN (0, 1))"),
+    ],
+}
 ALLE_SPALTEN = (SPALTEN_V2, SPALTEN_V3, SPALTEN_V4, SPALTEN_V6, SPALTEN_V8, SPALTEN_V9, SPALTEN_V11, SPALTEN_V13,
-                SPALTEN_V14)
+                SPALTEN_V14, SPALTEN_V15)
 
 # Karten aus dem Bulk-Scan liegen in keiner Tasche: Ihr Ausschnitt steht am Scan-Foto. Mehrere Fotos eines Postens
 # zeigen denselben Druck, dann genügt das neueste.
@@ -170,7 +177,7 @@ def fehlende_spalten(con) -> list[str]:
 
 
 def migrieren(con) -> list[str]:
-    """Bringt eine Datenbank der Version 1 bis 13 auf Version 14. Wiederholbar: Vorhandenes bleibt, wie es ist.
+    """Bringt eine Datenbank der Version 1 bis 14 auf Version 15. Wiederholbar: Vorhandenes bleibt, wie es ist.
 
     Gibt die ausgeführten Schritte zurück (leer, wenn nichts zu tun war). Daten werden nicht
     verändert; neue Spalten bekommen ihren Standardwert (Fotos: Quelle „import", Seiten: Art „foto",

@@ -85,6 +85,15 @@ FEST = [
     # Der Name wechselt, sobald die App einen neuen Drop findet: gut als Auslöser einer Benachrichtigung
     ("sensor", "secret_lair_neuester", "Secret Lair neuester Drop", THEMA_STATUS, _wert("secret_neuester"),
      {"icon": "mdi:treasure-chest-outline"}),
+    # Wunsch des Nutzers (09.11.2026): Verkaufsbeginn des nächsten gewünschten Drops als Zeitstempel, damit eine
+    # Automation mit Zeit-Auslöser (auch mit Versatz, etwa eine Stunde vorher) daran erinnern kann
+    ("sensor", "secret_lair_naechster_wunsch", "Secret Lair nächster Wunsch", THEMA_STATUS,
+     _wert("secret_wunsch_naechster"),
+     {"device_class": "timestamp", "icon": "mdi:cart-heart", "json_attributes_topic": THEMA_STATUS,
+      "json_attributes_template": "{{ {'name': value_json.secret_wunsch_name,"
+                                  " 'wuensche': value_json.secret_wuensche_liste} | tojson }}"}),
+    ("sensor", "secret_lair_wuensche", "Secret Lair Wünsche kommend", THEMA_STATUS, _wert("secret_wuensche"),
+     {**ANZAHL, "unit_of_measurement": "Drops", "icon": "mdi:cart-heart"}),
     ("sensor", "gesamtwert", "Gesamtwert", THEMA_WERTE, _wert("gesamtwert"),
      {**EURO, "json_attributes_topic": THEMA_WERTE,
       "json_attributes_template": _liste("preisart", "preistag", "ohne_preis", "binder", "kisten", "decks")}),

@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.33.0
+- Secret Lair: **Verkaufstag ändern** je Drop. Der Abgleich lässt einen geänderten Tag in Ruhe, „Wieder automatisch“
+  nimmt wieder den Tag aus Scryfall.
+- Secret Lair: **Möchte ich kaufen** markiert einen Drop als Wunsch (Marke in der Liste).
+- Secret Lair: Einstellung **Verkauf ab 17:00 Uhr** für alle Drops (änderbar). Ein Drop gilt bis zu dieser Uhrzeit
+  an seinem Verkaufstag als „kommend“.
+- Home Assistant: neue Sensoren `sensor.mtg_secret_lair_nachster_wunsch` (Verkaufsbeginn des nächsten Wunschs als
+  Zeitstempel, für eine Erinnerung per Automation) und `sensor.mtg_secret_lair_wunsche_kommend`. Beispiel in
+  HOME-ASSISTANT.md.
+- Datenbank Version 15 (wird beim Start automatisch umgestellt).
+
 ## 0.32.6
 - Regal: Der Knopf **Secret Lair** steht jetzt auch neben „Dashboard“ (weiterhin auch in der Sets-Ansicht).
 

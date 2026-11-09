@@ -3,9 +3,11 @@
     GET    /api/secretlair                 alle Drops mit Summen, Standardkosten, Stand des Abgleichs
     GET    /api/secretlair/{id}            ein Drop mit Karten und Verlauf
     POST   /api/secretlair                 {"name", "verkauf"?, "text", "probe"?}  Drop von Hand, mit `probe` nur prüfen
-    PATCH  /api/secretlair/{id}            {"name"?, "kosten"?}  Kosten: Euro oder null für den Standard
+    PATCH  /api/secretlair/{id}            {"name"?, "kosten"?, "verkauf"?, "wunsch"?}  Kosten: Euro oder null für den
+                                           Standard; Verkaufstag JJJJ-MM-TT oder null (wieder automatisch); Wunsch ja/nein
     DELETE /api/secretlair/{id}            nur Drops von Hand
     POST   /api/secretlair/kosten          {"kosten"}  Standardkosten je Drop in Euro, null = keine
+    POST   /api/secretlair/uhrzeit         {"uhrzeit": "HH:MM"}  Verkaufsbeginn aller Drops (Standard 17:00)
     POST   /api/secretlair/aktualisieren   Abgleich und Bewertung sofort
 
 Die Preisdatei liegt neben der Datenbank unter preise/, wie beim täglichen Abruf.
@@ -45,6 +47,18 @@ def _kosten(wert) -> float | None:
     return float(wert)
 
 
+def _tag(wert) -> str | None:
+    if wert is None:
+        return None
+    try:
+        if isinstance(wert, str) and DATUM.fullmatch(wert):
+            date.fromisoformat(wert)
+            return wert
+    except ValueError:
+        pass
+    raise Fehler("Der Verkaufstag ist ungültig.")
+
+
 def routen(h) -> list[Route]:
     preisdatei = Path(h.datenbank).parent / "preise" / "price_guide_1.json"
 
@@ -54,6 +68,7 @@ def routen(h) -> list[Route]:
     def uebersicht(request):
         with closing(h.db()) as con:
             return JSONResponse({"drops": drops.liste(con), "kosten": drops.standard_kosten(con),
+                                 "uhrzeit": drops.uhrzeit(con),
                                  "stand": drops.stand(con), "katalog": h.katalog_pfad is not None
                                  and Path(h.katalog_pfad).exists()})
 
@@ -77,9 +92,7 @@ def routen(h) -> list[Route]:
         if d.get("probe"):
             return antwort
         name = _name(d.get("name"))
-        verkauf = d.get("verkauf") or None
-        if verkauf is not None and not (isinstance(verkauf, str) and DATUM.fullmatch(verkauf)):
-            raise Fehler("Der Verkaufstag ist ungültig.")
+        verkauf = _tag(d.get("verkauf") or None)
         drop = h.schreibvorgang(lambda con: drops.einfuegen(con, name, verkauf, karten))
         # Der Abgleich verbindet die Karten mit den Drucken des Katalogs; MTGJSON bleibt dabei außen vor
         with closing(h.katalog()) as kat2:
@@ -96,20 +109,35 @@ def routen(h) -> list[Route]:
     async def aendern(request):
         d = await h.json_daten(request)
         drop = _id(request)
-        if set(d) - {"name", "kosten"} or not d:
-            raise Fehler("Erlaubt sind „name“ und „kosten“.")
+        if set(d) - {"name", "kosten", "verkauf", "wunsch"} or not d:
+            raise Fehler("Erlaubt sind „name“, „kosten“, „verkauf“ und „wunsch“.")
         name = _name(d["name"]) if "name" in d else None
         kosten = _kosten(d.get("kosten"))
+        verkauf = _tag(d.get("verkauf"))
+        if "wunsch" in d and not isinstance(d["wunsch"], bool):
+            raise Fehler("„wunsch“ muss ja oder nein sein.")
 
-        def arbeit(con):
+        def arbeit(con, kat=None):
             if con.execute("SELECT 1 FROM secret_drop WHERE id = ?", (drop,)).fetchone() is None:
                 raise Fehler("Diesen Drop gibt es nicht.", 404)
             if name is not None:
                 con.execute("UPDATE secret_drop SET name = ?, umbenannt = 1 WHERE id = ?", (name, drop))
             if "kosten" in d:
                 con.execute("UPDATE secret_drop SET kosten = ? WHERE id = ?", (kosten, drop))
+            if "wunsch" in d:
+                con.execute("UPDATE secret_drop SET wunsch = ? WHERE id = ?", (int(d["wunsch"]), drop))
+            if "verkauf" in d:
+                drops.tag_setzen(con, drop, verkauf, kat)
             return {"id": drop}
-        return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
+
+        def mit_katalog():
+            # Nur „wieder automatisch“ braucht den Katalog: Der Tag kommt dann aus den Drucken des Drops
+            kat = h.katalog() if "verkauf" in d and verkauf is None else None
+            if kat is None:
+                return h.schreibvorgang(arbeit)
+            with closing(kat):
+                return h.schreibvorgang(lambda con: arbeit(con, kat))
+        return JSONResponse(await run_in_threadpool(mit_katalog))
 
     @h.schreibend
     async def loeschen(request):
@@ -132,6 +160,15 @@ def routen(h) -> list[Route]:
         await run_in_threadpool(h.schreibvorgang, lambda con: drops.wert_setzen(con, "kosten", kosten))
         return JSONResponse({"kosten": kosten})
 
+    @h.schreibend
+    async def uhrzeit_setzen(request):
+        d = await h.json_daten(request)
+        uhr = d.get("uhrzeit")
+        if not isinstance(uhr, str) or not drops.UHR.fullmatch(uhr):
+            raise Fehler("Die Uhrzeit braucht die Form HH:MM, zum Beispiel 17:00.")
+        await run_in_threadpool(h.schreibvorgang, lambda con: drops.wert_setzen(con, "uhrzeit", uhr))
+        return JSONResponse({"uhrzeit": uhr})
+
     def _aktualisieren() -> dict:
         if h.katalog_pfad is None or not Path(h.katalog_pfad).exists():
             raise Fehler(KEIN_KATALOG, 409)
@@ -145,6 +182,7 @@ def routen(h) -> list[Route]:
         Route("/secretlair", uebersicht),
         Route("/secretlair", einfuegen, methods=["POST"]),
         Route("/secretlair/kosten", kosten_setzen, methods=["POST"]),
+        Route("/secretlair/uhrzeit", uhrzeit_setzen, methods=["POST"]),
         Route("/secretlair/aktualisieren", aktualisieren, methods=["POST"]),
         Route("/secretlair/{id:int}", einer),
         Route("/secretlair/{id:int}", aendern, methods=["PATCH"]),

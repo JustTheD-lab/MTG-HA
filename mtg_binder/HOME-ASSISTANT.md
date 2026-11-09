@@ -30,6 +30,8 @@ Die Entitäts-IDs entstehen aus „MTG“ und dem Namen. Wer eine ID in Home Ass
 | `sensor.mtg_letzter_preisabruf` | Zeitpunkt des letzten Preisabrufs | 1 min |
 | `sensor.mtg_secret_lair_kommend` | Kommende Secret-Lair-Drops | 1 min |
 | `sensor.mtg_secret_lair_neuester_drop` | Zuletzt gefundener Drop; wechselt bei jedem neuen Drop | 1 min |
+| `sensor.mtg_secret_lair_nachster_wunsch` | Verkaufsbeginn (Zeitstempel) des nächsten Drops, den du kaufen möchtest (Attribute: `name`, `wuensche` mit Name und Beginn aller kommenden Wünsche) | 1 min |
+| `sensor.mtg_secret_lair_wunsche_kommend` | Zahl der kommenden Drops, die du kaufen möchtest | 1 min |
 | `sensor.mtg_gesamtwert` | Wert der Sammlung in € (Attribute: Preisart, Preistag, Karten ohne Preis, Liste der Binder und Kisten) | 1 h |
 | `sensor.mtg_veranderung_vortag` (`_3_tage`, `_30_tage`) | Veränderung in € | 1 h |
 | `sensor.mtg_veranderung_vortag_prozent` (`_3_tage_prozent`, `_30_tage_prozent`) | Veränderung in % | 1 h |
@@ -164,7 +166,38 @@ durch den eigenen Dienst ersetzen (Entwicklerwerkzeuge → Aktionen → „notif
         title: MTG Binder
         message: "{{ states('sensor.mtg_warteschlange') }} Fotos warten auf die Erkennung, der PC ist nicht verbunden."
   mode: single
+
+- alias: "MTG: Secret-Lair-Wunsch geht in den Verkauf"
+  description: Erinnert eine Stunde vor dem Verkaufsbeginn eines gewünschten Drops und noch einmal zum Start.
+  triggers:
+    - trigger: time
+      at:
+        entity_id: sensor.mtg_secret_lair_nachster_wunsch
+        offset: "-01:00:00"
+      id: vorher
+    - trigger: time
+      at: sensor.mtg_secret_lair_nachster_wunsch
+      id: start
+  actions:
+    - variables:
+        s: sensor.mtg_secret_lair_nachster_wunsch
+        # alle Wünsche mit demselben Verkaufsbeginn (meist kommen mehrere Drops gleichzeitig)
+        namen: >-
+          {% set t = as_datetime(states(s)) %}
+          {% for w in state_attr(s, 'wuensche') or [] if as_datetime(w.beginn) == t %}{{ w.name }}{{ ', ' if not loop.last }}{% endfor %}
+    - action: notify.mobile_app_DEIN_GERAET
+      data:
+        title: Secret Lair
+        message: >-
+          {{ 'In einer Stunde beginnt der Verkauf' if trigger.id == 'vorher' else 'Der Verkauf läuft jetzt' }}:
+          {{ namen }}
+  mode: queued
 ```
+
+Gewünschte Drops markiert man in der App (Secret Lair → Drop → „Möchte ich kaufen“). Der Sensor
+`sensor.mtg_secret_lair_nachster_wunsch` zeigt den Verkaufsbeginn des nächsten, das Attribut `wuensche` alle kommenden.
+Die Uhrzeit des Verkaufsbeginns stellt man in der App ein („Verkauf ab 17:00 Uhr“), einen falsch erkannten Tag je Drop
+über „Verkaufstag ändern“.
 
 ## Fehlersuche
 

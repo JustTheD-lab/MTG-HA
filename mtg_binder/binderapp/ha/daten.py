@@ -77,7 +77,7 @@ def status(con, nutzer: int = NUTZER) -> dict:
     else:
         pruefen = None
     preisstand = preise.stand(con)
-    secret = secret_drops.fuer_home_assistant(con) if version(con) >= 12 else {}
+    secret = secret_drops.fuer_home_assistant(con, wuensche=version(con) >= 15) if version(con) >= 12 else {}
     return {
         **secret,
         "pc_verbunden": "ON" if pc_verbunden else "OFF",

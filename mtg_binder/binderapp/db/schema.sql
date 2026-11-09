@@ -354,6 +354,9 @@ CREATE TABLE IF NOT EXISTS secret_drop (
     verkauf    TEXT,                       -- Verkaufstag JJJJ-MM-TT (aus Scryfall oder vom Nutzer)
     kosten     REAL,                       -- eigene Kosten dieses Drops in Euro, NULL = Standard
     umbenannt  INTEGER NOT NULL DEFAULT 0 CHECK (umbenannt IN (0, 1)),   -- Name vom Nutzer: der Abgleich lässt ihn
+    -- ab Version 15 (Wunsch des Nutzers, 09.11.2026)
+    datum_eigen INTEGER NOT NULL DEFAULT 0 CHECK (datum_eigen IN (0, 1)),   -- Verkaufstag vom Nutzer: der Abgleich lässt ihn
+    wunsch     INTEGER NOT NULL DEFAULT 0 CHECK (wunsch IN (0, 1)),   -- der Nutzer möchte ihn kaufen (Home Assistant erinnert)
     angelegt   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
 );
 
@@ -424,4 +427,4 @@ CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 -- ab Version 14: Ausschnitt je Scan-Foto
 CREATE INDEX IF NOT EXISTS i_scan_foto_karte  ON scan_foto(karte_id);
 
-PRAGMA user_version = 14;
+PRAGMA user_version = 15;

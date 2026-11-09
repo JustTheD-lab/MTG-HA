@@ -17,17 +17,22 @@ Bewertung je Karte aus der Preisdatei des Tages (Ø 7 Tage, sonst Low, nur Nonfo
     einmal(datenbank, katalog, preisdatei)      Abgleich und Bewertung, gibt den Stand zurück
     bewerten_lauf(datenbank, katalog, preisdatei)   nur die Bewertung (nach neuen Preisen oder einem eingefügten Drop)
     Secretabgleich                              Thread im Add-on: täglich
+
+Verkaufsbeginn (Wunsch des Nutzers, 09.11.2026): Tag des Drops plus eine Uhrzeit für alle Drops (Einstellung,
+Standard 17:00 Ortszeit). Den Tag kann der Nutzer je Drop ändern (`datum_eigen`), der Abgleich lässt ihn dann.
+Drops mit `wunsch` möchte der Nutzer kaufen; Home Assistant bekommt den Beginn des nächsten als Zeitstempel.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import threading
 import urllib.request
 import uuid
 from contextlib import closing
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
 from binderapp.db.datenbank import schreiben, verbinden
@@ -43,6 +48,9 @@ NAME_MAX = 80
 ZEILEN_MAX = 100
 SET = "sld"
 ZEILE = re.compile(r"^(?:[-•*]\s*)?(?:(\d{1,2})\s*[x×]\s+)?(.+)$", re.IGNORECASE)
+UHRZEIT = "17:00"       # Standard für den Verkaufsbeginn (Wunsch des Nutzers)
+UHR = re.compile(r"([01]\d|2[0-3]):([0-5]\d)")
+TOLERANZ_TAGE = 30      # eingefügter Drop: Drucke bis so viele Tage vor seinem Verkaufstag gehören noch dazu
 ZUSATZ = re.compile(r"\s+(?:as|als)\s+[\"“„'].*$|\s*[(\[].*$", re.IGNORECASE)   # „Eerie Interlude as "Beam Us Up"“
 
 log = logging.getLogger("binderapp.secretlair")
@@ -60,6 +68,42 @@ def wert_lesen(con, name: str) -> str | None:
 def wert_setzen(con, name: str, wert) -> None:
     con.execute("INSERT INTO secret_wert (name, wert) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET wert = excluded.wert",
                 (name, None if wert is None else str(wert)))
+
+
+# ---------------------------------------------------------------- Verkaufsbeginn
+
+def _sonntag_letzter(jahr: int, monat: int) -> date:
+    tag = date(jahr, monat, 31)
+    return tag - timedelta(days=(tag.weekday() + 1) % 7)
+
+
+def _mitteleuropa(naiv: datetime) -> datetime:
+    """Rückfall ohne Zeitzonendaten: deutsche Zeit (MEZ, MESZ von Ende März bis Ende Oktober)."""
+    sommer = _sonntag_letzter(naiv.year, 3) <= naiv.date() < _sonntag_letzter(naiv.year, 10)
+    return naiv.replace(tzinfo=timezone(timedelta(hours=2 if sommer else 1)))
+
+
+def zone():
+    """Zeitzone des Add-ons (Home Assistant setzt `TZ`), sonst Europe/Berlin; None ohne Zeitzonendaten."""
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(os.environ.get("TZ") or "Europe/Berlin")
+    except Exception:   # keine Zeitzonendaten im Abbild oder unbekannter Name
+        return None
+
+
+def uhrzeit(con) -> str:
+    wert = wert_lesen(con, "uhrzeit")
+    return wert if wert and UHR.fullmatch(wert) else UHRZEIT
+
+
+def beginn(verkauf: str | None, uhr: str, tz=None) -> datetime | None:
+    """Verkaufsbeginn als Zeitpunkt mit Zeitzone; None ohne Tag."""
+    if not verkauf:
+        return None
+    h, m = UHR.fullmatch(uhr).groups()
+    naiv = datetime.combine(date.fromisoformat(verkauf), time(int(h), int(m)))
+    return naiv.replace(tzinfo=tz) if tz is not None else _mitteleuropa(naiv)
 
 
 # ---------------------------------------------------------------- MTGJSON
@@ -91,14 +135,15 @@ def mtgjson_laden(oeffnen=urllib.request.urlopen) -> list[dict]:
 def _hand_verbinden(con, drucke: dict, nach_oracle: dict) -> set[str]:
     """Verbindet eingefügte Karten mit den Drucken des Katalogs und gibt alle so belegten Drucke zurück."""
     belegt: set[str] = set()
-    zeilen = con.execute("SELECT k.id, k.oracle_id, k.scryfall_id, d.verkauf FROM secret_karte k"
+    zeilen = con.execute(f"SELECT k.id, k.oracle_id, k.scryfall_id, date(d.verkauf, '-{TOLERANZ_TAGE} days') AS ab"
+                         " FROM secret_karte k"
                          " JOIN secret_drop d ON d.id = k.drop_id WHERE d.quelle = 'hand' ORDER BY k.id").fetchall()
     belegt.update(k["scryfall_id"] for k in zeilen if k["scryfall_id"])
     for k in zeilen:
         sid = k["scryfall_id"]
         if sid is None and k["oracle_id"]:
             frei = [d for d in nach_oracle.get(k["oracle_id"], ()) if d["scryfall_id"] not in belegt
-                    and (k["verkauf"] is None or d["erschienen"] >= k["verkauf"])]
+                    and (k["ab"] is None or d["erschienen"] >= k["ab"])]
             if frei:
                 d = max(frei, key=lambda x: (x["erschienen"], x["nummer_zahl"] or 0))
                 sid = d["scryfall_id"]
@@ -166,7 +211,8 @@ def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int
             drop = con.execute("INSERT INTO secret_drop (schluessel, name, quelle, verkauf) VALUES (?, ?, ?, ?)",
                                (g["schluessel"], g["name"], g["quelle"], verkauf)).lastrowid
         else:
-            con.execute("UPDATE secret_drop SET schluessel = ?, quelle = ?, verkauf = ?,"
+            con.execute("UPDATE secret_drop SET schluessel = ?, quelle = ?,"
+                        " verkauf = CASE WHEN datum_eigen THEN verkauf ELSE ? END,"
                         " name = CASE WHEN umbenannt THEN name ELSE ? END WHERE id = ?",
                         (g["schluessel"], g["quelle"], verkauf, g["name"], drop))
             con.execute("DELETE FROM secret_karte WHERE drop_id = ?", (drop,))
@@ -305,10 +351,37 @@ def einfuegen(con, name: str, verkauf: str | None, karten: list[dict]) -> int:
     return drop
 
 
+# ---------------------------------------------------------------- Ändern
+
+def tag_aus_katalog(con, kat, drop_id: int) -> str | None:
+    """Verkaufstag eines Drops nach dem Katalog: erster Erscheinungstag seiner Drucke."""
+    ids = [z[0] for z in con.execute("SELECT scryfall_id FROM secret_karte WHERE drop_id = ? AND scryfall_id IS NOT NULL",
+                                     (drop_id,))]
+    tage = [z[0] for i in range(0, len(ids), 500) for z in kat.execute(
+        f"SELECT erschienen FROM druck WHERE scryfall_id IN ({','.join('?' * len(ids[i:i + 500]))})", ids[i:i + 500])]
+    return min(tage, default=None)
+
+
+def tag_setzen(con, drop_id: int, verkauf: str | None, kat=None) -> str | None:
+    """Tag vom Nutzer (in der Transaktion des Aufrufers). `None` gibt den Tag wieder dem Abgleich: bei
+    automatischen Drops der Tag aus dem Katalog (ohne Katalog bleibt der alte bis zum nächsten Abgleich), bei
+    eingefügten heißt es „unbekannt“."""
+    if verkauf is not None:
+        con.execute("UPDATE secret_drop SET verkauf = ?, datum_eigen = 1 WHERE id = ?", (verkauf, drop_id))
+        return verkauf
+    z = con.execute("SELECT quelle, verkauf FROM secret_drop WHERE id = ?", (drop_id,)).fetchone()
+    if z["quelle"] == "hand":
+        neu = None
+    else:
+        neu = (tag_aus_katalog(con, kat, drop_id) if kat is not None else None) or z["verkauf"]
+    con.execute("UPDATE secret_drop SET verkauf = ?, datum_eigen = 0 WHERE id = ?", (neu, drop_id))
+    return neu
+
+
 # ---------------------------------------------------------------- Lesen
 
 SQL_DROPS = """
-SELECT d.id, d.name, d.quelle, d.verkauf, d.kosten, COUNT(k.id) AS karten, SUM(k.anzahl) AS exemplare,
+SELECT d.id, d.name, d.quelle, d.verkauf, d.datum_eigen, d.wunsch, d.kosten, COUNT(k.id) AS karten, SUM(k.anzahl) AS exemplare,
        SUM(k.anzahl * k.teuer) AS teuer, SUM(k.anzahl * k.guenstig) AS guenstig, SUM(k.anzahl * k.preis) AS wert,
        SUM(k.preis IS NOT NULL) AS mit_preis, SUM(k.teuer IS NULL) AS ohne_vergleich
 FROM secret_drop d LEFT JOIN secret_karte k ON k.drop_id = d.id {wo} GROUP BY d.id
@@ -320,12 +393,18 @@ def _rund(wert) -> float | None:
     return None if wert is None else round(wert, 2)
 
 
-def _drop(z, standard: float | None, heute: str) -> dict:
+def _jetzt_zeit(jetzt: datetime | None) -> datetime:
+    return jetzt if jetzt is not None else datetime.now(timezone.utc)
+
+
+def _drop(z, standard: float | None, uhr: str, jetzt: datetime, tz) -> dict:
     d = dict(z)
     kosten = d["kosten"] if d["kosten"] is not None else standard
     for f in ("teuer", "guenstig", "wert"):
         d[f] = _rund(d[f])
-    d.update(kosten_eigen=d["kosten"], kosten=kosten, kommend=d["verkauf"] is None or d["verkauf"] > heute,
+    start = beginn(d["verkauf"], uhr, tz)
+    d.update(kosten_eigen=d["kosten"], kosten=kosten, kommend=start is None or start > jetzt,
+             beginn=start.isoformat() if start else None, wunsch=bool(d["wunsch"]), datum_eigen=bool(d["datum_eigen"]),
              faktor=round(d["teuer"] / kosten, 2) if kosten and d["teuer"] is not None else None)
     return d
 
@@ -335,17 +414,16 @@ def standard_kosten(con) -> float | None:
     return float(wert) if wert else None
 
 
-def liste(con, heute: date | None = None) -> list[dict]:
-    tag = (heute or date.today()).isoformat()
-    standard = standard_kosten(con)
-    return [_drop(z, standard, tag) for z in con.execute(SQL_DROPS.format(wo=""))]
+def liste(con, jetzt: datetime | None = None) -> list[dict]:
+    standard, uhr, tz = standard_kosten(con), uhrzeit(con), zone()
+    return [_drop(z, standard, uhr, _jetzt_zeit(jetzt), tz) for z in con.execute(SQL_DROPS.format(wo=""))]
 
 
-def einzeln(con, drop_id: int, heute: date | None = None) -> dict | None:
+def einzeln(con, drop_id: int, jetzt: datetime | None = None) -> dict | None:
     z = con.execute(SQL_DROPS.format(wo="WHERE d.id = ?"), (drop_id,)).fetchone()
     if z is None or z["id"] is None:
         return None
-    d = _drop(z, standard_kosten(con), (heute or date.today()).isoformat())
+    d = _drop(z, standard_kosten(con), uhrzeit(con), _jetzt_zeit(jetzt), zone())
     d["liste"] = [dict(k) for k in con.execute(
         "SELECT name, nummer, anzahl, preis, teuer, teuer_set, teuer_nummer, teuer_id, guenstig, guenstig_set,"
         " guenstig_nummer, guenstig_id, nur_sld, scryfall_id"
@@ -363,12 +441,23 @@ def stand(con) -> dict:
             "fehler": wert_lesen(con, "fehler")}
 
 
-def fuer_home_assistant(con, heute: date | None = None) -> dict:
-    """Kommende Drops und der zuletzt aufgenommene: Sein Name wechselt, sobald die App einen neuen findet."""
-    tag = (heute or date.today()).isoformat()
-    kommend = con.execute("SELECT COUNT(*) FROM secret_drop WHERE verkauf IS NULL OR verkauf > ?", (tag,)).fetchone()[0]
+def fuer_home_assistant(con, jetzt: datetime | None = None, wuensche: bool = True) -> dict:
+    """Kommende Drops, der zuletzt aufgenommene (sein Name wechselt, sobald die App einen neuen findet) und die
+    kommenden Wünsche: `secret_wunsch_naechster` ist der Verkaufsbeginn des nächsten (Zeitstempel für eine
+    Automation). Datenbanken vor Version 15 kennen keine Wünsche (`wuensche=False`)."""
+    jetzt, uhr, tz = _jetzt_zeit(jetzt), uhrzeit(con), zone()
+    spalte = "wunsch" if wuensche else "0"
+    kommend, liste_ = 0, []
+    for z in con.execute(f"SELECT name, verkauf, {spalte} AS wunsch FROM secret_drop ORDER BY verkauf, id"):
+        start = beginn(z["verkauf"], uhr, tz)
+        if start is None or start > jetzt:
+            kommend += 1
+            if z["wunsch"] and start is not None:
+                liste_.append({"name": z["name"], "beginn": start.isoformat()})
     z = con.execute("SELECT name FROM secret_drop ORDER BY id DESC LIMIT 1").fetchone()
-    return {"secret_kommend": kommend, "secret_neuester": z[0] if z else None}
+    return {"secret_kommend": kommend, "secret_neuester": z[0] if z else None,
+            "secret_wuensche": len(liste_), "secret_wunsch_naechster": liste_[0]["beginn"] if liste_ else None,
+            "secret_wunsch_name": liste_[0]["name"] if liste_ else None, "secret_wuensche_liste": liste_}
 
 
 class Secretabgleich(threading.Thread):

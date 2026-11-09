@@ -1,7 +1,10 @@
 // Secret-Lair-Drops (nur im Add-on). Zeigt Zahlen zum Vergleich, keine Kaufempfehlung.
 //
 //   #/secretlair      Liste: kommende Drops, dann die der letzten 12 Monate
-//   #/secretlair/5    ein Drop: Karten mit Vergleichswerten, Kosten, Name
+//   #/secretlair/5    ein Drop: Karten mit Vergleichswerten, Kosten, Name, Verkaufstag, Wunsch
+//
+// Verkaufsbeginn = Tag des Drops + Uhrzeit für alle Drops (Einstellung, Standard 17:00). Den Tag kann der Nutzer
+// je Drop ändern; Drops mit Wunsch meldet das Add-on an Home Assistant (Sensor „Secret Lair nächster Wunsch“).
 //
 // Vergleichswert ist der teuerste Nonfoil-Reprint je Karte (Wunsch des Nutzers). Daten: web/secretlair.py.
 
@@ -23,6 +26,13 @@ const geld = (w) => (w === null || w === undefined ? '–' : euro(w));
 function datum(tag) {
   if (!tag) return 'Verkaufstag unbekannt';
   return new Date(`${tag}T00:00:00`).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** „12. November 2026, 17:00 Uhr“ aus dem Verkaufsbeginn des Servers (mit Zeitzone); ohne Beginn nur der Tag. */
+function beginnText(d) {
+  if (!d.beginn) return datum(d.verkauf);
+  const [tag, uhr] = d.beginn.split('T');
+  return `${datum(tag)}, ${uhr.slice(0, 5)} Uhr`;
 }
 
 function zeitText(z) {
@@ -52,10 +62,14 @@ function werteHtml(d) {
   return `<dl class="sl-werte">${reihen.map(([t, w]) => `<div><dt>${esc(t)}</dt><dd>${esc(w)}</dd></div>`).join('')}</dl>`;
 }
 
+const WUNSCH = '<span class="sl-wunsch"><span aria-hidden="true">★</span> Wunsch</span>';
+
 function eintragHtml(d) {
   const ohne = d.ohne_vergleich ? ` · ${d.ohne_vergleich} ohne Vergleich` : '';
-  return `<li><a class="sl-drop" href="#/secretlair/${d.id}"><span class="sl-kopf"><span class="sl-name">${esc(d.name)}</span>`
-    + `<span class="sl-datum">${esc(datum(d.verkauf))} · ${d.karten} Karten${esc(ohne)}</span></span>${werteHtml(d)}</a></li>`;
+  const tag = d.kommend ? beginnText(d) : datum(d.verkauf);
+  return `<li><a class="sl-drop${d.wunsch ? ' sl-drop-wunsch' : ''}" href="#/secretlair/${d.id}"><span class="sl-kopf">`
+    + `<span class="sl-name">${esc(d.name)}</span>${d.wunsch ? WUNSCH : ''}`
+    + `<span class="sl-datum">${esc(tag)} · ${d.karten} Karten${esc(ohne)}</span></span>${werteHtml(d)}</a></li>`;
 }
 
 async function einfuegen() {
@@ -126,6 +140,38 @@ async function kostenFragen(titel, text, wert) {
   return d.fertig;
 }
 
+/** Kleiner Dialog mit einem Feld; gibt den Wert zurück, `null` für „wieder automatisch“, undefined bei Abbruch. */
+function feldFragen({ titel, text, typ, wert, etikett, automatisch = null }) {
+  const form = document.createElement('form');
+  form.id = 'sl-feld';
+  form.noValidate = true;
+  form.innerHTML = `<p class="dialog-text">${esc(text)}</p>`
+    + `<label class="etikett feld-etikett" for="sl-wert">${esc(etikett)}</label>`
+    + `<input id="sl-wert" class="feld" type="${typ}" required>`
+    + '<p class="meldung" role="alert" aria-live="assertive"></p>';
+  const feld = form.querySelector('#sl-wert');
+  feld.value = wert ?? '';
+  const d = dialog({ titel, klasse: 'dialog-klein', inhalt: form });
+  const abbrechen = knopf('Abbrechen');
+  abbrechen.addEventListener('click', () => d.schliessen());
+  d.fuss.append(abbrechen);
+  if (automatisch) {
+    const auto = knopf(automatisch);
+    auto.addEventListener('click', () => d.schliessen(null));
+    d.fuss.append(auto);
+  }
+  const los = Object.assign(knopf('Speichern', 'knopf knopf-haupt'), { type: 'submit' });
+  los.setAttribute('form', form.id);
+  d.fuss.append(los);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!feld.value) { form.querySelector('.meldung').textContent = 'Bitte einen Wert eintragen.'; return; }
+    d.schliessen(feld.value);
+  });
+  feld.focus();
+  return d.fertig;
+}
+
 async function listeZeigen(wurzel) {
   const r = await holen('/api/secretlair');
   const bereich = document.createElement('div');
@@ -150,6 +196,14 @@ async function listeZeigen(wurzel) {
       const e = await kostenFragen('Kosten je Drop', 'Was dich ein Drop ohne Foil kostet, mit Versand. Leer heißt: keine Kosten rechnen.', r.kosten);
       if (e) { await senden('/api/secretlair/kosten', { daten: e }); await neuZeigen(); }
     });
+    const uhr = knopf(`Verkauf ab ${r.uhrzeit} Uhr`);
+    uhr.addEventListener('click', async () => {
+      const neu = await feldFragen({
+        titel: 'Verkaufsbeginn', etikett: 'Uhrzeit', typ: 'time', wert: r.uhrzeit,
+        text: 'Um diese Uhrzeit beginnt der Verkauf an jedem Verkaufstag. Sie gilt für alle Drops und für die Erinnerung in Home Assistant.',
+      });
+      if (neu) { await senden('/api/secretlair/uhrzeit', { daten: { uhrzeit: neu } }); await neuZeigen(); }
+    });
     const auf = knopf('Jetzt aktualisieren');
     auf.addEventListener('click', async () => {
       auf.disabled = true;
@@ -158,7 +212,7 @@ async function listeZeigen(wurzel) {
         auf.textContent = f.message;
       }
     });
-    werkzeug.append(neu, kosten, auf);
+    werkzeug.append(neu, kosten, uhr, auf);
   }
   bereich.append(werkzeug);
 
@@ -221,7 +275,8 @@ async function dropZeigen(wurzel, id) {
   }
   const bereich = document.createElement('div');
   bereich.className = 'sets';
-  bereich.append(kopf(d.name, datum(d.verkauf), '#/secretlair'));
+  const eigen = d.datum_eigen && d.quelle !== 'hand' ? ' · Tag von dir' : '';
+  bereich.append(kopf(d.name, `${d.kommend ? beginnText(d) : datum(d.verkauf)}${eigen}`, '#/secretlair'));
 
   const werkzeug = document.createElement('div');
   werkzeug.className = 'sl-werkzeug';
@@ -236,7 +291,30 @@ async function dropZeigen(wurzel, id) {
       const e = await kostenFragen('Kosten dieses Drops', 'Leer heißt: die Standardkosten gelten.', d.kosten_eigen);
       if (e) { await senden(`/api/secretlair/${id}`, { methode: 'PATCH', daten: e }); await neuZeigen(); }
     });
-    werkzeug.append(name, kosten);
+    const wunsch = knopf(d.wunsch ? '★ Möchte ich kaufen' : '☆ Möchte ich kaufen');
+    wunsch.setAttribute('aria-pressed', String(d.wunsch));
+    wunsch.setAttribute('aria-label', 'Möchte ich kaufen');   // der Stern ist nur Schmuck, der Zustand steht in aria-pressed
+    wunsch.addEventListener('click', async () => {
+      wunsch.disabled = true;
+      try {
+        await senden(`/api/secretlair/${id}`, { methode: 'PATCH', daten: { wunsch: !d.wunsch } });
+        await neuZeigen();
+      } finally { wunsch.disabled = false; }
+    });
+    const tag = knopf('Verkaufstag ändern');
+    tag.addEventListener('click', async () => {
+      const auto = d.quelle === 'hand' ? 'Unbekannt' : 'Wieder automatisch';
+      const neu = await feldFragen({
+        titel: 'Verkaufstag', etikett: 'Tag', typ: 'date', wert: d.verkauf,
+        text: d.quelle === 'hand' ? 'Der Tag, an dem der Verkauf beginnt.'
+          : 'Der Abgleich lässt einen geänderten Tag in Ruhe. „Wieder automatisch“ nimmt den Tag aus Scryfall.',
+        automatisch: d.quelle === 'hand' ? (d.verkauf ? auto : null) : (d.datum_eigen ? auto : null),
+      });
+      if (neu === undefined) return;
+      await senden(`/api/secretlair/${id}`, { methode: 'PATCH', daten: { verkauf: neu } });
+      await neuZeigen();
+    });
+    werkzeug.append(wunsch, tag, name, kosten);
     if (d.quelle === 'hand') {
       const weg = knopf('Löschen', 'knopf knopf-gefahr');
       weg.addEventListener('click', async () => {
