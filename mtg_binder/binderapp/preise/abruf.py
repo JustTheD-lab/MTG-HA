@@ -67,9 +67,10 @@ def sammlung_ids(con) -> set[int]:
     if version(con) >= 12:
         grenze = (date.today() - timedelta(days=365)).isoformat()
         eigene = " OR d.id IN (SELECT drop_id FROM secret_kauf)" if version(con) >= 18 else ""
-        ids |= {z[0] for z in con.execute(
-            "SELECT DISTINCT k.cardmarket_id FROM secret_karte k JOIN secret_drop d ON d.id = k.drop_id"
-            f" WHERE k.cardmarket_id IS NOT NULL AND (d.verkauf IS NULL OR d.verkauf >= ?{eigene})", (grenze,))}
+        stern = ", k.foil_cardmarket_id" if version(con) >= 20 else ""
+        for z in con.execute(f"SELECT k.cardmarket_id{stern} FROM secret_karte k JOIN secret_drop d ON d.id = k.drop_id"
+                             f" WHERE d.verkauf IS NULL OR d.verkauf >= ?{eigene}", (grenze,)):
+            ids |= {i for i in z if i is not None}
     return ids
 
 

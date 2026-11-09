@@ -8,7 +8,7 @@
     DELETE /api/secretlair/{id}            nur Drops von Hand, nur ohne Käufe
     POST   /api/secretlair/kosten          {"kosten"} oder {"kosten_foil"}  Standardkosten je Drop in Euro, null = keine
     POST   /api/secretlair/schnaeppchen    {"prozent"}  Schwelle für „Schnäppchen“ (Standard 80)
-    POST   /api/secretlair/{id}/kauf       {"foil", "anzahl", "preis", "datum"?}  eigener Kauf (Preis je Stück in Euro)
+    POST   /api/secretlair/{id}/kauf       {"foil", "anzahl", "preis", "datum"?, "variante"?}  eigener Kauf (Preis je Stück in Euro)
     PATCH  /api/secretlair/kauf/{id}       dieselben Felder, einzeln
     DELETE /api/secretlair/kauf/{id}
                                            Käufe sind Nutzerdaten mit Historie; die Antwort nennt den `schritt`,
@@ -70,7 +70,7 @@ def _tag(wert) -> str | None:
 def _kauf(d: dict, alles: bool) -> dict:
     """Felder eines Kaufs aus der Anfrage; `alles` verlangt Ausführung, Anzahl und Preis."""
     if set(d) - set(drops.KAUF_FELDER) or not d:
-        raise Fehler("Erlaubt sind „foil“, „anzahl“, „preis“ und „datum“.")
+        raise Fehler("Erlaubt sind „foil“, „anzahl“, „preis“, „datum“ und „variante“.")
     if alles and not {"foil", "anzahl", "preis"} <= set(d):
         raise Fehler("Bitte Ausführung, Anzahl und Kaufpreis je Stück angeben.")
     aus = {}
@@ -93,7 +93,17 @@ def _kauf(d: dict, alles: bool) -> dict:
             raise Fehler("Das Kaufdatum ist ungültig.")
     elif alles:
         aus["datum"] = None
+    if "variante" in d:
+        if d["variante"] is not None and (not isinstance(d["variante"], str) or not 0 < len(d["variante"]) <= drops.NAME_MAX):
+            raise Fehler("Diese Sonderausgabe gibt es nicht.")
+        aus["variante"] = d["variante"]
     return aus
+
+
+def _variante_da(con, drop: int, variante) -> None:
+    if variante is not None and con.execute("SELECT 1 FROM secret_karte WHERE drop_id = ? AND variante = ? LIMIT 1",
+                                            (drop, variante)).fetchone() is None:
+        raise Fehler("Diese Sonderausgabe gibt es bei diesem Drop nicht.")
 
 
 def routen(h) -> list[Route]:
@@ -237,6 +247,7 @@ def routen(h) -> list[Route]:
         def arbeit(con):
             if con.execute("SELECT 1 FROM secret_drop WHERE id = ?", (drop,)).fetchone() is None:
                 raise Fehler("Diesen Drop gibt es nicht.", 404)
+            _variante_da(con, drop, felder.get("variante"))
             kauf, schritt = drops.kauf_anlegen(con, h.nutzer, drop, felder)
             return {"id": kauf, "schritt": schritt}
         return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
@@ -252,6 +263,9 @@ def routen(h) -> list[Route]:
 
         def arbeit(con):
             _kauf_da(con, kauf)
+            if "variante" in felder:
+                drop = con.execute("SELECT drop_id FROM secret_kauf WHERE id = ?", (kauf,)).fetchone()[0]
+                _variante_da(con, drop, felder["variante"])
             return {"id": kauf, "schritt": drops.kauf_aendern(con, h.nutzer, kauf, felder)}
         return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
 

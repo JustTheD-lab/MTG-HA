@@ -136,6 +136,10 @@ aus Cardmarket (Ø 7 Tage, sonst Low) und keine Kaufempfehlung.
 - **Fertige Decks** (Commander-Decks, Dandân-Deck): Es zählt die ganze Deckliste laut MTGJSON, jede Karte in ihrer
   Ausführung im Deck; der Umschalter wirkt dort nur auf die Reprints und die Kosten. Die übrigen Karten (meist
   The List) stehen als Tabelle auf der Seite des Decks.
+- **Sonderausgaben und ★:** Gibt es einen Drop zusätzlich mit besonderem Foil als eigene Drucke (Raised Foil,
+  Confetti Foil …), steht diese Ausgabe auf der Seite des Drops mit eigener Summe und zählt nicht zu den Werten oben.
+  Drucke mit ★ hinter der Nummer sind die Foil-Fassung eines nur Nicht-Foil gedruckten Drops; der Umschalter Foil
+  zeigt sie. Seriennummerierte Drucke zählen nie als Reprint.
 - **Schnäppchen −NN %:** Der ganze Drop kostet bei Cardmarket ab höchstens 80 % seiner Drucke einzeln (gleiche
   Ausführung). Die Schwelle stellst du oben ein. Hat nicht jede Karte einen Preis, gibt es nie ein Schnäppchen.
 - **Eigene Secret Lairs:** Auf der Seite eines Drops trägst du unter „Meine Käufe“ jeden Kauf ein (Nicht-Foil oder

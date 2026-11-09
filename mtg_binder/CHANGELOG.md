@@ -1,5 +1,17 @@
 # Änderungen
 
+## 0.38.0
+- Secret Lair: **Sonderausgaben.** Manche Drops gibt es zusätzlich mit besonderem Foil als eigene Drucke (Raised Foil,
+  Confetti Foil, Pool Party Foil, Foil Etched …). Bisher stand dann jede Karte doppelt im Drop (zum Beispiel
+  „VroooOOOMMMMMM!“) und die Summen stimmten nicht. Jetzt hat der Drop seine Karten einmal, die Sonderausgabe steht
+  darunter mit eigener Summe und lässt sich als Kauf wählen. Betroffen: 7 Drops.
+- Secret Lair: **Foil-Fassung „★“.** Ist der normale Druck nur Nicht-Foil, druckt Wizards die Foil-Fassung als eigene
+  Nummer mit ★ (meist Rainbow Foil). Diese 109 Drucke erschienen bisher als eigene Drops und die Foil-Werte fehlten.
+  Jetzt gelten sie als Foil-Ausgabe ihres Drops (Bild und Preis im Foil-Modus); dicke Anzeigekarten mit ★ zählen nicht.
+- Secret Lair: Seriennummerierte Drucke und Drucke desselben Drops zählen nicht mehr als „teuerster Reprint“
+  (vorher zum Beispiel Mishra's Bauble mit BRR 97z für 1.149,90 €).
+- Datenbank Version 20 (wird beim Start automatisch umgestellt). Nach dem Update gleicht das Add-on einmal neu ab.
+
 ## 0.37.0
 - Secret Lair: **Fertige Decks mit ganzer Deckliste.** Bei Commander-Decks (und dem Dandân-Deck) zählte die App nur
   die Secret-Lair-Karten, im Preis des Decks steckt aber die ganze Liste. Jetzt zählen alle Karten, jede in der

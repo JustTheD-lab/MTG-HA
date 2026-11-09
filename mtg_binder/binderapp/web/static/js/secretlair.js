@@ -120,6 +120,12 @@ function druckeText(d) {
   return a.mit_preis < d.karten ? `${geld(a.wert)} (${a.mit_preis} von ${d.karten} Karten)` : geld(a.wert);
 }
 
+/** Summe einer Sonderausgabe (Raised Foil …), mit „x von y Karten“, wenn Preise fehlen. */
+function varianteText(v) {
+  if (v.wert === null || v.wert === undefined) return '–';
+  return v.mit_preis < v.karten ? `${geld(v.wert)} (${v.mit_preis} von ${v.karten} Karten)` : geld(v.wert);
+}
+
 function werteHtml(d) {
   const a = zahlen(d);
   const reihen = [
@@ -129,6 +135,7 @@ function werteHtml(d) {
   ];
   const cm = cardmarketKurz(d);
   if (cm) reihen.push(['Drop bei Cardmarket', cm]);
+  for (const v of d.varianten || []) reihen.push([`${v.name}: Drucke einzeln`, varianteText(v)]);
   return `<dl class="sl-werte">${reihen.map(([t, w]) => `<div><dt>${esc(t)}</dt><dd>${esc(w)}</dd></div>`).join('')}</dl>`;
 }
 
@@ -449,16 +456,28 @@ function kartenHtml(d) {
     + (k.bonus ? `<p class="sl-druck">${d.fest ? 'Nicht in der Deckliste (zum Beispiel Token), zählt nicht zum Wert' : 'Bonuskarte, zählt nicht zum Wert des Drops'}</p>` : '')
     + (k.im_deck_foil !== null && k.im_deck_foil !== undefined && !k.bonus ? `<p class="sl-druck">Im Deck: ${ausfuehrungText(Boolean(k.im_deck_foil))}</p>` : '')
     + (k.nur_sld ? '<p class="sl-druck">Basic Land: nur gegen andere Secret Lairs</p>' : '')
+    + (k.foil_id ? `<p class="sl-druck">Foil als eigener Druck SLD ${esc(k.nummer)}★</p>` : '')
     + '<div class="sl-figuren">'
-    + figurHtml('Secret Lair', k.scryfall_id, k.name, imDeck(k), k.nummer ? `SLD ${k.nummer}` : '', 'Noch kein Bild')
+    + figurHtml('Secret Lair', istFoil() && k.foil_id ? k.foil_id : k.scryfall_id, k.name, imDeck(k),
+      k.nummer ? `SLD ${k.nummer}${istFoil() && k.foil_id ? '★' : ''}` : '', 'Noch kein Bild')
     + figurHtml('Teuerster Reprint', k[`teuer${f}_id`], k.name, k[`teuer${f}`],
       druck(k[`teuer${f}_set`], k[`teuer${f}_nummer`]), kein)
     + figurHtml('Günstigster Reprint', k[`guenstig${f}_id`], k.name, k[`guenstig${f}`],
       druck(k[`guenstig${f}_set`], k[`guenstig${f}_nummer`]), kein)
     + '</div></li>';
-  const eigene = d.liste.filter((k) => !k.deck);
+  const eigene = d.liste.filter((k) => !k.deck && !k.variante);
   const deck = d.liste.filter((k) => k.deck);
   let html = `<ul class="sl-karten">${eigene.map(karte).join('')}</ul>`;
+  for (const v of d.varianten || []) {
+    // Sonderausgabe: eigene Drucke mit besonderem Foil, je Karte Bild und Foil-Preis
+    const art = d.liste.filter((k) => k.variante === v.name);
+    const preis = (k) => (k.preis_foil ?? k.preis);
+    html += `<h2 class="etikett sl-abschnitt">Sonderausgabe ${esc(v.name)} (${art.length})</h2>`
+      + `<p class="sl-hinweis">Eigene Drucke dieses Drops mit ${esc(v.name)}. Sie zählen nicht zu den Summen oben; `
+      + `zusammen einzeln: ${esc(varianteText(v))}.</p>`
+      + `<ul class="sl-karten sl-varianten">${art.map((k) => `<li class="sl-karte"><h2 class="sl-kartenname">${esc(k.name)}</h2>`
+        + `<div class="sl-figuren">${figurHtml(v.name, k.scryfall_id, k.name, preis(k), k.nummer ? `SLD ${k.nummer}` : '', 'Noch kein Bild')}</div></li>`).join('')}</ul>`;
+  }
   if (deck.length) {
     // Die übrigen Karten eines fertigen Decks (meist The List) als knappe Liste, je Karte in ihrer Ausführung im Deck
     const zeile = (k) => {
@@ -593,7 +612,7 @@ function kaeufeTeil(d, id) {
       + `<div><dt>Wert heute</dt><dd>${esc(geld(b.wert))}</dd></div>`
       + `<div><dt>Gewinn / Verlust</dt><dd>${gewinnHtml(b.gewinn, b.prozent)}</dd></div></dl>`
       + '<ul class="sl-liste sl-kaufliste">' + b.kaeufe.map((k) => '<li class="sl-kauf">'
-        + `<p class="sl-kauf-titel">${k.anzahl}× ${ausfuehrungText(k.foil)} · je ${esc(geld(k.preis))} · ${esc(kaufDatum(k.datum))}</p>`
+        + `<p class="sl-kauf-titel">${k.anzahl}× ${esc(k.variante || ausfuehrungText(k.foil))} · je ${esc(geld(k.preis))} · ${esc(kaufDatum(k.datum))}</p>`
         + '<dl class="sl-werte">'
         + `<div><dt>Kaufpreis</dt><dd>${esc(geld(k.kaufpreis))}</dd></div>`
         + `<div><dt>Wert heute</dt><dd>${esc(geld(k.wert))}</dd></div>`
@@ -612,7 +631,7 @@ function kaeufeTeil(d, id) {
   if (angemeldet()) {
     const neu = knopf('Kauf eintragen', 'knopf knopf-haupt');
     neu.addEventListener('click', async () => {
-      const daten = await kaufFragen(null);
+      const daten = await kaufFragen(null, d.varianten);
       if (!daten) return;
       await kaufSenden(box, () => senden(`/api/secretlair/${id}/kauf`, { daten }), 'Kauf eingetragen.');
     });
@@ -625,7 +644,7 @@ function kaeufeTeil(d, id) {
       const loeschen = e.target.closest('[data-kauf-loeschen]');
       if (aendern) {
         const k = b.kaeufe.find((x) => String(x.id) === aendern.dataset.kaufAendern);
-        const daten = await kaufFragen(k);
+        const daten = await kaufFragen(k, d.varianten);
         if (daten) await kaufSenden(box, () => senden(`/api/secretlair/kauf/${k.id}`, { methode: 'PATCH', daten }), 'Kauf geändert.');
       } else if (loeschen) {
         const kid = loeschen.dataset.kaufLoeschen;
@@ -657,14 +676,16 @@ async function kaufSenden(box, aufruf, text) {
 }
 
 /** Dialog für einen Kauf; gibt die Felder zurück oder undefined bei Abbruch. */
-function kaufFragen(alt) {
+function kaufFragen(alt, varianten = []) {
   const form = document.createElement('form');
   form.id = 'sl-kauf';
   form.noValidate = true;
   const foil = alt ? alt.foil : istFoil();
+  const gewaehlt = alt?.variante ? `v:${alt.variante}` : (foil ? '1' : '0');
+  const wahl = (wert, text) => `<label class="sl-haken"><input type="radio" name="sl-foil" value="${esc(wert)}"`
+    + `${gewaehlt === wert ? ' checked' : ''}> ${esc(text)}</label>`;
   form.innerHTML = '<fieldset class="sl-ausfuehrung"><legend class="etikett feld-etikett">Ausführung</legend>'
-    + `<label class="sl-haken"><input type="radio" name="sl-foil" value="0"${foil ? '' : ' checked'}> Nicht-Foil</label>`
-    + `<label class="sl-haken"><input type="radio" name="sl-foil" value="1"${foil ? ' checked' : ''}> Foil</label></fieldset>`
+    + wahl('0', 'Nicht-Foil') + wahl('1', 'Foil') + varianten.map((v) => wahl(`v:${v.name}`, v.name)).join('') + '</fieldset>'
     + '<label class="etikett feld-etikett" for="sl-anzahl">Anzahl</label>'
     + `<input id="sl-anzahl" class="feld" type="number" min="1" max="999" step="1" inputmode="numeric" value="${alt ? alt.anzahl : 1}">`
     + '<label class="etikett feld-etikett" for="sl-preis">Kaufpreis je Stück in Euro</label>'
@@ -685,8 +706,9 @@ function kaufFragen(alt) {
     const meldung = form.querySelector('.meldung');
     if (!Number.isInteger(anzahl) || anzahl < 1 || anzahl > 999) { meldung.textContent = 'Die Anzahl muss zwischen 1 und 999 liegen.'; return; }
     if (preisRoh === '' || Number(preisRoh) < 0) { meldung.textContent = 'Bitte den Kaufpreis je Stück eintragen.'; return; }
+    const art = form.querySelector('input[name="sl-foil"]:checked').value;
     d.schliessen({
-      foil: form.querySelector('input[name="sl-foil"]:checked').value === '1', anzahl, preis: Number(preisRoh),
+      foil: art !== '0', variante: art.startsWith('v:') ? art.slice(2) : null, anzahl, preis: Number(preisRoh),
       datum: form.querySelector('#sl-datum').value || null,
     });
   });

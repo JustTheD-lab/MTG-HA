@@ -19,6 +19,15 @@ Quellen und was sie taugen (gemessen am Star-Trek-Drop, vier Tage vor dem Verkau
   List, `plst`) und haben je Karte eine feste Ausführung (`isFoil`, meist nur die Secret-Lair-Karten Foil). Die ganze
   Liste zählt zum Wert (`secret_karte.deck` = 1 für die Reprints, `foil` = Ausführung im Produkt); die Scryfall-IDs der
   fremden Karten stehen nur in den Deckdateien von MTGJSON (`decks/<Datei>.json`), gemerkt in `secret_wert.deck_ids`.
+- **Sonderausgaben** (ab Version 20, Hinweis des Nutzers, 09.11.2026): Manche Drops gibt es zusätzlich mit einem
+  besonderen Foil als eigene Drucke (Raised Foil, Confetti Foil, Galaxy Foil mit ★, Foil Etched …). MTGJSON nennt sie
+  als eigenes Deck „<Drop> <Art> Edition“. Diese Drucke hängen als `variante` am Grund-Drop und zählen nicht zu seinen
+  Summen; je Sonderausgabe rechnet die App eine eigene Summe. Gleiche Drucke mit anderem Finish (etwa Galaxy Foil auf
+  derselben Nummer) deckt der Umschalter Foil ab.
+- **★-Drucke:** Ist der normale Druck nur Nicht-Foil, druckt Wizards die Foil-Fassung als eigene Nummer „N★“ (meist
+  Rainbow Foil). Sie ist die Foil-Ausgabe des Drops: Ihr Preis gilt als Foil-Preis von N (`foil_id`,
+  `foil_cardmarket_id`), sie erscheint nicht als eigene Karte. „N★“ nur Nicht-Foil (dicke Anzeigekarten) zählt nicht;
+  ein ★-Druck mit eigenem Finish neben einem Foil-Druck N ist eine Sonderausgabe.
 - **Von Hand:** Der Nutzer fügt die Kartenliste aus der Ankündigung von Wizards ein. Sobald der Katalog die Drucke
   kennt, verbindet der Abgleich sie, und sie verschwinden aus den automatischen Gruppen.
 
@@ -75,7 +84,7 @@ ALT = 20 * 3600        # ab diesem Alter wird neu abgeglichen
 # Thread nach dem Start sofort ab, statt bis zu 20 Stunden zu warten (Befund 09.11.2026: nach dem Update auf 0.35.0
 # hatte kein Drop ein Cardmarket-Produkt, weil der Katalog erst beim nächsten Abgleich geladen worden wäre).
 # 2: MTG Wiki, Bonuskarten (0.34.0); 3: Cardmarket-Produkte (0.35.0)
-FASSUNG = 5
+FASSUNG = 6
 TAKT = 3600
 ZEIT = 120             # Sekunden für den Download
 NAME_MAX = 80
@@ -151,9 +160,10 @@ def mtgjson_lesen(roh: bytes) -> list[dict]:
     daten = json.loads(roh)["data"]
     ids = {k["uuid"]: k.get("identifiers", {}).get("scryfallId") for k in daten.get("cards", [])}
     drops, nach_name = [], {}
+    sonder = _sonderausgaben(daten.get("decks", []), ids)
     for d in daten.get("decks", []):
         name = d.get("name") or ""
-        if not name or name in nach_name or name.endswith("Foil Edition"):
+        if not name or name in nach_name or name.endswith("Foil Edition") or name in sonder["decks"]:
             continue
         eintraege = [e for e in (d.get("commander") or []) + (d.get("mainBoard") or []) if isinstance(e, dict)]
         karten = [(ids[e["uuid"]], int(e.get("count") or 1)) for e in eintraege if ids.get(e.get("uuid"))]
@@ -165,7 +175,10 @@ def mtgjson_lesen(roh: bytes) -> list[dict]:
                     fremd=[(e["uuid"], int(e.get("count") or 1), bool(e.get("isFoil"))) for e in eintraege
                            if e.get("uuid") and e["uuid"] not in ids])
             drops.append(nach_name[name])
-    im_deck = {sid for d in drops for sid, _ in d["karten"]}
+    for d in drops:
+        if d["name"] in sonder["je_basis"]:
+            d["varianten"] = sonder["je_basis"][d["name"]]
+    im_deck = {sid for d in drops for sid, _ in d["karten"]} | sonder["drucke"]
     for k in daten.get("cards", []):
         sid, teile = ids.get(k.get("uuid")), k.get("subsets") or []
         if not sid or sid in im_deck or not teile or not isinstance(teile[0], str) or not teile[0].strip():
@@ -179,14 +192,75 @@ def mtgjson_lesen(roh: bytes) -> list[dict]:
     return drops
 
 
+def _sonderausgaben(decks: list[dict], ids: dict) -> dict:
+    """Decks „<Grund-Drop> <Art> Edition“ (Art nicht „Foil“) mit eigenen Drucken. Gibt {"je_basis": {Grund-Drop:
+    {Art: [Scryfall-IDs]}}, "decks": Namen dieser Decks, "drucke": ihre Drucke} zurück. Drucke, die auch im Grund-Drop
+    stehen (nur ein anderes Finish), bleiben dort."""
+    def sids(d):
+        return [ids[e["uuid"]] for e in (d.get("commander") or []) + (d.get("mainBoard") or [])
+                if isinstance(e, dict) and ids.get(e.get("uuid"))]
+    namen = {(d.get("name") or "").casefold(): d for d in decks if d.get("name") and not d["name"].endswith(" Edition")}
+    aus = {"je_basis": {}, "decks": set(), "drucke": set()}
+    for d in decks:
+        name = d.get("name") or ""
+        if not name.endswith(" Edition"):
+            continue
+        basis = max((b for b in namen if name.casefold().startswith(b + " ")), key=len, default=None)
+        if basis is None:
+            continue
+        art = name[len(basis) + 1:-len(" Edition")].strip()
+        if not art or art.casefold() == "foil":
+            continue
+        grund = set(sids(namen[basis]))
+        eigene = [sid for sid in sids(d) if sid not in grund]
+        if not eigene:
+            continue
+        aus["je_basis"].setdefault(namen[basis]["name"], {}).setdefault(art, []).extend(eigene)
+        aus["decks"].add(name)
+        aus["drucke"] |= set(eigene)
+    return aus
+
+
+FOIL_ARTEN = {"rainbowfoil": "Rainbow Foil", "galaxyfoil": "Galaxy Foil", "raisedfoil": "Raised Foil",
+              "confettifoil": "Confetti Foil", "halofoil": "Halo Foil", "dazzlefoil": "Dazzle Foil",
+              "surgefoil": "Surge Foil", "stepandcompleat": "Step-and-Compleat Foil", "neonink": "Neon Ink Foil",
+              "gilded": "Gilded Foil", "textured": "Textured Foil"}
+
+
+def sterne_lesen(daten: dict) -> dict:
+    """★-Drucke aus `SLD.json` einordnen: {"partner": {★-ID: ID von N}, "weg": [★-IDs], "sonder": [{"karten": [ID von
+    N], "varianten": {Art: [★-ID]}}]}. Partner: N ist nur Nicht-Foil, ★ ist seine Foil-Fassung. Weg: ★ nur Nicht-Foil
+    (dicke Anzeigekarte). Sonder: N hat schon Foil, ★ ist ein besonderes Finish."""
+    nach_nr = {k.get("number"): k for k in daten.get("cards", []) if k.get("number")}
+    aus = {"partner": {}, "weg": [], "sonder": []}
+    for k in daten.get("cards", []):
+        nr, sid = k.get("number") or "", k.get("identifiers", {}).get("scryfallId")
+        basis = nach_nr.get(nr[:-1]) if nr.endswith("★") else None
+        bsid = (basis or {}).get("identifiers", {}).get("scryfallId")
+        if not sid or not bsid or basis.get("name") != k.get("name"):
+            continue
+        f, bf = set(k.get("finishes") or []), set(basis.get("finishes") or [])
+        if "nonfoil" in f:
+            aus["weg"].append(sid)
+        elif not bf & {"foil", "etched"}:
+            aus["partner"][sid] = bsid
+        else:
+            art = next((FOIL_ARTEN[p] for p in k.get("promoTypes") or [] if p in FOIL_ARTEN),
+                       "Foil Etched" if f == {"etched"} else "Sonder-Foil")
+            aus["sonder"].append({"karten": [bsid], "varianten": {art: [sid]}})
+    return aus
+
+
 def _holen(adresse: str, oeffnen) -> bytes:
     anfrage = urllib.request.Request(adresse, headers={"User-Agent": "MTG-Binder (privat)"})
     with oeffnen(anfrage, timeout=ZEIT) as antwort:
         return antwort.read()
 
 
-def mtgjson_laden(oeffnen=urllib.request.urlopen) -> list[dict]:
-    return mtgjson_lesen(_holen(MTGJSON, oeffnen))
+def mtgjson_laden(oeffnen=urllib.request.urlopen) -> tuple[list[dict], dict]:
+    """(Drops, ★-Drucke) aus `SLD.json`."""
+    roh = _holen(MTGJSON, oeffnen)
+    return mtgjson_lesen(roh), sterne_lesen(json.loads(roh)["data"])
 
 
 def deckdatei_lesen(roh: bytes) -> dict[str, str]:
@@ -330,6 +404,27 @@ def _decks_anhaengen(gruppen: list[dict], fest: list[dict], drucke: dict, kat) -
             g.setdefault("deck", []).append((sid, anzahl, int(foil)))
 
 
+def _varianten_anhaengen(gruppen: list[dict], sonder: list[dict], drucke: dict) -> list[dict]:
+    """Holt die Drucke jeder Sonderausgabe aus allen Gruppen und hängt sie als `varianten` an die Gruppe mit den
+    meisten Karten des Grund-Drops. Gruppen, die danach leer sind (die Sonderausgabe als eigener Drop), fallen weg."""
+    vergeben: set[str] = set()   # MTGJSON-Deck und ★-Regel können denselben Druck nennen
+    for s in sonder:
+        grund = set(s["karten"])
+        n, i = max(((len(grund & {sid for sid, *_ in g["karten"]}), i) for i, g in enumerate(gruppen)), default=(0, None))
+        if not n:
+            continue
+        for art, liste in s["varianten"].items():
+            neu = [sid for sid in dict.fromkeys(liste) if sid in drucke and sid not in vergeben]
+            vergeben |= set(neu)
+            if not neu:
+                continue
+            weg = set(neu)
+            for g in gruppen:
+                g["karten"] = [k for k in g["karten"] if k[0] not in weg]
+            gruppen[i].setdefault("varianten", []).extend((sid, art) for sid in neu)
+    return [g for g in gruppen if any(not b for _, _, b in g["karten"])]
+
+
 def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int]) -> None:
     """Gleicht die automatischen Drops ab. Ein Drop behält Name vom Nutzer und Kosten, auch wenn er seinen Schlüssel
     wechselt, zum Beispiel wenn MTGJSON den Namen nachliefert.
@@ -374,7 +469,7 @@ def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int
                         " name = CASE WHEN umbenannt THEN name ELSE ? END WHERE id = ?",
                         (g["schluessel"], g["quelle"], verkauf, g["name"], drop))
             con.execute("DELETE FROM secret_karte WHERE drop_id = ?", (drop,))
-        neu_karten[drop] = {sid for sid, *_ in g["karten"]}
+        neu_karten[drop] = {sid for sid, *_ in g["karten"]} | {sid for sid, _ in g.get("varianten", [])}
         foil = g.get("foil", {})
         # Fertiges Deck: Karten der Gruppe, die nicht in der Deckliste stehen (Tokens, Zweitfassungen), zählen wie
         # Bonuskarten nicht zum Wert
@@ -382,11 +477,15 @@ def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int
         zeilen = [(sid, n_deck.get(sid, anzahl), int(bonus or (bool(foil) and sid not in foil)), 0,
                    None if sid not in foil else int(foil[sid])) for sid, anzahl, bonus in g["karten"]]
         zeilen += [(sid, anzahl, 0, 1, f) for sid, anzahl, f in g.get("deck", [])]
-        for sid, anzahl, bonus, deck, f in zeilen:
+        zeilen = [(*z, None) for z in zeilen] + [(sid, 1, 0, 0, None, art) for sid, art in g.get("varianten", [])]
+        for sid, anzahl, bonus, deck, f, art in zeilen:
             d = drucke[sid]
+            st = g.get("partner", {}).get(sid) or {}
             con.execute("INSERT INTO secret_karte (drop_id, name, oracle_id, scryfall_id, nummer, cardmarket_id, anzahl,"
-                        " bonus, deck, foil) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (drop, d["name"], d["oracle_id"], sid, d["nummer"], d["cardmarket_id"], anzahl, bonus, deck, f))
+                        " bonus, deck, foil, variante, foil_id, foil_cardmarket_id)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (drop, d["name"], d["oracle_id"], sid, d["nummer"], d["cardmarket_id"], anzahl, bonus, deck, f,
+                         art, st.get("scryfall_id"), st.get("cardmarket_id")))
     for i in frei:
         if i not in gekauft:
             continue
@@ -398,7 +497,8 @@ def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int
             log.warning("Secret Lair: Drop %s hat Käufe, aber keinen Nachfolger; er bleibt stehen.", i)
 
 
-def abgleichen(con, kat, decks: list[dict] | None, heute: date, wiki_daten: dict | None = None) -> None:
+def abgleichen(con, kat, decks: list[dict] | None, heute: date, wiki_daten: dict | None = None,
+               sterne: dict | None = None) -> None:
     """Trägt alle Drops seit 2019 und die kommenden ein (in der Transaktion des Aufrufers). `decks` ist
     None, wenn MTGJSON gerade nicht erreichbar war: Dann bleiben die Drops aus MTGJSON, wie sie sind. Ohne
     `wiki_daten` gilt der zuletzt gemerkte Stand des Wikis.
@@ -409,6 +509,12 @@ def abgleichen(con, kat, decks: list[dict] | None, heute: date, wiki_daten: dict
     drucke = {z["scryfall_id"]: dict(z) for z in kat.execute(
         "SELECT scryfall_id, oracle_id, name, nummer, nummer_zahl, erschienen, cardmarket_id FROM druck"
         " WHERE set_code = ? AND erschienen >= ?", (SET, grenze))}
+    if sterne is None:   # MTGJSON gerade nicht erreichbar: gemerkter Stand
+        sterne = json.loads(wert_lesen(con, "sterne") or "{}")
+    partner = {b: s for s, b in (sterne.get("partner") or {}).items() if s in drucke and b in drucke}
+    stern_drucke = {s: drucke[s] for s in partner.values()}
+    for sid in list(partner.values()) + list(sterne.get("weg") or []):
+        drucke.pop(sid, None)    # keine eigene Karte, kein eigener Drop
     nach_oracle: dict[str, list[dict]] = {}
     for d in drucke.values():
         nach_oracle.setdefault(d["oracle_id"], []).append(d)
@@ -464,6 +570,11 @@ def abgleichen(con, kat, decks: list[dict] | None, heute: date, wiki_daten: dict
     # Fertige Decks: aus MTGJSON, sonst (MTGJSON gerade nicht erreichbar) der gemerkte Stand
     fest = [d for d in decks if "foil" in d] if decks is not None else json.loads(wert_lesen(con, "decks_fest") or "[]")
     _decks_anhaengen(liste_, fest, drucke, kat)
+    sonder = ([{"karten": [sid for sid, _ in d["karten"]], "varianten": d["varianten"]} for d in decks if d.get("varianten")]
+              if decks is not None else json.loads(wert_lesen(con, "sonderausgaben") or "[]"))
+    liste_ = _varianten_anhaengen(liste_, sonder + list(sterne.get("sonder") or []), drucke)
+    for g in liste_:
+        g["partner"] = {sid: stern_drucke[partner[sid]] for sid, *_ in g["karten"] if sid in partner}
     _gruppen_schreiben(con, liste_, drucke, behalten)
     # Cardmarket-Produkte der Drops aus dem gemerkten Katalog (`einmal` merkt ihn vorher frisch)
     cardmarket.zuordnen(con, cardmarket.aus_text(wert_lesen(con, "cm_produkte")))
@@ -489,6 +600,14 @@ def _vergleich(drucke, preise: dict, karte, nur_sld: bool):
     return max(werte, key=lambda w: w[0], default=None), min(werte, key=lambda w: w[0], default=None)
 
 
+def _foilpreis(k, preise: dict, preise_foil: dict) -> float | None:
+    """Foil-Preis einer Drop-Karte; mit ★-Fassung deren Preis (Cardmarket führt reine Foil-Drucke oft nur mit dem
+    normalen Preis)."""
+    if k["foil_cardmarket_id"]:
+        return preise_foil.get(k["foil_cardmarket_id"]) or preise.get(k["foil_cardmarket_id"])
+    return preise_foil.get(k["cardmarket_id"])
+
+
 def _felder(teuer, guenstig) -> tuple:
     return (teuer and teuer[0], teuer and teuer[1]["set_code"], teuer and teuer[1]["nummer"],
             teuer and teuer[1]["scryfall_id"], guenstig and guenstig[0], guenstig and guenstig[1]["set_code"],
@@ -497,20 +616,28 @@ def _felder(teuer, guenstig) -> tuple:
 
 def bewerten(con, kat, roh: bytes) -> int:
     """Schreibt die Vergleichswerte aller Drop-Karten (in der Transaktion des Aufrufers)."""
-    karten = con.execute("SELECT id, oracle_id, scryfall_id, cardmarket_id FROM secret_karte").fetchall()
+    stern = "foil_id, foil_cardmarket_id" if version(con) >= 20 else "NULL AS foil_id, NULL AS foil_cardmarket_id"
+    karten = con.execute(f"SELECT id, drop_id, oracle_id, scryfall_id, cardmarket_id, {stern} FROM secret_karte").fetchall()
+    im_drop: dict[int, set] = {}   # Drucke desselben Drops (Sonderausgabe, ★) sind kein Reprint
+    for k in karten:
+        im_drop.setdefault(k["drop_id"], set()).update(x for x in (k["scryfall_id"], k["foil_id"]) if x)
     andere: dict[str, list] = {}
+    # seriennummerierte Drucke (zum Beispiel BRR 97z) sind Einzelstücke, kein Vergleich (Katalog ab Version 3)
+    seriell = ("AND ',' || COALESCE(besonderheiten, '') || ',' NOT LIKE '%,serialized,%'"
+               if "besonderheiten" in {z[1] for z in kat.execute("PRAGMA table_info(druck)")} else "")
     for oracle in {k["oracle_id"] for k in karten if k["oracle_id"]}:
         andere[oracle] = kat.execute(
             "SELECT scryfall_id, cardmarket_id, set_code, nummer, typzeile FROM druck WHERE oracle_id = ?"
-            " AND cardmarket_id IS NOT NULL AND COALESCE(set_art, '') <> 'memorabilia'", (oracle,)).fetchall()
+            f" AND cardmarket_id IS NOT NULL AND COALESCE(set_art, '') <> 'memorabilia' {seriell}", (oracle,)).fetchall()
     ids = {d["cardmarket_id"] for liste in andere.values() for d in liste}
     ids |= {k["cardmarket_id"] for k in karten if k["cardmarket_id"]}
+    ids |= {k["foil_cardmarket_id"] for k in karten if k["foil_cardmarket_id"]}
     zeilen = abruf.einlesen(roh, ids)[2]
     preise = {z[0]: _preis(z) for z in zeilen}
     preise_foil = {z[0]: _preis(z, foil=True) for z in zeilen}
     foil = version(con) >= 18
     for k in karten:
-        drucke = andere.get(k["oracle_id"], [])
+        drucke = [d for d in andere.get(k["oracle_id"], []) if d["scryfall_id"] not in im_drop[k["drop_id"]]]
         nur_sld = any("Basic" in (d["typzeile"] or "") for d in drucke)   # gilt auch für Foil
         con.execute("UPDATE secret_karte SET preis = ?, teuer = ?, teuer_set = ?, teuer_nummer = ?, teuer_id = ?,"
                     " guenstig = ?, guenstig_set = ?, guenstig_nummer = ?, guenstig_id = ?, nur_sld = ? WHERE id = ?",
@@ -520,7 +647,7 @@ def bewerten(con, kat, roh: bytes) -> int:
             con.execute("UPDATE secret_karte SET preis_foil = ?, teuer_foil = ?, teuer_foil_set = ?,"
                         " teuer_foil_nummer = ?, teuer_foil_id = ?, guenstig_foil = ?, guenstig_foil_set = ?,"
                         " guenstig_foil_nummer = ?, guenstig_foil_id = ? WHERE id = ?",
-                        (preise_foil.get(k["cardmarket_id"]), *_felder(*_vergleich(drucke, preise_foil, k, nur_sld)),
+                        (_foilpreis(k, preise, preise_foil), *_felder(*_vergleich(drucke, preise_foil, k, nur_sld)),
                          k["id"]))
     cardmarket.preise_schreiben(con, roh)
     wert_setzen(con, "bewertet", _jetzt())
@@ -542,9 +669,9 @@ def einmal(datenbank: Path, katalog: Path, preisdatei: Path, oeffnen=urllib.requ
     gemerkten Stand), der Fehler steht im Stand. `wiki_laden` (Tests): liefert die Daten des Wikis."""
     fehler = []
     try:
-        decks = mtgjson_laden(oeffnen)
+        decks, sterne = mtgjson_laden(oeffnen)
     except (OSError, ValueError, KeyError) as f:
-        decks = None
+        decks = sterne = None
         fehler.append(f"MTGJSON nicht erreichbar: {f}")
     try:
         wiki_daten = (wiki_laden or (lambda: wiki.laden(oeffnen)))()
@@ -569,12 +696,16 @@ def einmal(datenbank: Path, katalog: Path, preisdatei: Path, oeffnen=urllib.requ
             wert_setzen(con, "deck_ids", json.dumps(bekannt))
         if decks is not None:
             wert_setzen(con, "decks_fest", _fest_merken(decks))
+            wert_setzen(con, "sterne", json.dumps(sterne))
+            wert_setzen(con, "sonderausgaben", json.dumps(
+                [{"karten": [sid for sid, _ in d["karten"]], "varianten": d["varianten"]} for d in decks
+                 if d.get("varianten")], ensure_ascii=False))
         if wiki_daten is not None:
             wert_setzen(con, "wiki", wiki.als_text(wiki_daten))
             wert_setzen(con, "wiki_stand", _jetzt())
         if produkte is not None:
             wert_setzen(con, "cm_produkte", cardmarket.als_text(produkte))
-        abgleichen(con, kat, decks, heute or date.today(), wiki_daten)
+        abgleichen(con, kat, decks, heute or date.today(), wiki_daten, sterne)
         wert_setzen(con, "abgleich", _jetzt())
         wert_setzen(con, "fassung", FASSUNG)
         wert_setzen(con, "fehler", " · ".join(fehler) or None)
@@ -657,7 +788,7 @@ SELECT d.id, d.name, d.quelle, d.verkauf, d.datum_eigen, d.wunsch, d.kosten, {ko
        COALESCE(SUM(k.bonus = 0 AND {deck} = 0 AND k.teuer IS NULL), 0) AS ohne_vergleich, COALESCE(SUM(k.bonus), 0) AS bonus,
        COALESCE(SUM(k.bonus = 0 AND {deck} = 1), 0) AS deckkarten, COALESCE(MAX({kfoil} IS NOT NULL), 0) AS fest,
        {foil}
-FROM secret_drop d LEFT JOIN secret_karte k ON k.drop_id = d.id {wo} GROUP BY d.id
+FROM secret_drop d LEFT JOIN secret_karte k ON k.drop_id = d.id{ohne_variante} {wo} GROUP BY d.id
 ORDER BY d.verkauf IS NULL DESC, d.verkauf DESC, d.id DESC
 """
 # Dieselben Summen für Foil (ab Version 18)
@@ -679,7 +810,28 @@ def _sql(con, wo: str = "") -> str:
     teile.update(preis_nf=PREIS_IN.format(modus=0, **teile) if neu else "k.preis",
                  preis_f=PREIS_IN.format(modus=1, **teile))
     return SQL_DROPS.format(wo=wo, foil=(SQL_FOIL if neu else SQL_OHNE_FOIL).format(**teile),
-                            kosten_foil="d.kosten_foil" if neu else "NULL", **teile)
+                            kosten_foil="d.kosten_foil" if neu else "NULL",
+                            ohne_variante=" AND k.variante IS NULL" if version(con) >= 20 else "", **teile)
+
+
+# Sonderausgaben je Drop: Drucke einzeln in Foil (Ø 7 Tage, sonst ab; Cardmarket führt reine Foil-Drucke manchmal ohne
+# Foil-Preis, dann zählt der normale)
+SQL_VARIANTEN = """
+SELECT drop_id, variante, COUNT(*) AS karten, SUM(anzahl * COALESCE(preis_foil, preis)) AS wert,
+       SUM(COALESCE(preis_foil, preis) IS NOT NULL) AS mit_preis
+FROM secret_karte WHERE variante IS NOT NULL {wo} GROUP BY drop_id, variante ORDER BY drop_id, variante
+"""
+
+
+def _varianten_lesen(con, drop_id: int | None = None) -> dict[int, list[dict]]:
+    if version(con) < 20:
+        return {}
+    wo, werte = ("AND drop_id = ?", (drop_id,)) if drop_id is not None else ("", ())
+    aus: dict[int, list[dict]] = {}
+    for z in con.execute(SQL_VARIANTEN.format(wo=wo), werte):
+        aus.setdefault(z["drop_id"], []).append({"name": z["variante"], "karten": z["karten"], "wert": _rund(z["wert"]),
+                                                "mit_preis": z["mit_preis"]})
+    return aus
 
 
 def _rund(wert) -> float | None:
@@ -759,7 +911,8 @@ def _kaeufe_lesen(con, drop_id: int | None = None) -> dict[int, list[dict]]:
         return {}
     wo, werte = ("WHERE drop_id = ?", (drop_id,)) if drop_id is not None else ("", ())
     aus: dict[int, list[dict]] = {}
-    for z in con.execute(f"SELECT id, drop_id, foil, anzahl, preis, datum FROM secret_kauf {wo}"
+    art = "variante" if version(con) >= 20 else "NULL AS variante"
+    for z in con.execute(f"SELECT id, drop_id, foil, anzahl, preis, datum, {art} FROM secret_kauf {wo}"
                          " ORDER BY datum IS NULL, datum, id", werte):
         aus.setdefault(z["drop_id"], []).append({k: z[k] for k in z.keys() if k != "drop_id"})
     return aus
@@ -771,7 +924,13 @@ def _besitz(d: dict, kaeufe: list[dict]) -> dict | None:
     liste_ = []
     for k in kaeufe:
         foil = bool(k["foil"])
-        if d["fest"]:   # fertiges Deck: eine Ausführung, Produktpreis aus „ab“ oder „ab Foil“
+        art = next((v for v in d["varianten"] if v["name"] == k.get("variante")), None)
+        if k.get("variante"):   # Sonderausgabe: Drucke einzeln dieser Ausgabe (ein eigenes Produkt kennt die App nicht)
+            stueck = art["wert"] if art else None
+            grundlage = None if stueck is None else (
+                f"{k['variante']}: Drucke einzeln, Ø 7 Tage, sonst ab"
+                + ("" if art["mit_preis"] == art["karten"] else f", nur {art['mit_preis']} von {art['karten']} Karten mit Preis"))
+        elif d["fest"]:   # fertiges Deck: eine Ausführung, Produktpreis aus „ab“ oder „ab Foil“
             stueck, grundlage = stueckwert(d, _fest_produkte(d["produkte"]), d["karten"], False)
         else:
             stueck, grundlage = stueckwert(d["foil"] if foil else d, d["produkte"], d["karten"], foil)
@@ -785,9 +944,10 @@ def _besitz(d: dict, kaeufe: list[dict]) -> dict | None:
 
 
 def _drop(z, standard: float | None, standard_foil: float | None, uhr: str, jetzt: datetime, tz,
-          produkte: list[dict], schwelle: float, kaeufe: list[dict]) -> dict:
+          produkte: list[dict], schwelle: float, kaeufe: list[dict], varianten: list[dict] | None = None) -> dict:
     d = {k: z[k] for k in ("id", "name", "quelle", "verkauf", "karten", "exemplare", "bonus", "deckkarten")}
     d["fest"] = bool(z["fest"])
+    d["varianten"] = varianten or []
     d.update(_ausfuehrung(z, False, standard, produkte, schwelle))
     d["foil"] = _ausfuehrung(z, True, standard_foil, produkte, schwelle)
     start = beginn(d["verkauf"], uhr, tz)
@@ -814,11 +974,11 @@ def _produkte(con) -> dict[int, list[dict]]:
 
 def liste(con, jetzt: datetime | None = None, nur_eigene: bool = False) -> list[dict]:
     standard, standard_foil, uhr, tz = standard_kosten(con), standard_kosten(con, True), uhrzeit(con), zone()
-    produkte, kaeufe, grenze = _produkte(con), _kaeufe_lesen(con), schwelle(con)
+    produkte, kaeufe, grenze, varianten = _produkte(con), _kaeufe_lesen(con), schwelle(con), _varianten_lesen(con)
     if nur_eigene and version(con) < 18:
         return []
     return [_drop(z, standard, standard_foil, uhr, _jetzt_zeit(jetzt), tz, produkte.get(z["id"], []), grenze,
-                  kaeufe.get(z["id"], []))
+                  kaeufe.get(z["id"], []), varianten.get(z["id"]))
             for z in con.execute(_sql(con, NUR_EIGENE if nur_eigene else ""))]
 
 
@@ -836,16 +996,19 @@ def einzeln(con, drop_id: int, jetzt: datetime | None = None, katalog_set=None) 
     if z is None or z["id"] is None:
         return None
     d = _drop(z, standard_kosten(con), standard_kosten(con, True), uhrzeit(con), _jetzt_zeit(jetzt), zone(),
-              _produkte(con).get(drop_id, []), schwelle(con), _kaeufe_lesen(con, drop_id).get(drop_id, []))
+              _produkte(con).get(drop_id, []), schwelle(con), _kaeufe_lesen(con, drop_id).get(drop_id, []),
+              _varianten_lesen(con, drop_id).get(drop_id))
     d["schwelle"] = schwelle(con)
     foil = ("preis_foil, teuer_foil, teuer_foil_set, teuer_foil_nummer, teuer_foil_id, guenstig_foil, guenstig_foil_set,"
             " guenstig_foil_nummer, guenstig_foil_id, ") if version(con) >= 18 else ""
     decks = version(con) >= 19
     deck = "deck, foil AS im_deck_foil, " if decks else "0 AS deck, NULL AS im_deck_foil, "
+    deck += "variante, foil_id, " if version(con) >= 20 else "NULL AS variante, NULL AS foil_id, "
     d["liste"] = [dict(k) for k in con.execute(
         "SELECT name, nummer, anzahl, preis, teuer, teuer_set, teuer_nummer, teuer_id, guenstig, guenstig_set,"
         f" guenstig_nummer, guenstig_id, {foil}{deck}nur_sld, scryfall_id, bonus"
-        " FROM secret_karte WHERE drop_id = ? ORDER BY bonus, deck, teuer IS NULL, teuer DESC, name", (drop_id,))]
+        " FROM secret_karte WHERE drop_id = ? ORDER BY bonus, deck, variante IS NOT NULL, variante, teuer IS NULL, teuer DESC,"
+        " name", (drop_id,))]
     if decks:   # Set und Nummer der Reprints der Deckliste, für die Anzeige
         ids = [k["scryfall_id"] for k in d["liste"] if k["deck"]]
         if ids and katalog_set is not None:
@@ -860,7 +1023,8 @@ def einzeln(con, drop_id: int, jetzt: datetime | None = None, katalog_set=None) 
                     " ELSE COALESCE(p.avg7, p.low) END)")
         verlauf = [(t, _rund(w)) for t, w in con.execute(
             f"SELECT p.tag, SUM(k.anzahl * {ausdruck}) FROM preis p JOIN secret_karte k"
-            " ON k.cardmarket_id = p.cardmarket_id WHERE k.drop_id = ? AND k.bonus = 0 GROUP BY p.tag ORDER BY p.tag",
+            " ON k.cardmarket_id = p.cardmarket_id WHERE k.drop_id = ? AND k.bonus = 0"
+            f"{' AND k.variante IS NULL' if version(con) >= 20 else ''} GROUP BY p.tag ORDER BY p.tag",
             (drop_id,)) if w]
         d[schluessel] = {"erster": verlauf[0], "letzter": verlauf[-1], "tage": len(verlauf)} if verlauf else None
     return d
@@ -868,14 +1032,14 @@ def einzeln(con, drop_id: int, jetzt: datetime | None = None, katalog_set=None) 
 
 # ---------------------------------------------------------------- Eigene Secret Lairs
 
-KAUF_FELDER = ("foil", "anzahl", "preis", "datum")
+KAUF_FELDER = ("foil", "anzahl", "preis", "datum", "variante")
 
 
 def kauf_anlegen(con, nutzer: int, drop_id: int, felder: dict) -> tuple[int, str]:
     """Neuer Kauf (in der Transaktion des Aufrufers); gibt (ID, Schritt) für Rückgängig zurück."""
     schritt = schritte.neuer_schritt()
     kauf = schritte.einfuegen(con, nutzer, "secret_kauf", {"nutzer_id": nutzer, "drop_id": drop_id,
-                                                          **{k: felder[k] for k in KAUF_FELDER}}, schritt=schritt)
+                                                          **{k: felder.get(k) for k in KAUF_FELDER}}, schritt=schritt)
     return kauf, schritt
 
 

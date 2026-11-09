@@ -397,7 +397,12 @@ CREATE TABLE IF NOT EXISTS secret_karte (
     guenstig_foil_id TEXT,
     -- ab Version 19 (Hinweis des Nutzers, 09.11.2026): fertige Decks (Commander-Decks) mit ganzer Deckliste
     deck          INTEGER NOT NULL DEFAULT 0 CHECK (deck IN (0, 1)),   -- Reprint aus einem anderen Set (meist The List)
-    foil          INTEGER CHECK (foil IN (0, 1))   -- Ausführung im Deck laut MTGJSON; NULL = Drop ohne feste Ausführung
+    foil          INTEGER CHECK (foil IN (0, 1)),  -- Ausführung im Deck laut MTGJSON; NULL = Drop ohne feste Ausführung
+    -- ab Version 20 (Hinweis des Nutzers, 09.11.2026): Druck einer Sonderausgabe (Raised Foil, Confetti Foil …),
+    -- zählt nicht zu den Summen des Drops, sondern zu ihrer eigenen
+    variante      TEXT,
+    foil_id       TEXT,                    -- ab Version 20: eigene Foil-Fassung „N★“, wenn N nur Nicht-Foil ist
+    foil_cardmarket_id INTEGER
 );
 
 -- ab Version 17 (Wunsch des Nutzers, 09.11.2026): der Drop als Cardmarket-Produkt, mit und ohne Endung „Set“
@@ -425,13 +430,14 @@ CREATE TABLE IF NOT EXISTS secret_kauf (
     anzahl     INTEGER NOT NULL DEFAULT 1 CHECK (anzahl >= 1),
     preis      REAL NOT NULL CHECK (preis >= 0),   -- Kaufpreis je Stück in Euro
     datum      TEXT,                               -- Kaufdatum JJJJ-MM-TT, darf fehlen
+    variante   TEXT,                               -- ab Version 20: Sonderausgabe (secret_karte.variante), sonst NULL
     angelegt   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     geaendert  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS secret_wert (
     name  TEXT PRIMARY KEY,                -- kosten, kosten_foil (Standard in Euro), schnaeppchen (Schwelle in Prozent),
-                                           -- abgleich, bewertet, fehler, uhrzeit, deck_ids, decks_fest,
+                                           -- abgleich, bewertet, fehler, uhrzeit, deck_ids, decks_fest, sonderausgaben, sterne,
                                            -- wiki, wiki_stand, cm_produkte (gemerkte Quellen)
     wert  TEXT
 );
@@ -478,4 +484,4 @@ CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 -- ab Version 14: Ausschnitt je Scan-Foto
 CREATE INDEX IF NOT EXISTS i_scan_foto_karte  ON scan_foto(karte_id);
 
-PRAGMA user_version = 19;
+PRAGMA user_version = 20;
