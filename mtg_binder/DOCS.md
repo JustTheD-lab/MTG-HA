@@ -6,16 +6,25 @@ Bücherregal, Lesetisch, Kisten und Prüfansicht deiner Magic-Binder, direkt im 
 Die Erkennung der Karten läuft weiter auf dem PC mit Grafikkarte. Hochgeladene Fotos warten im Add-on, bis der
 PC sie über Port 8099 abholt (nur im Heimnetz, nur mit Schlüssel).
 
-## Erkennung am PC verbinden
+## Erkennung am PC einrichten und verbinden
 
 1. In der App im Regal auf **„PC verbinden“** tippen und **„Schlüssel erzeugen“**. Der Schlüssel erscheint nur
    einmal; geht er verloren, erzeugst du einfach einen neuen (der alte gilt dann nicht mehr).
-2. Am PC `MTG-Binder-Erkennung.exe` im Projektordner starten. Beim ersten Start fragt sie nach
-   **Adresse** (`http://<IP von Home Assistant>:8099`) und **Schlüssel**.
-3. Das Symbol neben der Uhr zeigt den Stand: grau = aus, grün = wartet, messing = erkennt, rot = Fehler.
+2. Im selben Fenster **„Installer herunterladen“** (`MTG-Binder-Setup.exe` aus dem GitHub-Release dieses
+   Repositorys, passend zur Version des Add-ons). Am PC starten (Windows 10 oder 11 mit NVIDIA-Grafikkarte; Windows
+   warnt eventuell, weil der Installer nicht signiert ist: „Weitere Informationen“ → „Trotzdem ausführen“).
+   Der Installer fragt nach dem **Zielordner** (gut 30 GB frei, gern eine andere Platte), der **Adresse**
+   (`http://<IP von Home Assistant>:8099`) und dem **Schlüssel**, dazu Autostart und Desktop-Verknüpfung. Dann lädt
+   er Python, die Erkennung, die Python-Pakete, die Scryfall-Daten und Kartenbilder und baut Katalog,
+   Namensverzeichnis und Bildindex. Beim ersten Mal dauert das einige Stunden; ein Abbruch setzt beim nächsten Start
+   des Installers fort. Entfernen: Windows-Einstellungen → Apps → „MTG Binder Erkennung“.
+3. **Updates der PC-Erkennung laufen automatisch:** Ist das Add-on neuer als die Erkennung am PC, lädt sie die neue
+   Version stündlich nach, sobald sie gerade nichts erkennt, prüft die Dateien gegen die Prüfsummen aus dem Add-on und
+   startet neu. Ändern sich die Python-Pakete, installiert sie sie mit.
+4. Das Symbol neben der Uhr zeigt den Stand: grau = aus, grün = wartet, messing = erkennt, rot = Fehler.
    Rechtsklick: Jetzt abholen, Pause, Betriebsart (im Hintergrund nachsehen oder abarbeiten und beenden),
    Katalog senden, Verbindung testen, Einstellungen, Protokoll, Mit Windows starten, Beenden.
-4. Beim Start schickt die Erkennung den Kartenkatalog (etwa 126 MB), wenn das Add-on keinen oder einen älteren
+5. Beim Start schickt die Erkennung den Kartenkatalog (etwa 126 MB), wenn das Add-on keinen oder einen älteren
    hat. Damit funktionieren „Karte hinzufügen“ und „Druck ändern“ auch, wenn der PC aus ist.
 
 ## Neue Karten von Scryfall (täglich)

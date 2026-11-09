@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.39.0
+- **Erkennung für Windows zum Herunterladen.** In der App unter „PC verbinden“ gibt es jetzt den Knopf
+  „Installer herunterladen“. Der Installer (`MTG-Binder-Setup.exe`) liegt im GitHub-Release dieses Repositorys und
+  richtet alles am PC ein: Python (offizielles Paket, im Programmordner), die Erkennung, die Python-Pakete, die
+  Kartenbilder von Scryfall und den Bildindex. Zielordner frei wählbar, Autostart, Desktop-Verknüpfung, Eintrag
+  unter „Apps“ zum Deinstallieren, die Verbindung zu diesem Add-on gleich mit. Ein Abbruch setzt beim nächsten Start
+  fort.
+- **Automatische Updates der PC-Erkennung.** Ist das Add-on neuer, lädt die Erkennung die passende Version selbst
+  nach, sobald sie nichts zu tun hat, prüft jede Datei gegen die Prüfsummen aus dem Add-on und startet neu.
+- Keine Änderung an der Datenbank.
+
 ## 0.38.0
 - Secret Lair: **Sonderausgaben.** Manche Drops gibt es zusätzlich mit besonderem Foil als eigene Drucke (Raised Foil,
   Confetti Foil, Pool Party Foil, Foil Etched …). Bisher stand dann jede Karte doppelt im Drop (zum Beispiel

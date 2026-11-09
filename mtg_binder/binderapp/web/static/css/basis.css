@@ -129,6 +129,8 @@ body {
 .pc-code { padding: 6px 8px; border: 1px solid var(--messing-dunkel); border-radius: var(--radius-klein);
   background: var(--messing-schleier); user-select: all; }
 .pc-einmal, .pc-hinweis { color: var(--text-3); font-size: 0.84rem; }
+.pc-download-titel { margin: 22px 0 6px; padding-top: 14px; border-top: 1px solid var(--linie); }
+.pc-download { display: inline-flex; max-width: 100%; text-decoration: none; white-space: normal; text-align: center; }
 
 /* Add-on: Verwaltung (verwaltung.js) */
 .verwaltung-wahl { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; border: 0; }

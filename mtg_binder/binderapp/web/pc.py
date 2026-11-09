@@ -40,6 +40,7 @@ from starlette.requests import ClientDisconnect
 from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
+from binderapp.addon import pc_version
 from binderapp.db import erkennung
 from binderapp.db.datenbank import schreiben, verbinden, version
 from binderapp.preise import zeitplan
@@ -230,6 +231,11 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
         return k
 
     # ------------------------------------------------------------ Routen
+
+    async def pc_version_lesen(request):
+        """Welche PC-Erkennung zu diesem Add-on gehört, mit SHA-256 je Datei (automatisches Update der exe)."""
+        v = pc_version.lesen()
+        return fehler("Dieses Add-on wurde ohne PC-Paket gebaut.", 404) if v is None else JSONResponse(v)
 
     async def stand(request):
         def lesen():
@@ -512,6 +518,7 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
 
     routen = [
         Route("/pc/stand", geschuetzt(stand)),
+        Route("/pc/version", geschuetzt(pc_version_lesen)),
         Route("/pc/anmelden", geschuetzt(anmelden), methods=["POST"]),
         Route("/pc/lebenszeichen", geschuetzt(lebenszeichen), methods=["POST"]),
         Route("/pc/beenden", geschuetzt(beenden), methods=["POST"]),

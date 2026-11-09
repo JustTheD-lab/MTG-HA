@@ -56,6 +56,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route, Router
 from starlette.staticfiles import StaticFiles
 
+from binderapp.addon import pc_version
 from binderapp.db import leeren, seiten
 from binderapp.db.datenbank import MINDEST, aendern, einfuegen, mit_scan_ausschnitt, schreiben, verbinden, version
 from binderapp.db.seiten import Fehler
@@ -427,7 +428,9 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
 
     # Add-on: Verbindung zum PC (Schlüssel für die PC-Schnittstelle, web/pc.py)
     def pc_verbindung(request):
-        return JSONResponse({"eingerichtet": pc.schluessel_eingerichtet(daten), "port": PC_PORT})
+        # dazu die passende PC-Erkennung zum Herunterladen (GitHub-Release, siehe addon/pc_version.py)
+        return JSONResponse({"eingerichtet": pc.schluessel_eingerichtet(daten), "port": PC_PORT,
+                             "download": pc_version.oeffentlich()})
 
     # ---------------------------------------------------------------- Anmelden
 
