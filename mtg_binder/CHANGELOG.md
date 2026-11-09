@@ -1,5 +1,8 @@
 # Änderungen
 
+## 0.32.6
+- Regal: Der Knopf **Secret Lair** steht jetzt auch neben „Dashboard“ (weiterhin auch in der Sets-Ansicht).
+
 ## 0.32.5
 - Regal: Das Lesezeichen der farbigen Kisten ist jetzt ein **Leseband wie in einem alten Buch**: breiter, gerippte
   Seide mit feinen Querrippen, dunkleren Webkanten und mattem Glanz, knickt über die Oberkante der Kiste und fällt

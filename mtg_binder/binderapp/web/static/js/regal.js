@@ -206,6 +206,8 @@ function setsHtml(s) {
     + ' aria-label="Sets öffnen: wie vollständig die Sammlung je Set ist">Sets</button>'
     + '<button type="button" class="knopf regal-dashboard"'
     + ' aria-label="Dashboard öffnen: Werte und Graphen der ganzen Sammlung">Dashboard</button>'
+    + `<button type="button" class="knopf regal-secretlair"${sitzung().ha ? '' : ' hidden'}`
+    + ' aria-label="Secret Lair öffnen: Drops mit Vergleichswerten">Secret Lair</button>'
     + '<button type="button" class="knopf regal-proxy" hidden'
     + ' aria-label="Proxys öffnen: Decklisten als druckfertige PDF">Proxys</button></p>';
 }
@@ -741,6 +743,8 @@ export async function zeigen(wurzel, parameter, vorher) {
     sitzung: () => {
       neu.hidden = !angemeldet(); neueKiste.hidden = !(kistenDa && angemeldet()); pcKnopf.hidden = !sitzung().ha;
       verwaltungKnopf.hidden = !sitzung().ha;
+      const sl = szene.querySelector('.regal-secretlair');
+      if (sl) sl.hidden = !sitzung().ha;   // Secret Lair gibt es nur im Add-on
       scannen.hidden = !(scanDa && angemeldet());
       if (neuesDeck) neuesDeck.hidden = !angemeldet();
     },
@@ -772,6 +776,7 @@ export async function zeigen(wurzel, parameter, vorher) {
     if (ereignis.target.closest('.regal-regeln')) { gehe('#/regeln'); return; }
     if (ereignis.target.closest('.regal-sets')) { gehe('#/sets'); return; }
     if (ereignis.target.closest('.regal-dashboard')) { gehe('#/dashboard'); return; }
+    if (ereignis.target.closest('.regal-secretlair')) { gehe('#/secretlair'); return; }
     if (ereignis.target.closest('.regal-proxy')) { gehe('#/proxy'); return; }
     if (ereignis.target.closest('.regal-sammlung')) { gehe('#/sammlung'); return; }
     const knopf = ereignis.target.closest('.regal-ruecken');
@@ -865,6 +870,8 @@ export async function zeigen(wurzel, parameter, vorher) {
     zustand.szene.querySelector('.regal-sets')?.focus({ preventScroll: true });   // zurück aus den Sets
   } else if (vorher?.ansicht === 'dashboard' && !sucheDa) {
     zustand.szene.querySelector('.regal-dashboard')?.focus({ preventScroll: true });
+  } else if (vorher?.ansicht === 'secretlair' && !sucheDa) {
+    zustand.szene.querySelector('.regal-secretlair')?.focus({ preventScroll: true });
   } else if (vorher?.ansicht === 'proxy' && !sucheDa) {
     zustand.szene.querySelector('.regal-proxy')?.focus({ preventScroll: true });
   } else if (vorher?.sammlung && !sucheDa) {
