@@ -1,5 +1,14 @@
 # Änderungen
 
+## 0.37.0
+- Secret Lair: **Fertige Decks mit ganzer Deckliste.** Bei Commander-Decks (und dem Dandân-Deck) zählte die App nur
+  die Secret-Lair-Karten, im Preis des Decks steckt aber die ganze Liste. Jetzt zählen alle Karten, jede in der
+  Ausführung, in der sie im Deck liegt (meist nur die Secret-Lair-Karten Foil, die übrigen sind The-List-Drucke). Die
+  Liste kommt von MTGJSON. Tokens und Zweitfassungen, die nicht in der Deckliste stehen, zählen nicht mit. Die übrigen
+  Karten stehen auf der Seite des Decks als Tabelle mit Druck, Ausführung und Preis. Schnäppchen und eigene Käufe
+  rechnen mit der ganzen Liste.
+- Datenbank Version 19 (wird beim Start automatisch umgestellt). Nach dem Update gleicht das Add-on einmal neu ab.
+
 ## 0.36.0
 - Secret Lair: **Umschalter Nicht-Foil/Foil** oben in der Ansicht (merkt sich das Gerät). Alle Zahlen zeigen dann die
   gewählte Ausführung: Drucke einzeln, teuerste und günstigste Reprints, ganzer Drop bei Cardmarket, Faktor,

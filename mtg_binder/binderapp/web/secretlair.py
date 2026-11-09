@@ -113,8 +113,20 @@ def routen(h) -> list[Route]:
                                  and Path(h.katalog_pfad).exists()})
 
     def einer(request):
-        with closing(h.db()) as con:
-            d = drops.einzeln(con, _id(request))
+        kat = h.katalog()
+
+        def katalog_set(ids):   # Set und Nummer der Reprints eines fertigen Decks (ohne Katalog: keine Angabe)
+            if kat is None:
+                return {}
+            return {z[0]: f"{z[1].upper()} {z[2]}" for i in range(0, len(ids), 500) for z in kat.execute(
+                f"SELECT scryfall_id, set_code, nummer FROM druck WHERE scryfall_id IN ({','.join('?' * len(ids[i:i + 500]))})",
+                ids[i:i + 500])}
+        try:
+            with closing(h.db()) as con:
+                d = drops.einzeln(con, _id(request), katalog_set=katalog_set)
+        finally:
+            if kat is not None:
+                kat.close()
         return fehler("Diesen Drop gibt es nicht.", 404) if d is None else JSONResponse(d)
 
     def _einfuegen(d: dict) -> dict:

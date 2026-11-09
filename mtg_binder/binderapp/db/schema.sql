@@ -394,7 +394,10 @@ CREATE TABLE IF NOT EXISTS secret_karte (
     guenstig_foil REAL,
     guenstig_foil_set TEXT,
     guenstig_foil_nummer TEXT,
-    guenstig_foil_id TEXT
+    guenstig_foil_id TEXT,
+    -- ab Version 19 (Hinweis des Nutzers, 09.11.2026): fertige Decks (Commander-Decks) mit ganzer Deckliste
+    deck          INTEGER NOT NULL DEFAULT 0 CHECK (deck IN (0, 1)),   -- Reprint aus einem anderen Set (meist The List)
+    foil          INTEGER CHECK (foil IN (0, 1))   -- Ausführung im Deck laut MTGJSON; NULL = Drop ohne feste Ausführung
 );
 
 -- ab Version 17 (Wunsch des Nutzers, 09.11.2026): der Drop als Cardmarket-Produkt, mit und ohne Endung „Set“
@@ -428,7 +431,7 @@ CREATE TABLE IF NOT EXISTS secret_kauf (
 
 CREATE TABLE IF NOT EXISTS secret_wert (
     name  TEXT PRIMARY KEY,                -- kosten, kosten_foil (Standard in Euro), schnaeppchen (Schwelle in Prozent),
-                                           -- abgleich, bewertet, fehler, uhrzeit,
+                                           -- abgleich, bewertet, fehler, uhrzeit, deck_ids, decks_fest,
                                            -- wiki, wiki_stand, cm_produkte (gemerkte Quellen)
     wert  TEXT
 );
@@ -475,4 +478,4 @@ CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 -- ab Version 14: Ausschnitt je Scan-Foto
 CREATE INDEX IF NOT EXISTS i_scan_foto_karte  ON scan_foto(karte_id);
 
-PRAGMA user_version = 18;
+PRAGMA user_version = 19;

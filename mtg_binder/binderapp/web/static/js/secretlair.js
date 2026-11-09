@@ -147,7 +147,8 @@ function eintragHtml(d) {
   const tag = d.kommend ? beginnText(d) : datum(d.verkauf);
   return `<li><a class="sl-drop${d.wunsch ? ' sl-drop-wunsch' : ''}" href="#/secretlair/${d.id}"><span class="sl-kopf">`
     + `<span class="sl-name">${esc(d.name)}</span>${d.wunsch ? WUNSCH : ''}${schnaeppchenHtml(d)}${besitzMarke(d)}`
-    + `<span class="sl-datum">${esc(tag)} · ${d.karten} Karten${esc(ohne)}</span></span>${werteHtml(d)}</a></li>`;
+    + `<span class="sl-datum">${esc(tag)} · ${d.fest ? `fertiges Deck, ${d.exemplare} Karten` : `${d.karten} Karten`}${esc(ohne)}</span>`
+    + `</span>${werteHtml(d)}</a></li>`;
 }
 
 /** Summe aller eigenen Drops oben in der Liste. */
@@ -402,7 +403,7 @@ function cardmarketHtml(d) {
   const produkte = d.produkte || [];
   // Die Drucke einzeln zusammen, direkt neben dem ganzen Drop (Wunsch des Nutzers)
   const drucke = `<li class="sl-cm"><span class="sl-cm-titel">Die Drucke dieses Drops einzeln</span><dl class="sl-werte">`
-    + `<div><dt>Zusammen in ${ausfuehrungText(istFoil())} (Ø 7 Tage, sonst ab)</dt><dd>${esc(druckeText(d))}</dd></div></dl></li>`;
+    + `<div><dt>Zusammen ${d.fest ? 'wie im Deck' : `in ${ausfuehrungText(istFoil())}`} (Ø 7 Tage, sonst ab)</dt><dd>${esc(druckeText(d))}</dd></div></dl></li>`;
   const s = zahlen(d).schnaeppchen;
   if (!produkte.length) {
     return '<h2 class="etikett sl-abschnitt">Bei Cardmarket</h2>'
@@ -441,17 +442,39 @@ function kartenHtml(d) {
   const druck = (set, nummer) => (set ? `${String(set).toUpperCase()} ${nummer ?? ''}`.trim() : '');
   const f = istFoil() ? '_foil' : '';
   const kein = istFoil() ? 'Kein Foil-Reprint' : 'Kein Reprint';
+  // Preis in der Ausführung im Deck, wenn das Produkt sie festlegt (fertige Decks), sonst in der gewählten
+  const imDeck = (k) => (k.im_deck_foil === null || k.im_deck_foil === undefined ? k[`preis${f}`]
+    : k.im_deck_foil ? k.preis_foil : k.preis);
   const karte = (k) => `<li class="sl-karte"><h2 class="sl-kartenname">${k.anzahl > 1 ? `${k.anzahl}× ` : ''}${esc(k.name)}</h2>`
-    + (k.bonus ? '<p class="sl-druck">Bonuskarte, zählt nicht zum Wert des Drops</p>' : '')
+    + (k.bonus ? `<p class="sl-druck">${d.fest ? 'Nicht in der Deckliste (zum Beispiel Token), zählt nicht zum Wert' : 'Bonuskarte, zählt nicht zum Wert des Drops'}</p>` : '')
+    + (k.im_deck_foil !== null && k.im_deck_foil !== undefined && !k.bonus ? `<p class="sl-druck">Im Deck: ${ausfuehrungText(Boolean(k.im_deck_foil))}</p>` : '')
     + (k.nur_sld ? '<p class="sl-druck">Basic Land: nur gegen andere Secret Lairs</p>' : '')
     + '<div class="sl-figuren">'
-    + figurHtml('Secret Lair', k.scryfall_id, k.name, k[`preis${f}`], k.nummer ? `SLD ${k.nummer}` : '', 'Noch kein Bild')
+    + figurHtml('Secret Lair', k.scryfall_id, k.name, imDeck(k), k.nummer ? `SLD ${k.nummer}` : '', 'Noch kein Bild')
     + figurHtml('Teuerster Reprint', k[`teuer${f}_id`], k.name, k[`teuer${f}`],
       druck(k[`teuer${f}_set`], k[`teuer${f}_nummer`]), kein)
     + figurHtml('Günstigster Reprint', k[`guenstig${f}_id`], k.name, k[`guenstig${f}`],
       druck(k[`guenstig${f}_set`], k[`guenstig${f}_nummer`]), kein)
     + '</div></li>';
-  return `<ul class="sl-karten">${d.liste.map(karte).join('')}</ul>`;
+  const eigene = d.liste.filter((k) => !k.deck);
+  const deck = d.liste.filter((k) => k.deck);
+  let html = `<ul class="sl-karten">${eigene.map(karte).join('')}</ul>`;
+  if (deck.length) {
+    // Die übrigen Karten eines fertigen Decks (meist The List) als knappe Liste, je Karte in ihrer Ausführung im Deck
+    const zeile = (k) => {
+      const wert = imDeck(k);
+      return `<tr><td>${k.anzahl > 1 ? `${k.anzahl}× ` : ''}${esc(k.name)}</td><td>${esc(k.set ?? (k.nummer ? `Nr. ${k.nummer}` : ''))}</td>`
+        + `<td>${ausfuehrungText(Boolean(k.im_deck_foil))}</td><td class="sl-zahl-rechts">${esc(geld(wert === null || wert === undefined ? null : wert * k.anzahl))}</td></tr>`;
+    };
+    const summe = deck.reduce((n, k) => n + k.anzahl, 0);
+    html += `<h2 class="etikett sl-abschnitt">Weitere Karten der Deckliste (${summe})</h2>`
+      + '<p class="sl-hinweis">Reprints aus anderen Sets (meist The List) und Secret-Lair-Karten anderer Drops. Sie zählen zur '
+      + 'Summe der Drucke einzeln, aber nicht zu den Reprints.</p>'
+      + '<div class="sl-tabelle-rahmen"><table class="sl-tabelle"><thead><tr><th scope="col">Karte</th><th scope="col">Druck</th>'
+      + '<th scope="col">Ausführung</th><th scope="col" class="sl-zahl-rechts">Preis</th></tr></thead>'
+      + `<tbody>${deck.map(zeile).join('')}</tbody></table></div>`;
+  }
+  return html;
 }
 
 function bildZeigen(knopf) {
@@ -533,6 +556,9 @@ async function dropZeigen(wurzel, id) {
   const ohne = zahlen(d).ohne_vergleich;
   inhalt.innerHTML = werteHtml(d)
     + `<p class="sl-hinweis">Quelle: ${esc(QUELLEN[d.quelle] ?? d.quelle)}.${ohne ? ` ${ohne} Karten ohne Vergleichswert.` : ''}</p>`
+    + (d.fest ? `<p class="sl-hinweis">Fertiges Deck mit ${d.exemplare} Karten: Die ganze Deckliste zählt, jede Karte in der `
+      + 'Ausführung, in der sie im Deck liegt (laut MTGJSON). Der Umschalter Nicht-Foil/Foil wirkt hier nur auf die Reprints '
+      + 'der Secret-Lair-Karten und auf deine Kosten.</p>' : '')
     + (v && v.tage > 1 ? `<p class="sl-hinweis">Verlauf dieses Drops (${ausfuehrungText(istFoil())}): ${esc(geld(v.erster[1]))} am ${esc(datum(v.erster[0]))}, `
       + `${esc(geld(v.letzter[1]))} am ${esc(datum(v.letzter[0]))} (${v.tage} Tage).</p>` : '');
   const kaeufe = kaeufeTeil(d, id);

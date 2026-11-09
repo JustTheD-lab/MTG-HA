@@ -133,6 +133,9 @@ aus Cardmarket (Ø 7 Tage, sonst Low) und keine Kaufempfehlung.
   **Günstigste Reprints** entsprechend.
 - **Drucke einzeln bei Cardmarket:** die Secret-Lair-Drucke des Drops zusammen (Ø 7 Tage, sonst Low, ohne
   Bonuskarten), sobald sie bei Cardmarket einen Preis haben; „5 von 6 Karten“, wenn noch nicht alle einen haben.
+- **Fertige Decks** (Commander-Decks, Dandân-Deck): Es zählt die ganze Deckliste laut MTGJSON, jede Karte in ihrer
+  Ausführung im Deck; der Umschalter wirkt dort nur auf die Reprints und die Kosten. Die übrigen Karten (meist
+  The List) stehen als Tabelle auf der Seite des Decks.
 - **Schnäppchen −NN %:** Der ganze Drop kostet bei Cardmarket ab höchstens 80 % seiner Drucke einzeln (gleiche
   Ausführung). Die Schwelle stellst du oben ein. Hat nicht jede Karte einen Preis, gibt es nie ein Schnäppchen.
 - **Eigene Secret Lairs:** Auf der Seite eines Drops trägst du unter „Meine Käufe“ jeden Kauf ein (Nicht-Foil oder
