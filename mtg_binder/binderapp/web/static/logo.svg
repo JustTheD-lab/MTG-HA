@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="MTG Binder">
+  <title>MTG Binder</title>
+  <defs>
+    <radialGradient id="licht" cx="50%" cy="8%" r="80%">
+      <stop offset="0" stop-color="#3a3026"/>
+      <stop offset="0.55" stop-color="#1c1b1d"/>
+      <stop offset="1" stop-color="#141416"/>
+    </radialGradient>
+    <linearGradient id="messing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ecd4a4"/>
+      <stop offset="0.5" stop-color="#c9a46a"/>
+      <stop offset="1" stop-color="#8a6d40"/>
+    </linearGradient>
+    <linearGradient id="ruecken" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#000" stop-opacity="0.35"/>
+      <stop offset="0.25" stop-color="#fff" stop-opacity="0.10"/>
+      <stop offset="0.6" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.40"/>
+    </linearGradient>
+    <linearGradient id="brett" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a5f3e"/>
+      <stop offset="1" stop-color="#4a3826"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#licht)"/>
+  <rect x="1" y="1" width="126" height="126" rx="27" fill="none" stroke="#8a6d40" stroke-opacity="0.55" stroke-width="2"/>
+  <!-- Buchrücken: Binder im Regal -->
+  <g transform="translate(-3 0)">
+    <rect x="18" y="34" width="20" height="66" rx="3" fill="#2f4a6b"/>
+    <rect x="18" y="34" width="20" height="66" rx="3" fill="url(#ruecken)"/>
+    <rect x="40" y="24" width="24" height="76" rx="3" fill="#6b4a32"/>
+    <rect x="40" y="24" width="24" height="76" rx="3" fill="url(#ruecken)"/>
+    <rect x="66" y="40" width="17" height="60" rx="3" fill="#26262a"/>
+    <rect x="66" y="40" width="17" height="60" rx="3" fill="url(#ruecken)"/>
+    <!-- angelehnt an den schwarzen Binder (Kante berührt dessen obere Ecke) -->
+    <g transform="rotate(-12 94 100)">
+      <rect x="94" y="30" width="22" height="70" rx="3" fill="#7a2f2a"/>
+      <rect x="94" y="30" width="22" height="70" rx="3" fill="url(#ruecken)"/>
+      <rect x="94" y="40" width="22" height="4" fill="url(#messing)"/>
+      <rect x="94" y="88" width="22" height="4" fill="url(#messing)"/>
+      <rect x="98.5" y="53" width="13" height="18" rx="2" fill="none" stroke="#ecd4a4" stroke-width="2"/>
+    </g>
+    <!-- Messingbeschläge -->
+    <rect x="18" y="44" width="20" height="4" fill="url(#messing)"/>
+    <rect x="18" y="88" width="20" height="4" fill="url(#messing)"/>
+    <rect x="40" y="34" width="24" height="4" fill="url(#messing)"/>
+    <rect x="40" y="88" width="24" height="4" fill="url(#messing)"/>
+    <rect x="66" y="50" width="17" height="3.5" fill="url(#messing)"/>
+    <rect x="66" y="88" width="17" height="3.5" fill="url(#messing)"/>
+    <!-- Etikett mit Kartenumriss auf dem großen Binder -->
+    <rect x="45" y="48" width="14" height="20" rx="2" fill="#2a1f17" stroke="#ecd4a4" stroke-width="2"/>
+    <rect x="48" y="51" width="8" height="6" rx="1" fill="#c9a46a"/>
+  </g>
+  <!-- Regalbrett -->
+  <rect x="10" y="100" width="108" height="8" rx="2.5" fill="url(#brett)"/>
+  <rect x="10" y="100" width="108" height="2" rx="1" fill="#ecd4a4" fill-opacity="0.45"/>
+</svg>

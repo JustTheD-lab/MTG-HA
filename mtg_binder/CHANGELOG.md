@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.40.0
+- **Eigenes Logo:** Binder als Buchrücken im Regal, in den Farben der App (dunkles Leder, Messing). Es erscheint im
+  Home-Assistant-Store, als Symbol der Web-App (Browser-Tab und Handy-Startbildschirm, die App lässt sich jetzt auch
+  als eigene App auf den Startbildschirm legen), als Symbol der Erkennung neben der Uhr (mit farbigem Punkt für den
+  Zustand) und für die exe und den Installer am PC. Ein eigenes Motiv, nichts aus dem Magic-Design.
+- Die Erkennung am PC holt sich das neue Symbol über das automatische Update.
+
 ## 0.39.0
 - **Erkennung für Windows zum Herunterladen.** In der App unter „PC verbinden“ gibt es jetzt den Knopf
   „Installer herunterladen“. Der Installer (`MTG-Binder-Setup.exe`) liegt im GitHub-Release dieses Repositorys und

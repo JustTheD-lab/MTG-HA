@@ -82,7 +82,8 @@ PC_PORT = int(os.environ.get("BINDER_PC_PORT", "8099"))  # PC-Schnittstelle des 
 log = logging.getLogger("binderapp.web")
 
 # Unter Windows liest mimetypes die Registry; feste Typen, damit Module und Schriften überall stimmen.
-for typ, endung in (("text/javascript", ".js"), ("font/woff2", ".woff2"), ("image/webp", ".webp")):
+for typ, endung in (("text/javascript", ".js"), ("font/woff2", ".woff2"), ("image/webp", ".webp"),
+                    ("image/svg+xml", ".svg"), ("image/png", ".png"), ("application/manifest+json", ".webmanifest")):
     mimetypes.add_type(typ, endung)
 
 # Kennzahlen je Binder: Seiten (mit Leerseiten), Karten (mit Anzahl), offene Fälle (unsicher und
