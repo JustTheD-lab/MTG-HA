@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.34.0
+- Secret Lair: **Namen und Verkaufstage aus MTG Wiki.** Das Wiki nennt Drops mit Sammlernummern und Tag, neue
+  Superdrops etwa zwei Wochen vor dem Verkauf. Reihenfolge: dein eigener Name und Tag, MTG Wiki, MTGJSON (jetzt
+  auch der Drop-Name je Karte), sonst wie bisher nach Tag und Nummer. In der Testkopie sank die Zahl der Drops ohne
+  Namen von 70 auf 4; Star Trek steht mit allen sechs Drops am 09.11.
+- Secret Lair: **Bonuskarten und Promos** sind keine eigenen Drops mehr. Sie hängen als „Bonuskarte“ am Drop, zu
+  dem sie gehören, und zählen nicht zu seinem Wert; ohne bekannten Drop erscheinen sie nicht.
+- Katalog: Secret-Lair-Karten der letzten 60 Tage und alle kommenden werden täglich bei Scryfall neu geholt, damit
+  ein korrigierter Verkaufstag ankommt.
+- Datenbank Version 16 (wird beim Start automatisch umgestellt).
+
 ## 0.33.0
 - Secret Lair: **Verkaufstag ändern** je Drop. Der Abgleich lässt einen geänderten Tag in Ruhe, „Wieder automatisch“
   nimmt wieder den Tag aus Scryfall.

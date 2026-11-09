@@ -348,9 +348,9 @@ CREATE TABLE IF NOT EXISTS dienst (
 -- Die App bewertet Drops der letzten 12 Monate und kommende; ihre Preise landen zusätzlich im Verlauf `preis`.
 CREATE TABLE IF NOT EXISTS secret_drop (
     id         INTEGER PRIMARY KEY,
-    schluessel TEXT NOT NULL UNIQUE,       -- mtgjson:<Name>, scryfall:<Tag>:<erste Nummer>, hand:<Kennung>
+    schluessel TEXT NOT NULL UNIQUE,       -- wiki:<Name>, mtgjson:<Name>, scryfall:<Tag>:<erste Nummer>, hand:<Kennung>
     name       TEXT NOT NULL,
-    quelle     TEXT NOT NULL CHECK (quelle IN ('mtgjson', 'scryfall', 'hand')),
+    quelle     TEXT NOT NULL CHECK (quelle IN ('wiki', 'mtgjson', 'scryfall', 'hand')),   -- Wiki ab Version 16
     verkauf    TEXT,                       -- Verkaufstag JJJJ-MM-TT (aus Scryfall oder vom Nutzer)
     kosten     REAL,                       -- eigene Kosten dieses Drops in Euro, NULL = Standard
     umbenannt  INTEGER NOT NULL DEFAULT 0 CHECK (umbenannt IN (0, 1)),   -- Name vom Nutzer: der Abgleich lässt ihn
@@ -379,7 +379,9 @@ CREATE TABLE IF NOT EXISTS secret_karte (
     -- ab Version 13 (Bilder in der Ansicht): die Drucke hinter den Vergleichswerten
     teuer_id      TEXT,
     guenstig_id   TEXT,
-    guenstig_nummer TEXT
+    guenstig_nummer TEXT,
+    -- ab Version 16: Bonuskarte oder Promo des Drops (zählt nicht zu seinem Wert)
+    bonus         INTEGER NOT NULL DEFAULT 0 CHECK (bonus IN (0, 1))
 );
 
 CREATE TABLE IF NOT EXISTS secret_wert (
@@ -427,4 +429,4 @@ CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 -- ab Version 14: Ausschnitt je Scan-Foto
 CREATE INDEX IF NOT EXISTS i_scan_foto_karte  ON scan_foto(karte_id);
 
-PRAGMA user_version = 15;
+PRAGMA user_version = 16;

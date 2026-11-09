@@ -1,11 +1,16 @@
 """Secret-Lair-Drops finden und bewerten (Wunsch des Nutzers, 05.11.2026). Die App zeigt Zahlen, keine Kaufempfehlung.
 
-Quellen und was sie taugen (gemessen am Star-Trek-Drop, vier Tage vor dem Verkauf):
+Quellen und was sie taugen (gemessen am Star-Trek-Drop, vier Tage vor dem Verkauf; MTG Wiki am 09.11.2026):
+- **MTG Wiki (`secretlair/wiki.py`, zuerst):** Drop-Name und Verkaufstag je Sammlernummer, neue Superdrops etwa zwei
+  Wochen vorher, dazu welche Bonuskarte zu welchem Drop gehört. Ist das Wiki nicht erreichbar, gilt der zuletzt
+  gemerkte Stand (`secret_wert.wiki`).
 - **Katalog (Scryfall):** kennt viele Karten früh, oft mit Cardmarket-Produkt, aber keinen Namen des Drops. `erschienen`
   ist der Verkaufstag. Karten ohne Drop werden nach Tag und fortlaufender Sammlernummer gruppiert; das ist nur eine
   Näherung, nebeneinanderliegende Drops können verschmelzen.
-- **MTGJSON (`SLD.json`, Abschnitt `decks`):** nennt Drops und ihre Karten, kommt aber später. Sein `releaseDate` ist
+- **MTGJSON (`SLD.json`, Abschnitt `decks`, dazu `subsets` je Karte):** nennt Drops und ihre Karten, kommt aber später. Sein `releaseDate` ist
   nicht der Verkaufstag (Corn Maze: 14.12. statt 12.10.2026), darum gilt immer das Datum aus dem Katalog.
+- **Bonuskarten** (Nummern 501–999 und ab 7000, auch Promos): Sie hängen als Bonus am Drop, den Wiki oder MTGJSON
+  nennen, und zählen nicht zum Wert; ohne bekannten Drop erscheinen sie nicht (Antwort des Nutzers, 09.11.2026).
 - **Von Hand:** Der Nutzer fügt die Kartenliste aus der Ankündigung von Wizards ein. Sobald der Katalog die Drucke
   kennt, verbindet der Abgleich sie, und sie verschwinden aus den automatischen Gruppen.
 
@@ -38,6 +43,7 @@ from pathlib import Path
 from binderapp.db.datenbank import schreiben, verbinden
 from binderapp.katalog.suche import normalisiere
 from binderapp.preise import abruf
+from binderapp.secretlair import wiki
 
 MTGJSON = "https://mtgjson.com/api/v5/SLD.json"
 FENSTER_TAGE = 365     # Antwort des Nutzers: Drops der letzten 12 Monate
@@ -109,18 +115,30 @@ def beginn(verkauf: str | None, uhr: str, tz=None) -> datetime | None:
 # ---------------------------------------------------------------- MTGJSON
 
 def mtgjson_lesen(roh: bytes) -> list[dict]:
-    """Drops aus `SLD.json`: [{"name", "karten": [(Scryfall-ID, Anzahl)]}]. Foil-Ausgaben sind derselbe Drop."""
+    """Drops aus `SLD.json`: [{"name", "karten": [(Scryfall-ID, Anzahl)]}]. Foil-Ausgaben sind derselbe Drop. Karten
+    ohne Deck kommen über ihr erstes `subsets` dazu (MTGJSON nennt dort den Drop je Karte, oft vor dem Deck)."""
     daten = json.loads(roh)["data"]
     ids = {k["uuid"]: k.get("identifiers", {}).get("scryfallId") for k in daten.get("cards", [])}
-    drops, gesehen = [], set()
+    drops, nach_name = [], {}
     for d in daten.get("decks", []):
         name = d.get("name") or ""
-        if not name or name in gesehen or name.endswith("Foil Edition"):
+        if not name or name in nach_name or name.endswith("Foil Edition"):
             continue
-        gesehen.add(name)
         karten = [(ids[e["uuid"]], int(e.get("count") or 1)) for e in d.get("mainBoard", []) if ids.get(e.get("uuid"))]
         if karten:
-            drops.append({"name": name, "karten": karten})
+            nach_name[name] = {"name": name, "karten": karten}
+            drops.append(nach_name[name])
+    im_deck = {sid for d in drops for sid, _ in d["karten"]}
+    for k in daten.get("cards", []):
+        sid, teile = ids.get(k.get("uuid")), k.get("subsets") or []
+        if not sid or sid in im_deck or not teile or not isinstance(teile[0], str) or not teile[0].strip():
+            continue
+        name = teile[0].strip()
+        if name not in nach_name:
+            nach_name[name] = {"name": name, "karten": []}
+            drops.append(nach_name[name])
+        nach_name[name]["karten"].append((sid, 1))
+        im_deck.add(sid)
     return drops
 
 
@@ -174,8 +192,25 @@ def _laeufe(rest: list[dict]) -> list[dict]:
         von, bis = g[0]["nummer"], g[-1]["nummer"]
         aus.append({"schluessel": f"scryfall:{g[0]['erschienen']}:{von}", "quelle": "scryfall",
                     "name": f"Secret Lair vom {tag} (Nr. {von}{'–' + bis if bis != von else ''})",
-                    "karten": [(d["scryfall_id"], 1) for d in g]})
+                    "karten": [(d["scryfall_id"], 1, 0) for d in g]})
     return aus
+
+
+def nummer(druck: dict) -> int | None:
+    """Sammlernummer als Zahl, nur wenn sie ganz aus Ziffern besteht („IFIYW-6“ ist nicht Nummer 6)."""
+    n = str(druck.get("nummer") or "")
+    return int(n) if n.isdigit() else None
+
+
+def ist_bonus(n: int | None) -> bool:
+    """Bonuskarten und Promos haben eigene Nummernbereiche (MTG Wiki: 501–899, 900–924, ab 7001)."""
+    return n is not None and (501 <= n <= 999 or n >= 7000)
+
+
+def _start(g: dict, drucke: dict) -> str:
+    tage = [drucke[sid]["erschienen"] for sid, _, bonus in g["karten"] if not bonus] or \
+        [drucke[sid]["erschienen"] for sid, _, _ in g["karten"]]
+    return g.get("tag") or min(tage)
 
 
 def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int]) -> None:
@@ -196,7 +231,7 @@ def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int
     for platz, g in enumerate(gruppen):
         if platz in zuordnung:
             continue
-        ids = {sid for sid, _ in g["karten"]}
+        ids = {sid for sid, *_ in g["karten"]}
         gemeinsam = [(len(ids & d["karten"]), i) for i, d in frei.items()]
         n, i = max(gemeinsam, default=(0, None))
         if n and n * 2 >= min(len(ids), len(frei[i]["karten"])):
@@ -205,7 +240,7 @@ def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int
     for i in frei:
         con.execute("DELETE FROM secret_drop WHERE id = ?", (i,))
     for platz, g in enumerate(gruppen):
-        verkauf = min(drucke[sid]["erschienen"] for sid, _ in g["karten"])
+        verkauf = _start(g, drucke)
         drop = zuordnung.get(platz)
         if drop is None:
             drop = con.execute("INSERT INTO secret_drop (schluessel, name, quelle, verkauf) VALUES (?, ?, ?, ?)",
@@ -216,16 +251,20 @@ def _gruppen_schreiben(con, gruppen: list[dict], drucke: dict, behalten: set[int
                         " name = CASE WHEN umbenannt THEN name ELSE ? END WHERE id = ?",
                         (g["schluessel"], g["quelle"], verkauf, g["name"], drop))
             con.execute("DELETE FROM secret_karte WHERE drop_id = ?", (drop,))
-        for sid, anzahl in g["karten"]:
+        for sid, anzahl, bonus in g["karten"]:
             d = drucke[sid]
-            con.execute("INSERT INTO secret_karte (drop_id, name, oracle_id, scryfall_id, nummer, cardmarket_id, anzahl)"
-                        " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (drop, d["name"], d["oracle_id"], sid, d["nummer"], d["cardmarket_id"], anzahl))
+            con.execute("INSERT INTO secret_karte (drop_id, name, oracle_id, scryfall_id, nummer, cardmarket_id, anzahl,"
+                        " bonus) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (drop, d["name"], d["oracle_id"], sid, d["nummer"], d["cardmarket_id"], anzahl, bonus))
 
 
-def abgleichen(con, kat, decks: list[dict] | None, heute: date) -> None:
+def abgleichen(con, kat, decks: list[dict] | None, heute: date, wiki_daten: dict | None = None) -> None:
     """Trägt die Drops der letzten 12 Monate und die kommenden ein (in der Transaktion des Aufrufers). `decks` ist
-    None, wenn MTGJSON gerade nicht erreichbar war: Dann bleiben die Drops aus MTGJSON, wie sie sind."""
+    None, wenn MTGJSON gerade nicht erreichbar war: Dann bleiben die Drops aus MTGJSON, wie sie sind. Ohne
+    `wiki_daten` gilt der zuletzt gemerkte Stand des Wikis.
+
+    Reihenfolge je Karte: eingefügter Drop, MTG Wiki, MTGJSON, sonst Gruppe nach Tag und Nummer (Scryfall).
+    Bonuskarten hängen am Drop, den Wiki oder MTGJSON nennen, sonst fallen sie weg."""
     grenze = (heute - timedelta(days=FENSTER_TAGE)).isoformat()
     drucke = {z["scryfall_id"]: dict(z) for z in kat.execute(
         "SELECT scryfall_id, oracle_id, name, nummer, nummer_zahl, erschienen, cardmarket_id FROM druck"
@@ -235,21 +274,54 @@ def abgleichen(con, kat, decks: list[dict] | None, heute: date) -> None:
         nach_oracle.setdefault(d["oracle_id"], []).append(d)
     belegt = _hand_verbinden(con, drucke, nach_oracle)
     behalten: set[int] = set()
-    gruppen: list[dict] = []
     if decks is None:
         for z in con.execute("SELECT k.drop_id, k.scryfall_id FROM secret_karte k JOIN secret_drop d ON d.id = k.drop_id"
                              " WHERE d.quelle = 'mtgjson'"):
             behalten.add(z["drop_id"])
             belegt.add(z["scryfall_id"])
+    if wiki_daten is None:
+        wiki_daten = wiki.aus_text(wert_lesen(con, "wiki"))
+    aus_mtgjson: dict[str, tuple[str, int]] = {}
     for deck in decks or []:
-        karten = [(sid, n) for sid, n in deck["karten"] if sid in drucke and sid not in belegt]
-        if karten:
-            belegt.update(sid for sid, _ in karten)
-            gruppen.append({"schluessel": f"mtgjson:{deck['name']}", "quelle": "mtgjson", "name": deck["name"][:NAME_MAX],
-                            "karten": karten})
-    gruppen += _laeufe([d for sid, d in drucke.items() if sid not in belegt])
-    gruppen.sort(key=lambda g: (min(drucke[sid]["erschienen"] for sid, _ in g["karten"]), g["schluessel"]))
-    _gruppen_schreiben(con, gruppen, drucke, behalten)
+        for sid, n in deck["karten"]:
+            aus_mtgjson.setdefault(sid, (deck["name"][:NAME_MAX], n))
+
+    gruppen: dict[str, dict] = {}   # verglichener Name → Gruppe; gleiche Namen aus Wiki und MTGJSON sind ein Drop
+
+    def gruppe(quelle: str, name: str, tag: str | None = None) -> dict:
+        g = gruppen.get(wiki.norm(name))
+        if g is None:
+            g = gruppen[wiki.norm(name)] = {"schluessel": f"{quelle}:{name}", "quelle": quelle, "name": name[:NAME_MAX],
+                                            "karten": [], "tag": tag}
+        elif quelle == "wiki" and g["quelle"] != "wiki":   # das Wiki gewinnt, auch wenn MTGJSON die Gruppe anlegte
+            g.update(schluessel=f"wiki:{name}", quelle="wiki", name=name[:NAME_MAX], tag=tag or g["tag"])
+        elif tag and not g["tag"]:
+            g["tag"] = tag
+        return g
+
+    bonus, rest = [], []
+    for sid, d in sorted(drucke.items(), key=lambda x: (x[1]["nummer_zahl"] or 0, x[1]["nummer"])):
+        if sid in belegt:
+            continue
+        n = nummer(d)
+        if ist_bonus(n):
+            bonus.append(d)
+        elif n in wiki_daten["nummern"]:
+            name, tag = wiki_daten["nummern"][n]
+            gruppe("wiki", name, tag)["karten"].append((sid, 1, 0))
+        elif sid in aus_mtgjson:
+            name, anzahl = aus_mtgjson[sid]
+            gruppe("mtgjson", name)["karten"].append((sid, anzahl, 0))
+        else:
+            rest.append(d)
+    for d in bonus:   # Antwort des Nutzers: zum Drop, sonst nicht zeigen
+        name = wiki_daten["bonus"].get(nummer(d)) or aus_mtgjson.get(d["scryfall_id"], (None,))[0]
+        g = gruppen.get(wiki.norm(name)) if name else None
+        if g is not None and g["karten"]:
+            g["karten"].append((d["scryfall_id"], 1, 1))
+    liste_ = [g for g in gruppen.values() if any(not b for _, _, b in g["karten"])] + _laeufe(rest)
+    liste_.sort(key=lambda g: (_start(g, drucke), g["schluessel"]))
+    _gruppen_schreiben(con, liste_, drucke, behalten)
     con.execute("DELETE FROM secret_drop WHERE quelle <> 'hand' AND verkauf < ?", (grenze,))
 
 
@@ -299,20 +371,32 @@ def bewerten_lauf(datenbank: Path, katalog: Path, preisdatei: Path) -> int:
         return bewerten(con, kat, roh)
 
 
-def einmal(datenbank: Path, katalog: Path, preisdatei: Path, oeffnen=urllib.request.urlopen, heute: date | None = None) -> dict:
-    """Abgleich und Bewertung. Ist MTGJSON nicht erreichbar, läuft der Rest trotzdem, der Fehler steht im Stand."""
-    fehler = None
+def einmal(datenbank: Path, katalog: Path, preisdatei: Path, oeffnen=urllib.request.urlopen, heute: date | None = None,
+           wiki_laden=None) -> dict:
+    """Abgleich und Bewertung. Ist MTGJSON oder MTG Wiki nicht erreichbar, läuft der Rest trotzdem (beim Wiki mit dem
+    gemerkten Stand), der Fehler steht im Stand. `wiki_laden` (Tests): liefert die Daten des Wikis."""
+    fehler = []
     try:
         decks = mtgjson_laden(oeffnen)
     except (OSError, ValueError, KeyError) as f:
-        decks, fehler = None, f"MTGJSON nicht erreichbar: {f}"
-        log.warning("%s", fehler)
+        decks = None
+        fehler.append(f"MTGJSON nicht erreichbar: {f}")
+    try:
+        wiki_daten = (wiki_laden or (lambda: wiki.laden(oeffnen)))()
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as f:
+        wiki_daten = None
+        fehler.append(f"MTG Wiki nicht erreichbar: {f}")
+    for f in fehler:
+        log.warning("%s", f)
     with closing(verbinden(katalog, nur_lesen=True)) as kat, closing(verbinden(datenbank)) as con, schreiben(con):
-        abgleichen(con, kat, decks, heute or date.today())
+        if wiki_daten is not None:
+            wert_setzen(con, "wiki", wiki.als_text(wiki_daten))
+            wert_setzen(con, "wiki_stand", _jetzt())
+        abgleichen(con, kat, decks, heute or date.today(), wiki_daten)
         wert_setzen(con, "abgleich", _jetzt())
-        wert_setzen(con, "fehler", fehler)
+        wert_setzen(con, "fehler", " · ".join(fehler) or None)
     karten = bewerten_lauf(datenbank, katalog, preisdatei)
-    return {"karten": karten, "fehler": fehler}
+    return {"karten": karten, "fehler": " · ".join(fehler) or None}
 
 
 # ---------------------------------------------------------------- Einfügen
@@ -381,9 +465,13 @@ def tag_setzen(con, drop_id: int, verkauf: str | None, kat=None) -> str | None:
 # ---------------------------------------------------------------- Lesen
 
 SQL_DROPS = """
-SELECT d.id, d.name, d.quelle, d.verkauf, d.datum_eigen, d.wunsch, d.kosten, COUNT(k.id) AS karten, SUM(k.anzahl) AS exemplare,
-       SUM(k.anzahl * k.teuer) AS teuer, SUM(k.anzahl * k.guenstig) AS guenstig, SUM(k.anzahl * k.preis) AS wert,
-       SUM(k.preis IS NOT NULL) AS mit_preis, SUM(k.teuer IS NULL) AS ohne_vergleich
+SELECT d.id, d.name, d.quelle, d.verkauf, d.datum_eigen, d.wunsch, d.kosten,
+       COALESCE(SUM(k.id IS NOT NULL AND k.bonus = 0), 0) AS karten, SUM(CASE WHEN k.bonus = 0 THEN k.anzahl END) AS exemplare,
+       SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * k.teuer END) AS teuer,
+       SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * k.guenstig END) AS guenstig,
+       SUM(CASE WHEN k.bonus = 0 THEN k.anzahl * k.preis END) AS wert,
+       COALESCE(SUM(k.bonus = 0 AND k.preis IS NOT NULL), 0) AS mit_preis,
+       COALESCE(SUM(k.bonus = 0 AND k.teuer IS NULL), 0) AS ohne_vergleich, COALESCE(SUM(k.bonus), 0) AS bonus
 FROM secret_drop d LEFT JOIN secret_karte k ON k.drop_id = d.id {wo} GROUP BY d.id
 ORDER BY d.verkauf IS NULL DESC, d.verkauf DESC, d.id DESC
 """
@@ -426,19 +514,20 @@ def einzeln(con, drop_id: int, jetzt: datetime | None = None) -> dict | None:
     d = _drop(z, standard_kosten(con), uhrzeit(con), _jetzt_zeit(jetzt), zone())
     d["liste"] = [dict(k) for k in con.execute(
         "SELECT name, nummer, anzahl, preis, teuer, teuer_set, teuer_nummer, teuer_id, guenstig, guenstig_set,"
-        " guenstig_nummer, guenstig_id, nur_sld, scryfall_id"
-        " FROM secret_karte WHERE drop_id = ? ORDER BY teuer IS NULL, teuer DESC, name", (drop_id,))]
+        " guenstig_nummer, guenstig_id, nur_sld, scryfall_id, bonus"
+        " FROM secret_karte WHERE drop_id = ? ORDER BY bonus, teuer IS NULL, teuer DESC, name", (drop_id,))]
     # Verlauf nur aus echten Abrufen, mit Foil-Preisen hat er nichts zu tun
     verlauf = [(t, _rund(w)) for t, w in con.execute(
         "SELECT p.tag, SUM(k.anzahl * COALESCE(p.avg7, p.low)) FROM preis p JOIN secret_karte k"
-        " ON k.cardmarket_id = p.cardmarket_id WHERE k.drop_id = ? GROUP BY p.tag ORDER BY p.tag", (drop_id,)) if w]
+        " ON k.cardmarket_id = p.cardmarket_id WHERE k.drop_id = ? AND k.bonus = 0 GROUP BY p.tag ORDER BY p.tag",
+        (drop_id,)) if w]
     d["verlauf"] = {"erster": verlauf[0], "letzter": verlauf[-1], "tage": len(verlauf)} if verlauf else None
     return d
 
 
 def stand(con) -> dict:
     return {"abgleich": wert_lesen(con, "abgleich"), "bewertet": wert_lesen(con, "bewertet"),
-            "fehler": wert_lesen(con, "fehler")}
+            "fehler": wert_lesen(con, "fehler"), "wiki": wert_lesen(con, "wiki_stand")}
 
 
 def fuer_home_assistant(con, jetzt: datetime | None = None, wuensche: bool = True) -> dict:

@@ -15,7 +15,7 @@ import { angemeldet } from './anmeldung.js';
 const ZURUECK = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"'
   + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg>';
 const QUELLEN = {
-  hand: 'von Hand', mtgjson: 'MTGJSON', scryfall: 'Scryfall, Karten nach Nummer gruppiert, kann unvollständig sein',
+  hand: 'von Hand', wiki: 'MTG Wiki', mtgjson: 'MTGJSON', scryfall: 'Scryfall, Karten nach Nummer gruppiert, kann unvollständig sein',
 };
 
 let wurzelMerk = null;
@@ -218,7 +218,8 @@ async function listeZeigen(wurzel) {
 
   const hinweise = document.createElement('div');
   hinweise.innerHTML = `<p class="sl-hinweis">Zuletzt abgeglichen: ${esc(zeitText(r.stand.abgleich))}. `
-    + 'Die Werte sind Summen aus Cardmarket (Ø 7 Tage, ohne Foil), keine Kaufempfehlung.'
+    + 'Namen und Verkaufstage kommen aus MTG Wiki, sonst aus MTGJSON und Scryfall. '
+    + 'Die Werte sind Summen aus Cardmarket (Ø 7 Tage, ohne Foil, ohne Bonuskarten), keine Kaufempfehlung.'
     + `${ausgeblendet ? ` ${ausgeblendet} einzelne Karten ohne Drop sind ausgeblendet.` : ''}</p>`
     + (r.stand.fehler ? `<p class="meldung" role="alert">${esc(r.stand.fehler)}</p>` : '')
     + (r.katalog ? '' : '<p class="meldung" role="alert">Dafür braucht das Add-on den Kartenkatalog. Bitte einmal die Erkennung am PC starten.</p>');
@@ -251,6 +252,7 @@ function figurHtml(titel, id, name, wert, druck, leer) {
 function kartenHtml(d) {
   const druck = (set, nummer) => (set ? `${String(set).toUpperCase()} ${nummer ?? ''}`.trim() : '');
   const karte = (k) => `<li class="sl-karte"><h2 class="sl-kartenname">${k.anzahl > 1 ? `${k.anzahl}× ` : ''}${esc(k.name)}</h2>`
+    + (k.bonus ? '<p class="sl-druck">Bonuskarte, zählt nicht zum Wert des Drops</p>' : '')
     + (k.nur_sld ? '<p class="sl-druck">Basic Land: nur gegen andere Secret Lairs</p>' : '')
     + '<div class="sl-figuren">'
     + figurHtml('Secret Lair', k.scryfall_id, k.name, k.preis, k.nummer ? `SLD ${k.nummer}` : '', 'Noch kein Bild')

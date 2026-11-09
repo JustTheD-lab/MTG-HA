@@ -10,7 +10,8 @@ Weg (Scryfall-Schnittstelle, Stand 11/2026):
    Katalog nicht kennt, ist neu. Die Seiten werden direkt mit dem Katalog verglichen, nie alle IDs im Speicher.
 2. `POST /cards/collection` holt zu den neuen IDs die vollständigen Karten (75 je Anfrage, höchstens 2 je
    Sekunde). Dazu kommen junge Drucke (bis `AUFFRISCHEN_TAGE` alt) ohne Cardmarket-Produkt: Das trägt Scryfall
-   bei neuen Sets oft erst Tage nach dem Erscheinen nach, und ohne es gibt es keine Preise.
+   bei neuen Sets oft erst Tage nach dem Erscheinen nach, und ohne es gibt es keine Preise. Secret-Lair-Drucke
+   der letzten `SECRET_LAIR_TAGE` und alle kommenden kommen immer dazu (Verkaufstag der Drops).
 3. Geschrieben wird in Blöcken von `BLOCK` Karten, je Block eine Transaktion (druck, sprachdruck, satz, orakel,
    namen); so bleibt der Speicher im Add-on klein, und ein Abbruch verliert nur den laufenden Block (der nächste
    Lauf findet den Rest wieder als unbekannt). Nichts wird gelöscht. Erst am Ende hält `meta.abgleich` den
@@ -60,6 +61,8 @@ VERSUCHE_429 = 3
 ZEITLIMIT = 60
 SAMMLUNG_JE_ANFRAGE = 75
 AUFFRISCHEN_TAGE = 120
+SECRET_LAIR = "sld"
+SECRET_LAIR_TAGE = 60   # Secret-Lair-Drucke so lange täglich auffrischen (und alle kommenden)
 ALT = 20 * 3600        # ab diesem Alter des letzten Abgleichs wird neu abgeglichen
 TAKT = 3600            # Sekunden zwischen zwei Blicken im Add-on
 HOECHSTENS_SEITEN = 200   # Schutz gegen eine endlose Seitenkette
@@ -566,6 +569,11 @@ def abgleichen(pfad: Path, scryfall: Scryfall | None = None, bilder: Path | None
                     neu_sprache += [i for i in _unbekannt(kat, _ids(seite)) if i not in default_ids]
         auffrischen = [z[0] for z in kat.execute(
             "SELECT scryfall_id FROM druck WHERE cardmarket_id IS NULL AND erschienen >= ?", (grenze,))]
+        # Secret Lair (Antwort des Nutzers, 09.11.2026): junge und kommende Drucke täglich neu holen, damit eine
+        # spätere Korrektur von Scryfall (Verkaufstag, Nummer) den Katalog erreicht; etwa 150 Karten, 2–3 Anfragen
+        auffrischen += [z[0] for z in kat.execute(
+            "SELECT scryfall_id FROM druck WHERE set_code = ? AND erschienen >= ?",
+            (SECRET_LAIR, (heute - timedelta(days=SECRET_LAIR_TAGE)).isoformat()))]
         if neuheiten:
             auffrischen += _ohne_fertigen_scan(kat, grenze)
             if saat:

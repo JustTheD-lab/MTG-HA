@@ -9,6 +9,7 @@ Server und Verarbeiter schreiben in dieselbe Datei: WAL-Modus, kurze Transaktion
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -17,11 +18,12 @@ from pathlib import Path
 SCHEMA = Path(__file__).with_name("schema.sql")
 TABELLEN = {"binder", "seite", "tasche", "kiste", "karte", "foto", "nutzer", "scan_durchgang", "scan_foto",
             "sortierregel", "sortierfach", "deck", "deck_karte", "deck_entnahme"}
-VERSION = 15         # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
+VERSION = 16         # Stand von schema.sql (PRAGMA user_version); 4: Preise, 5: Bulk-Scan, 6: Sortierregeln (01.11.2026),
                      # 7: Decks (02.11.2026), 8: Deckbau (03.11.2026), 9: Foil und Sets je Scan-Durchgang (04.11.2026),
                      # 10: Messwerte je Scan-Foto (05.11.2026), 11: Kaufpreis (05.11.2026),
                      # 12: Secret-Lair-Drops (05.11.2026), 13: Reprints der Drops mit Druck (06.11.2026),
-                     # 14: Ausschnitt je Scan-Foto (06.11.2026), 15: Verkaufstag und Wunsch je Secret-Lair-Drop (09.11.2026)
+                     # 14: Ausschnitt je Scan-Foto (06.11.2026), 15: Verkaufstag und Wunsch je Secret-Lair-Drop (09.11.2026),
+                     # 16: Drops aus MTG Wiki und Bonuskarten (09.11.2026)
 MINDEST = 2          # ältester Stand, mit dem Server und Verarbeiter noch laufen (ohne Kisten)
 WARTEZEIT = 10       # Sekunden Wartezeit, wenn ein anderer Prozess gerade schreibt
 ANZAHL_MAX = 999     # so viele Exemplare höchstens in einem Posten
@@ -127,8 +129,14 @@ SPALTEN_V15 = {
         ("wunsch", "INTEGER NOT NULL DEFAULT 0 CHECK (wunsch IN (0, 1))"),
     ],
 }
+# Spalte, die Version 16 anhängt (Antwort des Nutzers, 09.11.2026): Bonuskarten hängen am Drop, zählen nicht zum Wert
+SPALTEN_V16 = {
+    "secret_karte": [
+        ("bonus", "INTEGER NOT NULL DEFAULT 0 CHECK (bonus IN (0, 1))"),
+    ],
+}
 ALLE_SPALTEN = (SPALTEN_V2, SPALTEN_V3, SPALTEN_V4, SPALTEN_V6, SPALTEN_V8, SPALTEN_V9, SPALTEN_V11, SPALTEN_V13,
-                SPALTEN_V14, SPALTEN_V15)
+                SPALTEN_V14, SPALTEN_V15, SPALTEN_V16)
 
 # Karten aus dem Bulk-Scan liegen in keiner Tasche: Ihr Ausschnitt steht am Scan-Foto. Mehrere Fotos eines Postens
 # zeigen denselben Druck, dann genügt das neueste.
@@ -176,8 +184,33 @@ def fehlende_spalten(con) -> list[str]:
     return fehlend
 
 
+def _secret_drop_neu_anlegen(con) -> bool:
+    """Version 16: `secret_drop.quelle` darf „wiki“ sein. SQLite ändert keine CHECK-Bedingung, darum wird die Tabelle
+    nach schema.sql neu angelegt und umkopiert (alle Spalten, gleiche IDs). Fremdschlüssel sind dabei aus, sonst
+    löschte DROP TABLE die Karten der Drops mit (ON DELETE CASCADE); danach wird geprüft."""
+    z = con.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'secret_drop'").fetchone()
+    pruefung = re.search(r"quelle\s+IN\s*\(([^)]*)\)", z[0] if z else "", re.IGNORECASE)
+    if z is None or (pruefung and "'wiki'" in pruefung.group(1)):
+        return False
+    vorlage = re.search(r"CREATE TABLE IF NOT EXISTS secret_drop \(.*?\n\);", SCHEMA.read_text(encoding="utf-8"), re.S)
+    neu = vorlage.group(0).replace("CREATE TABLE IF NOT EXISTS secret_drop (", "CREATE TABLE secret_drop_neu (", 1)
+    spalten = ", ".join(_spalten(con, "secret_drop"))
+    con.execute("PRAGMA foreign_keys = OFF")
+    try:
+        with schreiben(con):
+            con.execute(neu)
+            con.execute(f"INSERT INTO secret_drop_neu ({spalten}) SELECT {spalten} FROM secret_drop")
+            con.execute("DROP TABLE secret_drop")
+            con.execute("ALTER TABLE secret_drop_neu RENAME TO secret_drop")
+            if con.execute("PRAGMA foreign_key_check").fetchall():
+                raise RuntimeError("secret_drop: Fremdschlüssel nach dem Umkopieren verletzt")
+    finally:
+        con.execute("PRAGMA foreign_keys = ON")
+    return True
+
+
 def migrieren(con) -> list[str]:
-    """Bringt eine Datenbank der Version 1 bis 14 auf Version 15. Wiederholbar: Vorhandenes bleibt, wie es ist.
+    """Bringt eine Datenbank der Version 1 bis 15 auf Version 16. Wiederholbar: Vorhandenes bleibt, wie es ist.
 
     Gibt die ausgeführten Schritte zurück (leer, wenn nichts zu tun war). Daten werden nicht
     verändert; neue Spalten bekommen ihren Standardwert (Fotos: Quelle „import", Seiten: Art „foto",
@@ -196,6 +229,8 @@ def migrieren(con) -> list[str]:
                         schritte.append(f"{tabelle}.{name}")
         if version(con) < VERSION:
             schritte.append(f"Version {version(con)} -> {VERSION}")
+    if _secret_drop_neu_anlegen(con):
+        schritte.append("secret_drop.quelle wiki")
     # Tabellen und Indizes, die fehlen, legt schema.sql an (IF NOT EXISTS); setzt die Version.
     con.executescript(SCHEMA.read_text(encoding="utf-8"))
     return schritte
