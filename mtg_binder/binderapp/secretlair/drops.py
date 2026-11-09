@@ -51,6 +51,11 @@ from binderapp.secretlair import cardmarket, wiki
 MTGJSON = "https://mtgjson.com/api/v5/SLD.json"
 FENSTER_TAGE = 365     # Antwort des Nutzers: Drops der letzten 12 Monate
 ALT = 20 * 3600        # ab diesem Alter wird neu abgeglichen
+# Fassung des Abgleichs: erhöhen, wenn er neue Quellen oder Regeln bekommt. Ist die gespeicherte älter, gleicht der
+# Thread nach dem Start sofort ab, statt bis zu 20 Stunden zu warten (Befund 09.11.2026: nach dem Update auf 0.35.0
+# hatte kein Drop ein Cardmarket-Produkt, weil der Katalog erst beim nächsten Abgleich geladen worden wäre).
+# 2: MTG Wiki, Bonuskarten (0.34.0); 3: Cardmarket-Produkte (0.35.0)
+FASSUNG = 3
 TAKT = 3600
 ZEIT = 120             # Sekunden für den Download
 NAME_MAX = 80
@@ -407,6 +412,7 @@ def einmal(datenbank: Path, katalog: Path, preisdatei: Path, oeffnen=urllib.requ
             wert_setzen(con, "cm_produkte", cardmarket.als_text(produkte))
         abgleichen(con, kat, decks, heute or date.today(), wiki_daten)
         wert_setzen(con, "abgleich", _jetzt())
+        wert_setzen(con, "fassung", FASSUNG)
         wert_setzen(con, "fehler", " · ".join(fehler) or None)
     karten = bewerten_lauf(datenbank, katalog, preisdatei)
     return {"karten": karten, "fehler": " · ".join(fehler) or None}
@@ -587,7 +593,9 @@ class Secretabgleich(threading.Thread):
             return
         jetzt = datetime.now(timezone.utc)
         abgleich = self._zeit("abgleich")
-        if abgleich is None or (jetzt - abgleich).total_seconds() >= ALT:
+        with closing(verbinden(self.datenbank, nur_lesen=True)) as con:
+            fassung = wert_lesen(con, "fassung")
+        if abgleich is None or (jetzt - abgleich).total_seconds() >= ALT or fassung != str(FASSUNG):
             einmal(self.datenbank, self.katalog, self.preisdatei)
             return
         bewertet = self._zeit("bewertet")

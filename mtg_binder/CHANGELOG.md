@@ -1,5 +1,10 @@
 # Änderungen
 
+## 0.35.1
+- Secret Lair: Nach dem Update auf 0.35.0 hatte kein Drop einen Cardmarket-Preis. Der Abgleich, der den
+  Cardmarket-Katalog lädt, lief erst 20 Stunden nach dem letzten. Jetzt gleicht das Add-on nach einem Update mit
+  neuen Quellen gleich nach dem Start einmal ab (etwa 2 Minuten danach).
+
 ## 0.35.0
 - Secret Lair: **Preis des Drops bei Cardmarket mit Link.** Auf der Seite eines Drops stehen beide Fassungen, die
   Cardmarket führt (mit und ohne „Set“), je mit „ab“ und Trend für Nicht-Foil und Foil und einem Link zum Produkt;
