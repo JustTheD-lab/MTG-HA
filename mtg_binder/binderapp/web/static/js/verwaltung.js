@@ -1,4 +1,5 @@
-// Add-on: Verwaltung. Zeigt den Stand der Sicherungen und führt zu „Datenbank löschen“ (Neubeginn).
+// Add-on: Verwaltung. Zeigt den Stand der Sicherungen, spielt eine Sicherung zurück und führt zu „Datenbank
+// löschen“ (Neubeginn).
 // Entscheidungen des Nutzers (29.10.2026): endgültig, doppelte Bestätigung und ein eingetipptes Wort; die App zeigt
 // vorher, was gelöscht wird, und fragt nur bei den Original-Fotos nach.
 //
@@ -99,10 +100,118 @@ async function ergebnisZeigen(r) {
   location.reload();
 }
 
+// ---------------------------------------------------------------- Sicherung zurückspielen
+// Antworten des Nutzers (09.11.2026): alle Sicherungen zur Wahl, Bestätigung mit eingetipptem Wort, der Preisverlauf
+// bleibt. Vorher sichert das Add-on den jetzigen Stand, das Zurückspielen lässt sich also selbst zurücknehmen.
+
+const groesse = (b) => `${(Number(b || 0) / 1048576).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MB`;
+
+/** Liste der Sicherungen; gibt die gewählte zurück oder nichts. */
+async function sicherungWaehlen() {
+  const r = await holen('/api/sicherungen');
+  const inhalt = document.createElement('div');
+  const zeile = (s) => `<li><button type="button" class="verwaltung-sicherung" data-id="${esc(s.id)}">`
+    + `<span class="verwaltung-sicherung-zeit">${esc(zeit(s.zeit))}</span>`
+    + `<span class="verwaltung-sicherung-art">${esc(s.herkunft_text)} · ${esc(groesse(s.groesse))}</span></button></li>`;
+  inhalt.innerHTML = (r.hindernis ? `<p class="meldung" role="alert">${esc(r.hindernis)}</p>` : '')
+    + (r.sicherungen.length
+      ? '<p class="dialog-text">Wähle den Stand, zu dem du zurückwillst. Die App zeigt dir danach, was darin steckt.</p>'
+        + `<ul class="verwaltung-sicherungen">${r.sicherungen.map(zeile).join('')}</ul>`
+      : '<p class="dialog-text">Es gibt noch keine Sicherung. Die erste entsteht innerhalb eines Tages von selbst.</p>')
+    + (r.netzlaufwerk ? '' : '<p class="dialog-text pc-hinweis">Das Netzlaufwerk ist nicht erreichbar: Die Sicherungen dort fehlen in der Liste.</p>')
+    + '<p class="meldung" role="alert" aria-live="assertive"></p>';
+  const d = dialog({ titel: 'Sicherung zurückspielen', klasse: 'dialog-klein', inhalt });
+  const zu = knopf('Abbrechen');
+  zu.addEventListener('click', () => d.schliessen());
+  d.fuss.append(zu);
+  const text = inhalt.querySelector('.meldung:last-child');
+  inhalt.addEventListener('click', async (e) => {
+    const k = e.target.closest('[data-id]');
+    if (!k || k.disabled) return;
+    const alle = inhalt.querySelectorAll('[data-id]');
+    alle.forEach((x) => { x.disabled = true; });
+    text.textContent = 'Sicherung wird geprüft …';
+    try {
+      d.schliessen(await senden('/api/sicherung/vorschau', { daten: { id: k.dataset.id } }));
+    } catch (f) {
+      text.textContent = f.message;
+      alle.forEach((x) => { x.disabled = false; });
+    }
+  });
+  return d.fertig;
+}
+
+/** Vergleich „in der Sicherung“ gegen „heute“, dann das Wort. Gibt das Ergebnis des Servers zurück oder nichts. */
+async function zurueckspielen(v) {
+  const posten = [['binder', 'Binder'], ['kisten', 'Kisten'], ['decks', 'Decks'], ['karten', 'Karten'],
+    ['fotos', 'Binderfotos'], ['scan_fotos', 'Scan-Fotos'], ['regeln', 'Sortierregeln']];
+  const form = document.createElement('form');
+  form.id = 'sicherung-zurueck-form';
+  form.noValidate = true;
+  form.innerHTML = `<p class="dialog-text">Sicherung vom <strong>${esc(zeit(v.zeit))}</strong> (${esc(v.herkunft_text)}).</p>`
+    + '<table class="verwaltung-vergleich"><thead><tr><th scope="col"></th><th scope="col">In der Sicherung</th>'
+    + '<th scope="col">Heute</th></tr></thead><tbody>'
+    + posten.map(([k, name]) => `<tr><th scope="row">${esc(name)}</th><td>${esc(zahl(v.zahlen[k]))}</td>`
+      + `<td>${esc(zahl(v.heute[k]))}</td></tr>`).join('')
+    + '</tbody></table>'
+    + '<p class="dialog-text pc-hinweis">Die Sammlung ist danach wieder so wie in der Sicherung; alles, was seitdem '
+    + 'dazukam oder geändert wurde, ist dann weg. Der Preisverlauf bleibt. Der jetzige Stand wird vorher gesichert und '
+    + 'steht danach in dieser Liste als „vor einem Zurückspielen“.</p>'
+    + '<p class="dialog-text pc-hinweis">Fotos und Vorschaubilder liegen nicht in der Sicherung: Bilder, die seitdem '
+    + 'gelöscht wurden, kommen nicht zurück.</p>'
+    + (v.hindernis ? `<p class="meldung" role="alert">${esc(v.hindernis)}</p>` : '')
+    + `<label class="etikett feld-etikett" for="sicherung-wort">Zum Bestätigen ${esc(v.wort)} eintippen</label>`
+    + '<input id="sicherung-wort" class="feld" type="text" maxlength="20" autocomplete="off" autocapitalize="characters"'
+    + ' spellcheck="false">'
+    + '<p class="meldung" role="alert" aria-live="assertive"></p>';
+  const d = dialog({ titel: 'Sicherung zurückspielen', klasse: 'dialog-klein', inhalt: form });
+  const feld = form.querySelector('#sicherung-wort');
+  const text = form.querySelector('.meldung:last-child');
+  const abbrechen = knopf('Abbrechen');
+  abbrechen.addEventListener('click', () => d.schliessen());
+  const weiter = Object.assign(knopf('Zurückspielen', 'knopf knopf-gefahr'), { type: 'submit', disabled: true });
+  weiter.setAttribute('form', form.id);
+  d.fuss.append(abbrechen, weiter);
+  const passt = () => feld.value.trim() === v.wort && !v.hindernis;
+  feld.addEventListener('input', () => { weiter.disabled = !passt(); });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!passt()) return;
+    weiter.disabled = true;
+    abbrechen.disabled = true;
+    text.textContent = 'Wird zurückgespielt …';
+    try {
+      d.schliessen(await senden('/api/sicherung/zurueckspielen', { daten: { id: v.id, wort: feld.value.trim() } }));
+    } catch (f) {
+      text.textContent = f.message;
+      weiter.disabled = !passt();
+      abbrechen.disabled = false;
+    }
+  });
+  feld.focus();
+  return d.fertig;
+}
+
+async function zurueckErgebnis(r) {
+  const inhalt = document.createElement('div');
+  inhalt.innerHTML = `<p class="dialog-text">Die Sammlung ist wieder auf dem Stand vom ${esc(zeit(r.sicherung.zeit))}: `
+    + `${esc(zahl(r.zahlen.karten))} Karten, ${esc(zahl(r.zahlen.binder))} Binder, ${esc(zahl(r.zahlen.kisten))} Kisten, `
+    + `${esc(zahl(r.zahlen.decks))} Decks.</p>`
+    + '<p class="dialog-text pc-hinweis">Der Stand von eben liegt als Sicherung „vor einem Zurückspielen“ in der Liste.</p>';
+  const d = dialog({ titel: 'Sicherung zurückgespielt', klasse: 'dialog-klein', inhalt });
+  const zu = knopf('Zum Regal', 'knopf knopf-haupt');
+  zu.addEventListener('click', () => d.schliessen());
+  d.fuss.append(zu);
+  await d.fertig;
+  location.hash = '#/';
+  location.reload();
+}
+
 export async function oeffnen() {
   const v = await holen('/api/verwaltung');
   const inhalt = document.createElement('div');
   inhalt.innerHTML = `<h3 class="etikett">Sicherungen</h3>${sicherungHtml(v.sicherung)}`
+    + '<p class="verwaltung-knopf"><button type="button" class="knopf sicherung-zurueck">Sicherung zurückspielen …</button></p>'
     + '<h3 class="etikett">ManaBox</h3>'
     + '<p class="dialog-text">Sammlung oder Liste aus einem ManaBox-Export einlesen. Du entscheidest je Eintrag, was wohin geht.</p>'
     + '<p class="verwaltung-knopf"><button type="button" class="knopf manabox-start">Export wählen …</button></p>'
@@ -118,6 +227,14 @@ export async function oeffnen() {
   eingabe.setAttribute('aria-label', 'ManaBox-Export (CSV) wählen');
   inhalt.append(eingabe);
   inhalt.querySelector('.manabox-start').addEventListener('click', () => eingabe.click());
+  inhalt.querySelector('.sicherung-zurueck').addEventListener('click', async () => {
+    const wahl = await sicherungWaehlen();
+    if (!wahl) return;
+    const r = await zurueckspielen(wahl);
+    if (!r) return;
+    d.schliessen();
+    await zurueckErgebnis(r);
+  });
   eingabe.addEventListener('change', async () => {
     const datei = eingabe.files?.[0];
     if (!datei) return;

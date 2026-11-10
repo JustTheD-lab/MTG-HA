@@ -136,6 +136,22 @@ body {
 .verwaltung-wahl { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; border: 0; }
 .verwaltung-wahl label { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .verwaltung-knopf { margin: 10px 0 16px; }
+/* Sicherung zurückspielen: Liste zum Antippen, Vergleich „in der Sicherung“ gegen „heute“ */
+.verwaltung-sicherungen { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none;
+  max-height: min(50vh, 420px); overflow-y: auto; }
+.verwaltung-sicherung { display: grid; gap: 2px; width: 100%; min-height: 44px; padding: 8px 12px; text-align: left;
+  color: var(--text); background: var(--flaeche-3); border: 1px solid var(--linie-stark);
+  border-radius: var(--radius-klein); cursor: pointer; font: inherit; }
+.verwaltung-sicherung:hover:not(:disabled) { background: var(--flaeche-hover); border-color: var(--messing-dunkel); }
+.verwaltung-sicherung:focus-visible { outline: 2px solid var(--messing); outline-offset: 2px; }
+.verwaltung-sicherung:disabled { opacity: 0.55; cursor: default; }
+.verwaltung-sicherung-zeit { font-variant-numeric: tabular-nums; }
+.verwaltung-sicherung-art { color: var(--text-2); font-size: 0.84rem; }
+.verwaltung-vergleich { width: 100%; margin: 12px 0; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.verwaltung-vergleich th, .verwaltung-vergleich td { padding: 5px 0 5px 12px; text-align: right;
+  border-bottom: 1px solid var(--linie); }
+.verwaltung-vergleich thead th { color: var(--text-3); font-size: 0.84rem; font-weight: 400; }
+.verwaltung-vergleich th[scope="row"] { padding-left: 0; text-align: left; color: var(--text-2); font-weight: 400; }
 
 /* Add-on: ManaBox-Import (manabox.js) */
 .manabox-liste { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }

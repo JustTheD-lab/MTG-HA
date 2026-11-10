@@ -247,6 +247,7 @@ für Casual und Playtesting gedacht und bleiben als Proxy erkennbar.
 | Kartenkatalog, Schlüssel (nur als Hash) | im Add-on (`/data/katalog.sqlite`, `/data/pc_schluessel`) |
 | Sicherungen | im Add-on (`/data/sicherung`), die jüngsten 10 bleiben; vor jedem Update automatisch |
 | Tägliche Sicherungen | im Add-on (`/data/sicherung/taeglich`, die jüngsten 7) und auf dem Netzlaufwerk (`sicherung/`, die jüngsten 30) |
+| Stand vor einem Zurückspielen | im Add-on (`/data/sicherung/vor-zurueckspielen`, die jüngsten 5) |
 | Fotos und Vorschaubilder | auf dem Netzlaufwerk unter dem Speicherort (`fotos/`, `bilder/`), **nicht** in den Backups |
 | Scan-Fotos | auf dem Netzlaufwerk unter `fotos/scan/`, Vorschauen unter `bilder/scan/` |
 | Archiv aus „Datenbank löschen“ | auf dem Netzlaufwerk unter `archiv/<Zeit>/` |
@@ -275,7 +276,13 @@ hast, bleibt so. „Rückgängig“ im Bericht nimmt den ganzen Import zurück, 
 gescannten Karten wird nichts zusammengezählt, mögliche Doppel stehen im Bericht. Für den Import braucht das Add-on den
 Kartenkatalog.
 
-**Sicherung zurückholen:** Eine Datei aus `sicherung/` (oder `archiv/<Zeit>/binder.sqlite`) als
+**Sicherung zurückspielen:** Im Regal auf „Verwaltung“ → „Sicherung zurückspielen …“. Die Liste zeigt alle
+Sicherungen mit Datum und Herkunft. Nach der Wahl zeigt die App, was in der Sicherung steckt und was heute da ist;
+zum Bestätigen das Wort ZURÜCK eintippen. Der jetzige Stand wird vorher gesichert und steht danach in der Liste als
+„vor einem Zurückspielen“ (die jüngsten 5 bleiben). Der Preisverlauf bleibt. Fotos und Vorschaubilder liegen nicht
+in der Sicherung.
+
+Von Hand geht es weiterhin: eine Datei aus `sicherung/` (oder `archiv/<Zeit>/binder.sqlite`) als
 `einspielen/binder.sqlite` in den Speicherort kopieren und das Add-on neu starten, siehe „Testkopie einspielen“.
 
 **Datenbank löschen** ist für den Neubeginn gedacht und nicht rückgängig zu machen:

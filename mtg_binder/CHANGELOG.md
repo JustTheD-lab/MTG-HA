@@ -1,5 +1,15 @@
 # Änderungen
 
+## 0.42.0
+- **Sicherung zurückspielen.** In der Verwaltung gibt es „Sicherung zurückspielen …“: eine Liste aller Sicherungen
+  (täglich im Add-on und auf dem Netzlaufwerk, vor Updates, Importen und Abzügen, vor „Datenbank löschen“) mit Datum,
+  Herkunft und Größe. Nach der Wahl zeigt die App, was in der Sicherung steckt und was heute da ist; bestätigt wird mit
+  dem eingetippten Wort ZURÜCK.
+- Vorher sichert das Add-on den jetzigen Stand. Er steht danach in derselben Liste als „vor einem Zurückspielen“, das
+  Zurückspielen lässt sich also selbst zurücknehmen.
+- Der Preisverlauf bleibt erhalten. Fotos und Vorschaubilder liegen nicht in der Sicherung: Bilder, die seitdem
+  gelöscht wurden, kommen nicht zurück.
+
 ## 0.41.0
 - **Secret Lair, fertige Decks: Das ganze Deck zählt.** Bisher standen bei „Teuerste Reprints“ und „Günstigste
   Reprints“ nur die Secret-Lair-Karten des Decks, die übrigen Karten der Deckliste fehlten. Jetzt zählen sie mit ihrem
