@@ -1,5 +1,20 @@
 # Änderungen
 
+## 0.49.0
+- **Limit je Karte als Bedingung der Sortierregeln.** Neue Bedingung „Über dem Limit“ (z. B. „mehr als 4
+  Exemplare“): Gezählt wird je Druck, Foil getrennt, Sprache nicht; Binder, Kisten und Decks zählen mit. Steht eine
+  solche Regel vor den anderen, gehen beim Einsortieren nur die Exemplare über dem Limit in ihre Kiste. Ein Posten mit
+  mehreren Karten wird nicht geteilt. Bereits einsortierte Karten bleiben, wo sie sind.
+- **Überzählige Karten.** Knopf „Überzählige“ in der Gesamtsammlung: alle Drucke über einem wählbaren Limit mit
+  Orten, Preis der gewählten Preisart und Gesamtwert, als Text zum Kopieren und als CSV. Standardländer nur auf
+  Wunsch.
+
+## 0.48.2
+- **Protokolle der PC-Erkennung sofort lesbar.** Erkennung und Nachladen der Kartenbilder schreiben ihren Fortschritt
+  gleich ins Protokoll (`data\addon_zwischen\bilder_nachladen.log`); vorher stand dort erst am Ende etwas, und das
+  Nachladen sah aus, als täte es nichts.
+- Die automatischen Tests ändern den Eintrag unter „Apps“ des Entwicklungs-PCs nicht mehr.
+
 ## 0.48.1
 - **Installation der PC-Erkennung ohne den Paketindex von Paddle.** Der Index von paddlepaddle.org.cn antwortete am
   10.11.2026 nur mit Fehler 502, die Installation brach bei „Umgebung der Texterkennung“ ab. PaddlePaddle 3.0.0 kommt

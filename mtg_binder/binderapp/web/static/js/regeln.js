@@ -216,6 +216,21 @@ const BAUER = {
     k.append(wert, reihe);
     return () => ({ wert: wert.value, ab: ohneLeer(ab), unter: ohneLeer(unter) });
   },
+
+  // Paket 4: über dem Limit je Druck (Foil getrennt); was darunter liegt, geht an die nächste Regel
+  limit(k, feld, spec, b, w) {
+    const [ln, n] = zahlFeld('mehr als … Exemplare', w.ueber ?? 4);
+    n.step = '1';
+    n.min = '1';
+    n.inputMode = 'numeric';
+    n.placeholder = '4';
+    const reihe = el('div', 'regeln-zahlen');
+    reihe.append(ln);
+    k.append(reihe, el('p', 'regeln-hinweis', 'Trifft auf Exemplare zu, von denen schon so viele vom selben Druck da '
+      + 'sind (Binder, Kisten, Decks; Foil getrennt, Sprache nicht). Ein Posten mit mehreren Karten zählt nur, '
+      + 'wenn alle darüber liegen.'));
+    return () => ({ ueber: ohneLeer(n) });
+  },
 };
 
 /** Baut den Editor in `container`. `bedingungen` im Format der Schnittstelle (leer = keine).

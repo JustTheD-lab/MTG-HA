@@ -72,6 +72,7 @@ const SYM = {
   hochladen: sym('<path d="M12 16V5M7 10l5-5 5 5M5 19h14"/>'),
   wahl: sym('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.5l3 3 5-6"/>'),
   abzug: sym('<path d="M7 4h10v16H7zM10 9h4M10 13h4"/>'),
+  stapel: sym('<path d="M5 8h11v12H5zM8 5h11v12"/>'),
   weiter: sym('<path d="M4 12h14M13 7l5 5-5 5"/>'),
   stern: sym('<path d="M12 4l2.4 5 5.4.7-4 3.8 1 5.4L12 16.2 7.2 18.9l1-5.4-4-3.8 5.4-.7z"/>'),
   faecher: sym('<rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/>'),
@@ -1185,7 +1186,7 @@ function balken(gruppen, farbig) {
 // ---------- Umbenennen und Löschen ----------
 
 /** Schreibende Knöpfe, nur angemeldet. In der Kiste: Auswählen, Liste importieren, Karte hinzufügen, Umbenennen,
-    Löschen (wenn leer). In der Sammlung: Auswählen und Liste abziehen. */
+    Löschen (wenn leer). In der Sammlung: Auswählen, Liste abziehen und Überzählige. */
 function adminZeichnen() {
   const s = S;
   const box = s.wurzel.querySelector('.kiste-admin');
@@ -1211,6 +1212,8 @@ function adminZeichnen() {
   foil.setAttribute('aria-pressed', String(Boolean(s.foilModus)));
   if (s.sammlung) {
     neu('kiste-abzugknopf', SYM.abzug, 'Liste abziehen', 'Liste von der Sammlung abziehen', abziehenOeffnen);
+    neu('kiste-ueberknopf', SYM.stapel, 'Überzählige', 'Überzählige Karten über einem Limit je Druck ansehen',
+      ueberzaehligeOeffnen);
     return;
   }
   if (s.kopf.scan_eingang) {
@@ -1995,6 +1998,18 @@ async function abziehenOeffnen() {
     return;
   }
   if (geaendert && S === s) await neuAufbauen();
+}
+
+// ---------- Überzählige (Paket 4, nur lesend, eigene Datei) ----------
+
+async function ueberzaehligeOeffnen() {
+  const s = S;
+  try {
+    const { oeffnen } = await import('./ueberzaehlig.js');
+    await oeffnen();
+  } catch (f) {
+    if (S === s) hinweisZeigen(f.message || 'Die Liste der Überzähligen ließ sich nicht laden.', { art: 'fehler' });
+  }
 }
 
 // ---------- Ereignisse ----------

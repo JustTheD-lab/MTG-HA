@@ -5,6 +5,8 @@
                                  die Orte (Kisten und Binder) für Filter und Gruppen
     GET /api/sammlung/karten?…   wie /api/kiste/{id}/karten, zusätzlich ort=k12,b3 · quelle=scan,manabox,manuell
                                  · doppel=1 und die Gruppen „ort“ und „quelle“; jede Karte mit Ort, Quelle, Doppel
+    GET /api/sammlung/ueberzaehlig?limit=4&laender=1&format=csv|text
+                                 Überzählige je Druck über dem Limit mit Wert (Paket 4, sortieren/ueberzaehlig.py)
 
 Zählweise (Antwort des Nutzers, 28.10.2026): Binder und Kisten zusammen, die Quellen getrennt ausgewiesen,
 mögliche Doppel (gleicher Druck, Sprache und Foil in einer Kiste und in einem Binder) nur gekennzeichnet,
@@ -15,10 +17,12 @@ from __future__ import annotations
 import math
 from contextlib import closing
 
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from binderapp.db.seiten import Fehler
 from binderapp.preise import werte
+from binderapp.sortieren import ueberzaehlig as ue
 from binderapp.web import kisten as k_
 
 __all__ = ["routen"]
@@ -127,7 +131,27 @@ def routen(h) -> list[Route]:
             k_._ab_version_8(con)
             return JSONResponse(k_.seite_lesen(con, a))
 
+    @k_._lesen
+    def ueberzaehlige(request):
+        q = request.query_params
+        limit = ue.limit_lesen(q.get("limit"))
+        format_ = q.get("format") or "json"
+        if format_ not in ("json", "csv", "text"):
+            raise Fehler("Unbekanntes Format.")
+        with closing(h.db()) as con:
+            con.execute("BEGIN")
+            k_._ab_version_3(con, 404)
+            k_._ab_version_8(con)
+            d = ue.liste(con, h.nutzer, limit, mit_laendern=q.get("laender") == "1")
+        if format_ == "csv":
+            return Response(ue.als_csv(d), media_type="text/csv; charset=utf-8",
+                            headers={"Content-Disposition": f'attachment; filename="ueberzaehlige-{limit}.csv"'})
+        if format_ == "text":
+            return Response(ue.als_text(d), media_type="text/plain; charset=utf-8")
+        return JSONResponse({**d, "text": ue.als_text(d)})
+
     return [
         Route("/sammlung", kopf),
+        Route("/sammlung/ueberzaehlig", ueberzaehlige),
         Route("/sammlung/karten", karten),
     ]

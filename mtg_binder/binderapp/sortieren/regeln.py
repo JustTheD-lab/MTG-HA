@@ -14,6 +14,8 @@ Eine Bedingung ist ein Wörterbuch mit `feld` aus FELDER, den Werten ihrer Art u
     {"feld": "preis", "wert": "avg7" | "low" | … | "einstellung", "ab": 5, "unter": null}
                                                                 Euro, Foil-Karten mit Foil-Preis; Arten wie
                                                                 preise.werte.PREISARTEN, „einstellung“ = gewählte
+    {"feld": "limit", "ueber": 4}                               über dem Limit: Exemplare desselben Drucks (Foil
+                                                                getrennt, Sprache nicht) vor dieser Karte ≥ 4
 
 Alle Bedingungen einer Regel müssen zutreffen (UND). Die Auswertung kennt drei Werte: zutreffend, nicht zutreffend
 und unbekannt (ein Wert fehlt, zum Beispiel der Preis oder die Kartendaten). SQL liefert dafür 1, 0 und NULL; eine
@@ -27,6 +29,7 @@ from __future__ import annotations
 import json
 import re
 
+from binderapp.db.erkennung import SCAN_MARKE
 from binderapp.db.seiten import Fehler
 from binderapp.katalog.kartendaten import BESONDERHEITEN, FARBFOLGE, FOIL_SONDERARTEN, HAUPTTYPEN
 from binderapp.preise import werte as werte_preise
@@ -77,6 +80,7 @@ FELDER = {
     "sprache": {"name": "Sprache", "art": "auswahl", "werte": SPRACHEN},
     "name": {"name": "Name enthält", "art": "text"},
     "preis": {"name": "Preis", "art": "preis"},
+    "limit": {"name": "Über dem Limit", "art": "limit"},
 }
 
 # Spalte je Feld (nur aus dieser Liste kommen Spaltennamen ins SQL)
@@ -97,6 +101,23 @@ _PREIS = {wert: (f"(CASE WHEN {roh} IS NOT NULL THEN {roh} WHEN d.scryfall_id IS
 _PREIS[EINSTELLUNG] = ("(CASE (SELECT n.preisart FROM nutzer n WHERE n.id = k.nutzer_id) "
                        + " ".join(f"WHEN '{art}' THEN {sql}" for art, sql in _PREIS.items()) + " END)")
 _SET = re.compile(r"^[a-z0-9]{2,8}$")
+
+# Limit je Karte (Paket 4, Antworten des Nutzers 10.11.2026): gezählt wird je Druck (scryfall_id), Foil getrennt,
+# Sprache nicht; alle Orte zählen (Binder, Kisten, Decks, auch der Scan-Eingang), alle Quellen (echte Exemplare).
+# Eine Karte liegt über dem Limit N, wenn vor ihr schon N oder mehr Exemplare liegen. „Vor ihr“ heißt: zuerst alle
+# Karten außerhalb des Scan-Eingangs, dann die im Scan-Eingang, jeweils nach Kennung. So bekommen in einem Lauf
+# die ersten neuen Exemplare den normalen Platz und erst die darüber das Ziel der Limit-Regel, und eine Karte, die
+# schon einsortiert ist, ändert ihren Wert nicht, wenn danach weitere kommen. Ein Posten mit mehreren Exemplaren
+# wird nicht geteilt: er liegt nur dann über dem Limit, wenn alle seine Exemplare darüber liegen.
+LIMIT_MAX = 999
+_EINGANG = "(SELECT ki.id FROM kiste ki WHERE ki.nutzer_id = {a}.nutzer_id AND ki.extern_name = '" + SCAN_MARKE + "')"
+_IM_EINGANG = "(COALESCE({a}.kiste_id = " + _EINGANG + ", 0))"
+LIMIT_VORHER = (
+    "(SELECT COALESCE(SUM(x.anzahl), 0) FROM karte x WHERE x.scryfall_id = k.scryfall_id"
+    " AND +x.nutzer_id = k.nutzer_id AND x.foil = k.foil AND x.id <> k.id"
+    " AND (x.kiste_id IS NOT NULL OR x.tasche_id IS NOT NULL OR x.deck_id IS NOT NULL)"
+    f" AND ({_IM_EINGANG.format(a='x')} < {_IM_EINGANG.format(a='k')}"
+    f" OR ({_IM_EINGANG.format(a='x')} = {_IM_EINGANG.format(a='k')} AND x.id < k.id)))")
 
 # Fürs Grund-Feld: welcher Wert fehlt, wenn eine Bedingung unbekannt ist
 FEHLT = {"preis": "Preis", "besonderheit": "Special-Print-Merkmale", "promo": "Promo-Angabe",
@@ -191,6 +212,11 @@ def bedingung_pruefen(roh) -> dict:
         if ab is None and unter is None:
             raise Fehler("Preis: ab oder unter angeben.")
         b["wert"], b["ab"], b["unter"] = wert, ab, unter
+    elif art == "limit":
+        n = _zahl(roh.get("ueber"), "Limit", 1, LIMIT_MAX)
+        if n is None or n != int(n):
+            raise Fehler(f"Limit: eine ganze Zahl von 1 bis {LIMIT_MAX} angeben.")
+        b["ueber"] = int(n)
     if roh.get("nicht"):
         b["nicht"] = True
     return b
@@ -240,6 +266,8 @@ def text(b: dict) -> str:
         t = f"{spec['name']} „{b['text']}“"
     elif art == "ja":
         t = spec["name"]
+    elif art == "limit":
+        t = f"Über dem Limit von {b['ueber']} je Druck"
     else:
         teile = []
         if b.get("ab") is not None:
@@ -289,6 +317,9 @@ def bedingung_sql(b: dict) -> tuple[str, list]:
         sql, p = f"instr(lower({_SPALTE[feld]}), ?) > 0", [b["text"].lower()]
     elif art == "ja":
         sql, p = f"{_SPALTE[feld]} = 1", []
+    elif art == "limit":
+        # ohne Druck unbekannt (die Karte wartet wie ohne Kartendaten)
+        sql, p = f"CASE WHEN k.scryfall_id IS NULL THEN NULL ELSE {LIMIT_VORHER} >= ? END", [b["ueber"]]
     else:
         spalte = _PREIS[b["wert"]]
         teile, p = [], []

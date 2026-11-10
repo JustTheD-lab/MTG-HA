@@ -1,17 +1,17 @@
 {
- "version": "0.48.1",
+ "version": "0.49.0",
  "dateien": {
   "MTG-Binder-PC.zip": {
-   "sha256": "ad5137953fc1455c02f745e1a65e715e67a2de46304f18facdcd73e1812d000f",
-   "groesse": 1057923
+   "sha256": "eeedb4c24483b71e7edda06e6f4261b8b5fde894bdb26bc5dcf9b184814955c8",
+   "groesse": 1065624
   },
   "MTG-Binder-Erkennung.exe": {
-   "sha256": "f03a89930952aca2ae2a63d867012f822c244ff9585e18603a632e1a8606d1b3",
-   "groesse": 23829027
+   "sha256": "095a6bb749c3e7d657a79b4d9bfc38e1c86acedc8cd8310bca2ea6921c11594a",
+   "groesse": 23827827
   },
   "MTG-Binder-Setup.exe": {
-   "sha256": "7137bb152053b29341b9893e3a7467cb4f80e5bc065239764392273b03930893",
-   "groesse": 11866454
+   "sha256": "9b178634e330788b5abb90c3d50153b02e0ee2e4cc5ef4fc810224c28ea98b2d",
+   "groesse": 11865458
   }
  },
  "anforderungen": {

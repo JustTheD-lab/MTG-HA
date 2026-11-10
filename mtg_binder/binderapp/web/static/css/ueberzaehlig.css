@@ -1,0 +1,27 @@
+/* Überzählige Karten (Dialog aus der Gesamtsammlung, js/ueberzaehlig.js). Klassen mit Vorsatz ueber-. */
+
+@media (min-width: 700px) {
+  .dialog.ueber-dialog { width: min(900px, calc(100vw - 32px)); height: min(860px, calc(100dvh - 32px)); }
+}
+.ueber { display: grid; gap: 12px; padding-top: 12px; min-width: 0; }
+.ueber-wahl { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 20px; }
+.ueber-limit { display: grid; gap: 4px; font-size: 0.84rem; color: var(--text-2); }
+.ueber-limit-feld { width: 7em; min-height: 44px; }
+.ueber-laender { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.ueber-erkl { margin: 0; font-size: 0.84rem; color: var(--text-3); }
+.ueber-summe { margin: 0; font-variant-numeric: tabular-nums; }
+.ueber-art { color: var(--text-3); font-size: 0.86rem; }
+.ueber-knoepfe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ueber-knoepfe .knopf { min-height: 44px; }
+.ueber-csv[aria-disabled] { pointer-events: none; opacity: 0.5; }
+.ueber-status { font-size: 0.86rem; color: var(--text-2); }
+.ueber-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ueber-zeile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 8px 12px; background: var(--flaeche-1); border: 1px solid var(--linie); border-radius: var(--radius); }
+.ueber-anzahl { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 2.5em; }
+.ueber-karte { display: grid; min-width: 0; }
+.ueber-name { font-weight: 600; overflow-wrap: anywhere; }
+.ueber-foil { font-size: 0.74rem; font-weight: 500; color: var(--messing-hell); margin-left: 4px; }
+.ueber-druck { font-size: 0.8rem; color: var(--text-3); overflow-wrap: anywhere; }
+.ueber-wert { display: grid; justify-items: end; font-variant-numeric: tabular-nums; }
+.ueber-wert small { font-size: 0.74rem; color: var(--text-3); }
