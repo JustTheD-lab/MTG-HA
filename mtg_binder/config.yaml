@@ -1,7 +1,7 @@
 # Lokales Home-Assistant-Add-on „MTG Binder“ (nur Server und Oberfläche; die Erkennung läuft am PC).
 # Gebaut wird der fertige Ordner mit: python -m binderapp.addon.paket  (PYTHONPATH=src)
 name: MTG Binder
-version: "0.48.0"
+version: "0.48.1"
 slug: mtg_binder
 description: Magic-Binder per Foto – Bücherregal, Lesetisch, Kisten und Prüfansicht
 arch:

@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.48.1
+- **Installation der PC-Erkennung ohne den Paketindex von Paddle.** Der Index von paddlepaddle.org.cn antwortete am
+  10.11.2026 nur mit Fehler 502, die Installation brach bei „Umgebung der Texterkennung“ ab. PaddlePaddle 3.0.0 kommt
+  jetzt direkt aus dem Speicher des Paddle-Teams, mit fester Prüfsumme; alle anderen Pakete kommen von PyPI. Ein
+  abgebrochener Installer, der mit einer neueren Version fortgesetzt wird, lädt Programm und Paketlisten neu.
+
 ## 0.48.0
 - **Startpaket für die PC-Erkennung.** Das Add-on hält auf dem Netzlaufwerk den fertigen Bildindex und das
   Namensverzeichnis bereit (Ordner `startpaket` neben den Bildern); die installierte PC-Erkennung schickt beides
