@@ -170,3 +170,31 @@ a.knopf { text-decoration: none; display: inline-flex; align-items: center; just
 }
 .bau-text .deck-zeile-kopf { flex-wrap: nowrap; }
 .bau-text .deck-name { min-width: 0; }
+
+/* ---------- Statistik (Paket 10): einfarbig Messing, Namen und Zahlen als Text wie im Dashboard ---------- */
+.deck-statistik { margin-top: 12px; padding: 0 16px; background: var(--flaeche-2); border: 1px solid var(--linie);
+  border-radius: 12px; }
+.deck-statistik-titel { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.deck-statistik[open] { padding-bottom: 14px; }
+.deck-stat-zahlen { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 6px; color: var(--text-2); font-size: 0.88rem; }
+.deck-stat-zahlen strong { color: var(--text); font-size: 1.15rem; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.deck-stat-tafeln { display: grid; gap: 14px; margin-top: 8px; }
+@media (min-width: 900px) { .deck-stat-tafeln { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; } }
+.deck-stat-tafel { min-width: 0; }
+.deck-stat-titel { margin: 0; font-size: 0.78rem; }
+.deck-stat-unter { margin: 6px 0 0; color: var(--text-3); font-size: 0.76rem; }
+.deck-stat-balken { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.deck-stat-balken li { display: grid; gap: 3px; }
+.deck-stat-kopf { display: flex; align-items: baseline; gap: 6px; font-size: 0.86rem; min-width: 0; }
+.deck-stat-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-stat-wert { margin-left: auto; flex: none; font-weight: 500; font-variant-numeric: tabular-nums; }
+.deck-stat-anteil { display: inline-block; min-width: 3.1em; text-align: right; color: var(--text-3); font-weight: 400; font-size: 0.76rem; }
+.deck-stat-spur { display: block; height: 6px; border-radius: 3px; background: var(--flaeche-3); overflow: hidden; }
+.deck-stat-spur span { display: block; height: 100%; min-width: 2px; border-radius: 0 3px 3px 0; background: var(--messing); }
+.deck-stat-saeulen { list-style: none; margin: 10px 0 0; padding: 0; display: flex; align-items: stretch; gap: 4px; height: 130px; }
+.deck-stat-saeulen li { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.deck-stat-raum { flex: 1; width: 100%; min-height: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-end; border-bottom: 1px solid var(--linie-stark); }
+.deck-stat-saeule { display: block; width: 100%; max-width: 28px; border-radius: 4px 4px 0 0; background: var(--messing); }
+.deck-stat-kappe { color: var(--text-2); font-size: 0.74rem; font-variant-numeric: tabular-nums; white-space: nowrap; min-height: 1.2em; }
+.deck-stat-x { padding-top: 4px; color: var(--text-3); font-size: 0.74rem; white-space: nowrap; }

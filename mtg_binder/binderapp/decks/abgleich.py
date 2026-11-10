@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from binderapp.db.datenbank import aendern, einfuegen, loeschen
+from binderapp.decks import statistik
 from binderapp.preise import werte as preise
 
 QUELLE = "nutzer"
@@ -268,6 +269,7 @@ def uebersicht(con, nutzer: int) -> list[dict]:
         ergebnis.append({k: d[k] for k in ("id", "name", "quelle", "extern_id", "abgleich", "basics_auslassen",
                                            "geladen")}
                         | {"summe": a["summe"], "wert": a["wert"], "gebaut": a["gebaut"],
+                           "baubar": statistik.baubar(d, a["summe"]),   # Paket 10
                            "commander": commander["name"] if commander else None,
                            "bild": commander["scryfall_id"] if commander else None})
     return ergebnis

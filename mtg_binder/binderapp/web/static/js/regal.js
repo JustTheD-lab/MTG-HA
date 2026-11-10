@@ -144,17 +144,31 @@ function moebelBilderAbsichern(moebel) {
   }, true);
 }
 
-function textDeck(d) {
+/** Paket 10: aus der Sammlung baubar, nach der Einstellung des Decks (ältere Antworten ohne `baubar`: aus `summe`). */
+function baubarVon(d) {
   const s = d.summe ?? {};
-  return `Deck ${d.name}, ${zahl(s.vorhanden)} von ${zahl(s.karten)} Karten vorhanden`
+  return d.baubar ?? { karten: s.karten ?? 0, aus_sammlung: s.vorhanden ?? 0, proxy: s.proxy ?? 0, fehlt: s.fehlt ?? 0,
+    prozent: s.karten ? Math.floor((s.vorhanden ?? 0) * 100 / s.karten) : null, abgleich: d.abgleich };
+}
+
+function baubarZusatz(b) {
+  return [b.prozent != null ? `${b.prozent} %` : '', b.abgleich === 'druck' ? 'nach Druck' : 'nach Name',
+    b.proxy ? `${zahl(b.proxy)} Proxy` : ''].filter(Boolean).join(' · ');
+}
+
+function textDeck(d) {
+  const b = baubarVon(d);
+  return `Deck ${d.name}, ${zahl(b.aus_sammlung)} von ${zahl(b.karten)} Karten aus der Sammlung baubar`
+    + `${b.prozent != null ? `, ${b.prozent} Prozent` : ''}, Abgleich ${b.abgleich === 'druck' ? 'nach Druck' : 'nach Name'}`
+    + (b.proxy ? `, ${zahl(b.proxy)} Proxy` : '')
     + (d.commander ? `, Commander ${d.commander}` : '');
 }
 
-/** Eine Deckbox: Ausschnitt aus dem Bild des Commanders oben, darunter Name und Anteil „34 / 65 vorhanden“. */
+/** Eine Deckbox: Ausschnitt aus dem Bild des Commanders oben, darunter Name und Anteil „34 / 65 baubar“. */
 function deckHtml(d) {
-  const s = d.summe ?? {};
-  const gesamt = s.karten ?? 0;
-  const anteil = gesamt > 0 ? Math.min(100, Math.round((s.vorhanden ?? 0) / gesamt * 100)) : 0;
+  const b = baubarVon(d);
+  const gesamt = b.karten ?? 0;
+  const anteil = gesamt > 0 ? Math.min(100, Math.round((b.aus_sammlung ?? 0) / gesamt * 100)) : 0;
   const w = d.wert;
   const wertText = !w ? '' : d.gebaut && w.im_deck != null ? euro(w.im_deck)
     : w.liste != null ? `Liste ${euro(w.liste)}` : '';
@@ -168,7 +182,8 @@ function deckHtml(d) {
     + '<span class="regal-deck-front">'
     + `<span class="regal-deck-name">${esc(d.name)}</span>`
     + (d.commander ? `<span class="regal-deck-commander">${esc(d.commander)}</span>` : '')
-    + `<span class="regal-deck-zahlen etikett">${esc(zahl(s.vorhanden))} / ${esc(zahl(gesamt))} vorhanden</span>`
+    + `<span class="regal-deck-zahlen etikett">${esc(zahl(b.aus_sammlung))} / ${esc(zahl(gesamt))} baubar</span>`
+    + `<span class="regal-deck-baubar">${esc(baubarZusatz(b))}</span>`
     + (wertText ? `<span class="regal-deck-wert">${esc(wertText)}</span>` : '')
     + `<span class="regal-deck-balken" aria-hidden="true"><span style="width:${anteil}%"></span></span>`
     + '</span></button></li>';

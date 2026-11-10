@@ -343,6 +343,54 @@ function wertHtml(w) {
 
 const SORTIERUNGEN = [['gruppe', 'Gruppe'], ['name', 'Name'], ['preis', 'Preis']];
 
+// ---------------------------------------------------------------- Statistik (Paket 10)
+
+const STAT_FARBEN = { W: 'Weiß', U: 'Blau', B: 'Schwarz', R: 'Rot', G: 'Grün', C: 'Farblos' };
+const STAT_TYPEN = { kreatur: 'Kreaturen', planeswalker: 'Planeswalker', spontanzauber: 'Spontanzauber',
+  hexerei: 'Hexereien', artefakt: 'Artefakte', verzauberung: 'Verzauberungen', schlacht: 'Schlachten',
+  land: 'Länder', sonstige: 'Sonstige' };
+const dezimal = (n) => Number(n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Einfarbige Balken mit Namen, Zahl und Anteil als Text (wie im Dashboard). `zeilen`: {text, karten}. */
+function statBalken(zeilen, bezug) {
+  const groesster = Math.max(...zeilen.map((z) => z.karten), 1);
+  return '<ul class="deck-stat-balken">' + zeilen.map((z) => {
+    const anteil = bezug > 0 ? Math.round((z.karten / bezug) * 100) : 0;
+    return `<li><span class="deck-stat-kopf"><span class="deck-stat-name">${esc(z.text)}</span>`
+      + `<span class="deck-stat-wert">${zahl(z.karten)}<span class="deck-stat-anteil">${anteil > 0 ? `${anteil} %` : '&lt; 1 %'}</span></span></span>`
+      + `<span class="deck-stat-spur" aria-hidden="true"><span style="width:${(z.karten / groesster) * 100}%"></span></span></li>`;
+  }).join('') + '</ul>';
+}
+
+/** Manakurve als Säulen von einer Grundlinie, Zahl über jeder Säule. */
+function statKurve(kurve) {
+  const groesste = Math.max(...kurve.map((k) => k.karten), 1);
+  const text = kurve.map((k) => `Manawert ${k.text}: ${zahl(k.karten)}`).join(', ');
+  return `<ul class="deck-stat-saeulen" role="img" aria-label="Manakurve ohne Länder. ${esc(text)}">`
+    + kurve.map((k) => `<li><span class="deck-stat-raum"><span class="deck-stat-kappe">${k.karten ? zahl(k.karten) : ''}</span>`
+      + `<span class="deck-stat-saeule" style="height:${(k.karten / groesste) * 100}%"></span></span>`
+      + `<span class="deck-stat-x">${esc(k.text)}</span></li>`).join('') + '</ul>';
+}
+
+function statistikHtml(s) {
+  if (!s || !s.karten) return '<p class="deck-hinweis">Keine Karten in der Deckliste.</p>';
+  const tafel = (titel, inhalt, unter = '') => `<div class="deck-stat-tafel"><h3 class="deck-stat-titel etikett">${titel}</h3>`
+    + inhalt + (unter ? `<p class="deck-stat-unter">${unter}</p>` : '') + '</div>';
+  const kopf = '<p class="deck-stat-zahlen">'
+    + `<span><strong>${s.durchschnitt == null ? '–' : esc(dezimal(s.durchschnitt))}</strong> Ø Manawert ohne Länder</span>`
+    + `<span>${zahl(s.nichtlaender)} ohne Länder</span><span>${zahl(s.laender)} Länder</span></p>`
+    + (s.ohne_daten ? `<p class="deck-hinweis">${zahl(s.ohne_daten)} ${s.ohne_daten === 1 ? 'Karte' : 'Karten'} ohne Kartendaten zählen nicht: `
+      + `${esc(s.ohne_daten_namen.join(', '))}${s.ohne_daten_namen.length < s.ohne_daten ? ' …' : ''}</p>` : '');
+  const farben = s.farben.filter((f) => f.karten > 0).map((f) => ({ text: STAT_FARBEN[f.farbe] ?? f.farbe, karten: f.karten }));
+  const typen = s.typen.filter((t) => t.karten > 0).map((t) => ({ text: STAT_TYPEN[t.typ] ?? t.typ, karten: t.karten }));
+  return kopf + '<div class="deck-stat-tafeln">'
+    + tafel('Manakurve', statKurve(s.kurve), 'Ohne Länder; doppelseitige Karten mit dem Manawert der Vorderseite.')
+    + tafel('Farben', farben.length ? statBalken(farben, s.nichtlaender) : '<p class="deck-hinweis">Nur Länder.</p>',
+      `Ohne Länder; mehrfarbige Karten zählen bei jeder ihrer Farben (${zahl(s.mehrfarbig)} mehrfarbig).`)
+    + tafel('Kartentypen', statBalken(typen, s.mit_daten))
+    + '</div>';
+}
+
 function sortiert(karten, art) {
   const kopie = [...karten];
   if (art === 'name') kopie.sort((a, b) => a.name.localeCompare(b.name, 'de'));
@@ -380,6 +428,8 @@ function zeichnen() {
   z.titel.textContent = d.name;
   z.quelle.innerHTML = `Quelle: ${quelleHtml(d)}`;
   z.kopfZahlen.innerHTML = wertHtml(d.wert) + balkenHtml(d.summe ?? {});
+  z.statistik.hidden = !d.statistik;   // ältere Antwort ohne Statistik
+  if (d.statistik) z.statistikInhalt.innerHTML = statistikHtml(d.statistik);
   const sm = d.summe ?? {};
   z.bauen.hidden = !schreiben || !(sm.verfuegbar > 0);
   z.bauen.querySelector('span').textContent = d.gebaut ? `Nachtrag: ${zahl(sm.verfuegbar)} verfügbar` : 'Deck bauen';
@@ -630,6 +680,8 @@ export async function zeigen(wurzel, parameter) {
     + `<button type="button" class="knopf deck-neu-laden" hidden>${NEU}<span>Neu laden</span></button>`
     + '<button type="button" class="knopf deck-umbenennen" hidden>Umbenennen</button>'
     + '<button type="button" class="knopf knopf-gefahr deck-loeschen" hidden>Löschen</button></div></div>'
+    + '<details class="deck-statistik"><summary class="deck-statistik-titel etikett">Statistik</summary>'
+    + '<div class="deck-statistik-inhalt"></div></details>'
     + '<div class="deck-toast" role="status" hidden></div>'
     + '<p class="deck-hinweis deck-meldung" role="alert"></p>'
     + '<p class="nur-vorleser" role="status" aria-live="polite"></p>'
@@ -650,9 +702,13 @@ export async function zeigen(wurzel, parameter) {
     zurSammlung: bereich.querySelector('.deck-zur-sammlung'), zerlegen: bereich.querySelector('.deck-zerlegen'),
     sortierung: bereich.querySelector('.deck-sortierung'),
     kauf: bereich.querySelector('.deck-kaufliste'), kaufSchalter: bereich.querySelector('.deck-kaufliste-schalter'),
+    statistik: bereich.querySelector('.deck-statistik'),
+    statistikInhalt: bereich.querySelector('.deck-statistik-inhalt'),
     sort: SORTIERUNGEN.some(([s]) => s === vorliebe('deck.sort')) ? vorliebe('deck.sort') : 'gruppe',
   };
   Z = z;
+  z.statistik.open = vorliebe('deck.statistik') !== 'zu';
+  z.statistik.addEventListener('toggle', () => vorliebe('deck.statistik', z.statistik.open ? 'auf' : 'zu'));
   z.zurSammlung.addEventListener('click', () => zurSammlung(z));
   z.sortierung.addEventListener('click', (e) => {
     const b = e.target.closest('[data-sort]');

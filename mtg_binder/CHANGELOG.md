@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.53.0
+- **Deck-Statistik.** Die Deckansicht hat einen Abschnitt „Statistik“ (auf- und zuklappbar, die App merkt sich die
+  Wahl): Durchschnittsmanawert ohne Länder, Manakurve von 0 bis 7+ ohne Länder, Farben und Kartentypen, alles
+  einfarbig mit Zahlen und Anteil als Text. Doppelseitige Karten zählen mit dem Manawert, den Farben und dem Typ der
+  Vorderseite; ein Land auf der Vorderseite zählt als Land. Grundlage ist die ganze Deckliste mit Commander und Basics.
+  Karten ohne Kartendaten zählen sichtbar nicht mit.
+- **Baubare Decks im Regal.** Jede Deckbox zeigt „34 / 65 baubar“ mit Prozent und der Einstellung des Decks („nach
+  Name“ oder „nach Druck“), Proxys stehen extra daneben. Es zählen Karten, die schon im Deck liegen oder frei in
+  Bindern und Kisten verfügbar sind, wie in der Deckansicht.
+- Keine Änderung an der Datenbank.
+
 ## 0.52.0
 - **Gewinn und Verlust aus Kaufpreisen.** Den Kaufpreis (Euro je Karte) trägst du jetzt in der App ein: in der
   Kartenansicht („Kaufpreis eintragen“ bzw. „ändern“) oder für viele Karten auf einmal im Auswahlmodus von Kiste und
