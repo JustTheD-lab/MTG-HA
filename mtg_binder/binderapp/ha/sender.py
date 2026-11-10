@@ -112,6 +112,11 @@ FEST = [
      "{{ value_json.verlierer[0].euro if value_json.verlierer else None }}",
      {**EURO, "state_class": None, "icon": "mdi:trending-down", "json_attributes_topic": THEMA_WERTE,
       "json_attributes_template": "{{ {'karten': value_json.verlierer} | tojson }}"}),
+    # Paket 9: Top 5 Gewinner und Verlierer der Woche (ab 0,50 €); Zustand = Euro des größten Gewinners
+    ("sensor", "gewinner_verlierer_woche", "Gewinner und Verlierer Woche", THEMA_WERTE,
+     "{{ value_json.woche.gewinner[0].euro if value_json.woche.gewinner else None }}",
+     {**EURO, "state_class": None, "icon": "mdi:swap-vertical-bold", "json_attributes_topic": THEMA_WERTE,
+      "json_attributes_template": "{{ value_json.woche | tojson }}"}),
 ]
 for _name, _text in (("vortag", "Vortag"), ("tage3", "3 Tage"), ("tage30", "30 Tage")):
     FEST.append(("sensor", f"veraenderung_{_name}", f"Veränderung {_text}", THEMA_WERTE,

@@ -11,6 +11,8 @@
     GET    /api/regeln/probe?karte=ID     welche Regel greift für diese Karte und warum
     GET    /api/regeln/einsortieren       was „Jetzt einsortieren“ mit dem Scan-Eingang täte
     POST   /api/regeln/einsortieren       Regeln auf den ganzen Scan-Eingang anwenden (ein Schritt mit Rückgängig)
+    GET    /api/regeln/laeufe             die letzten 10 automatischen Einsortier-Läufe (Paket 2, 10.11.2026)
+    POST   /api/regeln/lauf/{kennung}/rueckgaengig   einen Lauf zurücknehmen (von Hand Geändertes bleibt, mit Hinweis)
 
 Schreiben mit Historie (Quelle „nutzer“). Bedingungen nur aus festen Feldern, Werte als Parameter.
 """
@@ -23,7 +25,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from binderapp.db.erkennung import SCAN_MARKE
-from binderapp.sortieren import einsortieren, regeln
+from binderapp.db import schritte
+from binderapp.sortieren import einsortieren, laeufe, regeln
 from binderapp.web.helfer import Fehler, fehler
 
 GROSSE_ID = 2 ** 31
@@ -83,6 +86,25 @@ def routen(h) -> list[Route]:
         return {"faecher": einsortieren.faecher_lesen(con, h.nutzer, kiste_id)}
 
     @lesend
+    def kiste_regeln(con, request):
+        """Regeln mit dieser Kiste als Ziel, für den Block „Regeln dieser Kiste“ in der Kistenansicht."""
+        kiste_id = _id(request, "Kiste")
+        z = con.execute("SELECT name, extern_name FROM kiste WHERE id = ? AND nutzer_id = ?",
+                        (kiste_id, h.nutzer)).fetchone()
+        if z is None:
+            raise Fehler("Kiste nicht gefunden.", 404)
+        scan = z["extern_name"] == SCAN_MARKE
+        if not einsortieren.aktiv(con):
+            return {"verfuegbar": False, "scan_eingang": scan, "regeln": [], "gesamt": 0, "kisten": [],
+                    "beschreibung": regeln.beschreibung()}
+        kisten = [{"id": k["id"], "name": k["name"]} for k in con.execute(
+            "SELECT id, name FROM kiste WHERE nutzer_id = ? AND COALESCE(extern_name, '') <> ? ORDER BY regalplatz, id",
+            (h.nutzer, SCAN_MARKE))]
+        stand = einsortieren.regeln_der_kiste(con, h.nutzer, kiste_id)
+        return {"verfuegbar": True, "scan_eingang": scan, **stand, "kisten": kisten,
+                "beschreibung": regeln.beschreibung()}
+
+    @lesend
     def suche(con, request):
         _version(con, 404)
         text = request.query_params.get("q", "").strip()
@@ -110,7 +132,16 @@ def routen(h) -> list[Route]:
         _version(con, 404)
         return einsortieren.eingang_vorschau(con, h.nutzer)
 
+    @lesend
+    def lauf_liste(con, request):
+        return {"laeufe": laeufe.laeufe(con, h.nutzer)}
+
     # ------------------------------------------------------------ Schreiben
+
+    @h.schreibend
+    async def lauf_zuruecknehmen(request):
+        kennung = schritte.kennung(request.path_params["kennung"])
+        return await schreiben(lambda con: laeufe.zuruecknehmen(con, h.nutzer, kennung))
 
     @h.schreibend
     async def eingang_einsortieren(request):
@@ -167,8 +198,11 @@ def routen(h) -> list[Route]:
         Route("/regeln/probe", probe),
         Route("/regeln/einsortieren", eingang_vorschau),
         Route("/regeln/einsortieren", eingang_einsortieren, methods=["POST"]),
+        Route("/regeln/laeufe", lauf_liste),
+        Route("/regeln/lauf/{kennung}/rueckgaengig", lauf_zuruecknehmen, methods=["POST"]),
         Route("/regel/{id:int}", aendern, methods=["PUT"]),
         Route("/regel/{id:int}", loeschen, methods=["DELETE"]),
+        Route("/kiste/{id:int}/regeln", kiste_regeln),
         Route("/kiste/{id:int}/faecher", faecher),
         Route("/kiste/{id:int}/faecher", faecher_setzen, methods=["PUT"]),
     ]

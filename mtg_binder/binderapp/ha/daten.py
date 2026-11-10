@@ -121,6 +121,8 @@ def werte(con, nutzer: int = NUTZER, preisart: str | None = None) -> dict:
                           "fehlt_kosten": fehlt["fehlt"] if fehlt else None})
     veraenderung = preise.veraenderung_gesamt(con, nutzer, preisart)
     aenderung = preise.groesste_aenderung(con, nutzer, TOP, preisart)
+    # Paket 9: Top 5 der Woche in Euro, nur Karten ab 0,50 € (heute oder am Vergleichstag)
+    woche = preise.groesste_aenderung(con, nutzer, TOP, preisart, "tage7", mindestpreis=preise.RANGLISTE_MINDESTPREIS)
     return {
         "preisart": preisart,
         "preistag": gesamt["tag"] if gesamt else None,
@@ -135,4 +137,6 @@ def werte(con, nutzer: int = NUTZER, preisart: str | None = None) -> dict:
         "teuerste": preise.teuerste(con, nutzer, TOP, preisart),
         "gewinner": aenderung["gewinner"],
         "verlierer": aenderung["verlierer"],
+        "woche": {"vergleichstag": preise.vergleichstage(con, preise.ALLE_ABSTAENDE)["tage7"],
+                  "mindestpreis": preise.RANGLISTE_MINDESTPREIS, **woche},
     }

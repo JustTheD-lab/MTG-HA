@@ -112,6 +112,7 @@
 .dash-karte-set { color: var(--text-3); font-size: 0.76rem; }
 
 /* ---------- Gewinner und Verlierer ---------- */
+.dash-bewegung-wahl { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .dash-bewegung { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 28px; margin-top: 10px; }
 @media (max-width: 760px) { .dash-bewegung { grid-template-columns: minmax(0, 1fr); } }
 .dash-bewegung-spalte h3 { margin: 0 0 4px; font-weight: inherit; }
@@ -124,6 +125,9 @@
 .dash-bewegt-bild .dash-flaeche { font-size: 0; }
 .dash-bewegt-text { flex: 1; min-width: 0; display: grid; }
 .dash-bewegt-name { font-size: 0.92rem; line-height: 1.25; overflow-wrap: anywhere; }
+/* Gewinner und Verlierer: Euro und Prozent untereinander, rechtsbündig (Paket 9) */
+.dash-bewegt .dash-delta { flex: none; justify-content: flex-end; row-gap: 0; }
+.dash-bewegt .dash-delta-prozent { flex-basis: 100%; text-align: right; }
 
 /* ---------- Balken ---------- */
 .dash-balken { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 2px; }

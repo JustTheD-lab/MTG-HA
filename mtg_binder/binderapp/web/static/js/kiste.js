@@ -75,6 +75,7 @@ const SYM = {
   weiter: sym('<path d="M4 12h14M13 7l5 5-5 5"/>'),
   stern: sym('<path d="M12 4l2.4 5 5.4.7-4 3.8 1 5.4L12 16.2 7.2 18.9l1-5.4-4-3.8 5.4-.7z"/>'),
   faecher: sym('<rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/>'),
+  rueck: sym('<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
   kopie: sym('<rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M15 9V5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15H9"/>'),
 };
 const ANSICHT_TEXT = { kasten: 'Karteikasten', raster: 'Raster', liste: 'Liste' };
@@ -406,6 +407,7 @@ function geruestHtml(s) {
       <div class="kiste-admin" role="group" aria-label="Bearbeiten" hidden></div>
       <p class="meldung kiste-meldung" role="alert"></p>
     </header>
+    <section class="kiste-regeln" aria-label="Regeln dieser Kiste" hidden></section>
     <div class="kiste-toast" role="status" aria-live="polite" hidden></div>
     <div class="kiste-fachwechsel" hidden>
       <div class="kiste-segmente" role="group" aria-label="Kiste mit Fächern oder alle Karten zeigen">
@@ -1214,6 +1216,8 @@ function adminZeichnen() {
   if (s.kopf.scan_eingang) {
     neu('kiste-einsortierknopf', SYM.weiter, 'Jetzt einsortieren', 'Karten des Scan-Eingangs nach den Sortierregeln einsortieren',
       jetztEinsortieren);
+    neu('kiste-laeufeknopf', SYM.rueck, 'Einräumen zurücknehmen',
+      'Letzte automatische Einsortier-Läufe ansehen und zurücknehmen', laeufeOeffnen);
   }
   neu('kiste-importknopf', SYM.hochladen, 'Liste importieren', 'Kartenliste (CSV) in diese Kiste importieren', listeImportieren);
   const plus = neu('kiste-plusknopf', SYM.plus, 'Karte hinzufügen', 'Karte zu dieser Kiste hinzufügen', karteHinzufuegen);
@@ -1263,6 +1267,21 @@ async function faecherOeffnen() {
     meldung('');
     await neuAufbauen();
     hinweisZeigen('Fächer gespeichert.');
+  }
+}
+
+/** Block „Regeln dieser Kiste“ (Paket 3, 10.11.2026; Darstellung und Bearbeiten in regeln.js, erst bei Bedarf geladen).
+    Nicht in der Gesamtsammlung und nicht im Scan-Eingang (er kann kein Ziel einer Regel sein). */
+async function regelnZeigen(s) {
+  if (s.sammlung || s.kopf.scan_eingang) return;
+  const platz = s.wurzel.querySelector('.kiste-regeln');
+  try {
+    const { kistenRegeln } = await import('./regeln.js');
+    if (S !== s) return;
+    platz.hidden = false;
+    s.regelBlock = kistenRegeln(platz, s.id, s.kopf.name);
+  } catch (f) {
+    if (S === s) meldung(f.message);
   }
 }
 
@@ -1692,6 +1711,81 @@ async function jetztEinsortieren() {
   if (S !== s) return;
   await neuAufbauen();
   hinweisZeigen(a.schritt ? `${karten(a.karten)} einsortiert.` : 'Nichts einzusortieren.', { schritt: a.schritt });
+}
+
+// ---------- Einräumen zurücknehmen (Scan-Eingang, Paket 2) ----------
+
+const zeitText = (z) => {
+  const d = new Date(`${z}Z`);   // die Historie speichert UTC
+  return Number.isNaN(d.getTime()) ? z
+    : d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const gebliebenText = (liste) => {
+  const namen = liste.slice(0, 5).map((g) => `${g.name}${g.anzahl > 1 ? ` ${g.anzahl}×` : ''} (${g.kiste})`).join(', ');
+  return `${namen}${liste.length > 5 ? ` und ${zahl(liste.length - 5)} weitere` : ''}`;
+};
+
+/** Die letzten automatischen Einsortier-Läufe; jeder lässt sich einzeln zurücknehmen. */
+async function laeufeOeffnen() {
+  const s = S;
+  let laeufe;
+  try {
+    laeufe = (await senden('/api/regeln/laeufe', { methode: 'GET' })).laeufe ?? [];
+  } catch (f) {
+    if (S === s) hinweisZeigen(f.message, { art: 'fehler' });
+    return;
+  }
+  if (S !== s) return;
+  const inhalt = el('div', 'kiste-laeufe-wrap');
+  inhalt.innerHTML = laeufe.length
+    ? '<p class="dialog-text">Die letzten automatischen Läufe nach dem Scannen. Zurückgenommene Karten liegen wieder im '
+      + 'Scan-Eingang; Karten, die du seitdem bewegt oder geändert hast, bleiben, wo sie sind.</p>'
+      + '<ul class="kiste-laeufe" role="list">'
+      + laeufe.map((l, i) => {
+        const ziele = l.kisten.map((k) => `${k.kiste} ${zahl(k.karten)}`).join(', ');
+        const stand = l.zurueckgenommen
+          ? `<span class="kl-stand etikett">Zurückgenommen${l.ergebnis.geblieben.length
+            ? `, ${zahl(l.ergebnis.geblieben.length)} geblieben` : ''}</span>`
+          : `<button type="button" class="knopf kl-knopf" data-i="${i}">Zurücknehmen</button>`;
+        return `<li class="kiste-lauf"><div class="kl-text"><span class="kl-zeit">${esc(zeitText(l.zeitpunkt))}</span>`
+          + `<span class="kl-was">${esc(karten(l.karten))} → ${esc(ziele)}</span></div>${stand}</li>`;
+      }).join('') + '</ul>'
+    : '<p class="dialog-text">Noch keine automatischen Läufe. Sie entstehen, wenn ein Scan-Durchgang mit '
+      + '„Einsortieren“ Karten in Kisten räumt.</p>';
+  const d = dialog({ titel: 'Einräumen zurücknehmen', klasse: 'dialog-klein kiste-dialog', inhalt });
+  inhalt.addEventListener('click', (e) => {
+    const b = e.target.closest('.kl-knopf');
+    if (b) d.schliessen(laeufe[Number(b.dataset.i)]);
+  });
+  const zu = el('button', 'knopf', 'Schließen');
+  zu.type = 'button';
+  zu.addEventListener('click', () => d.schliessen(undefined));
+  d.fuss.append(zu);
+  (inhalt.querySelector('.kl-knopf') ?? zu).focus();
+  const lauf = await d.fertig;
+  if (!lauf || S !== s) return;
+  const ja = await bestaetigen({
+    titel: 'Lauf zurücknehmen',
+    text: `${karten(lauf.karten)} vom ${zeitText(lauf.zeitpunkt)} zurück in den Scan-Eingang legen? Karten, die du `
+      + 'seitdem bewegt oder geändert hast, bleiben, wo sie sind. Das lässt sich nicht noch einmal umkehren; '
+      + 'mit „Jetzt einsortieren“ räumst du die Karten wieder ein.',
+    ja: 'Zurücknehmen',
+  });
+  if (!ja || S !== s) return;
+  let a;
+  try {
+    a = await senden(`/api/regeln/lauf/${encodeURIComponent(lauf.lauf)}/rueckgaengig`);
+  } catch (f) {
+    if (S === s) hinweisZeigen(f.message, { art: 'fehler' });
+    return;
+  }
+  if (S !== s) return;
+  await neuAufbauen();
+  const zurueckText = a.zurueck ? `${karten(a.zurueck)} wieder im Scan-Eingang.` : 'Keine Karte zurückgelegt.';
+  hinweisZeigen(a.geblieben.length
+    ? `${zurueckText} Geblieben, weil seitdem bewegt oder geändert: ${gebliebenText(a.geblieben)}.`
+    : zurueckText);
 }
 
 // ---------- Liste importieren ----------
@@ -2182,7 +2276,7 @@ function verdrahten(s) {
   }, { rootMargin: '1500px 0px 1500px 0px' });
   s.aufraeumen.push(() => s.io.disconnect());
 
-  const beiSitzung = () => adminZeichnen();
+  const beiSitzung = () => { adminZeichnen(); s.regelBlock?.zeichnen(); };
   window.addEventListener('binder:sitzung', beiSitzung);
   s.aufraeumen.push(() => window.removeEventListener('binder:sitzung', beiSitzung));
 }
@@ -2297,6 +2391,7 @@ async function aufbauen(wurzel, parameter, { still = false, wahlModus = false, f
   filterSync();
   fachAnsichtSync();
   adminZeichnen();
+  regelnZeigen(s);
   verdrahten(s);
   if (wahlModus) wahlUmschalten(true);
   if (foilModus) foilModusUmschalten(true);

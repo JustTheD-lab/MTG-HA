@@ -55,7 +55,7 @@ def _zeile(con, tabelle: str, datensatz: int):
 
 
 def aendern_genau(con, nutzer: int, tabelle: str, datensatz: int, felder: dict, *, schritt: str,
-                  quelle: str = QUELLE) -> dict:
+                  quelle: str = QUELLE, rueckgaengig_von: str | None = None) -> dict:
     """Wie `datenbank.aendern`, aber mit altem `geaendert` in der Historie (für exaktes Rückgängig)."""
     zeile = _zeile(con, tabelle, datensatz)
     if zeile is None:
@@ -68,7 +68,7 @@ def aendern_genau(con, nutzer: int, tabelle: str, datensatz: int, felder: dict, 
         alt["geaendert"] = zeile["geaendert"]
         neu["geaendert"] = con.execute(JETZT).fetchone()[0]
     con.execute(f"UPDATE {tabelle} SET {', '.join(f'{k} = ?' for k in neu)} WHERE id = ?", (*neu.values(), datensatz))
-    _protokoll(con, nutzer, quelle, tabelle, datensatz, "geaendert", alt, neu, schritt)
+    _protokoll(con, nutzer, quelle, tabelle, datensatz, "geaendert", alt, neu, schritt, rueckgaengig_von)
     return neu
 
 

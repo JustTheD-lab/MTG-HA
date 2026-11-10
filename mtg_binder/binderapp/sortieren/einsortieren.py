@@ -17,7 +17,7 @@ import json
 import logging
 
 from binderapp.db import schritte
-from binderapp.db.datenbank import ANZAHL_MAX, aendern, einfuegen, loeschen, version
+from binderapp.db.datenbank import ANZAHL_MAX, _protokoll, aendern, einfuegen, loeschen, version
 from binderapp.db.erkennung import SCAN_MARKE
 from binderapp.db.seiten import Fehler
 from binderapp.preise.werte import neuester_tag
@@ -69,6 +69,14 @@ def regeln_lesen(con, nutzer: int) -> list[dict]:
     kisten = _kistennamen(con, nutzer)
     return [_regel_dict(z, kisten) for z in con.execute(
         "SELECT * FROM sortierregel WHERE nutzer_id = ? ORDER BY platz, id", (nutzer,))]
+
+
+def regeln_der_kiste(con, nutzer: int, kiste_id: int) -> dict:
+    """Regeln mit dieser Kiste als Ziel (Paket 3, 10.11.2026), in der Reihenfolge der Seite „Sortierregeln“.
+    `nr` ist der Platz unter allen Regeln (1 = wird zuerst geprüft), `gesamt` die Zahl aller Regeln."""
+    alle = regeln_lesen(con, nutzer)
+    eigene = [{**r, "nr": i + 1} for i, r in enumerate(alle) if r["kiste_id"] == kiste_id]
+    return {"regeln": eigene, "gesamt": len(alle)}
 
 
 def faecher_lesen(con, nutzer: int, kiste_id: int) -> list[dict]:
@@ -353,7 +361,7 @@ def einsortieren(con, nutzer: int, karten_ids: list[int] | None = None, *, schri
         return []
     regeln_liste = _aktive_regeln(con, nutzer)
     ergebnis = auswerten(con, nutzer, [k["id"] for k in kandidaten], regeln_liste)
-    verschoben = []
+    verschoben, lauf = [], []
     for k in kandidaten:
         e = ergebnis.get(k["id"], {"regel": None, "fehlt": ["Kartendaten"]})
         if e["fehlt"]:
@@ -365,13 +373,31 @@ def einsortieren(con, nutzer: int, karten_ids: list[int] | None = None, *, schri
         if regel is None:
             continue   # bleibt im Scan-Eingang
         if schritt is None:
+            fotos = [f[0] for f in con.execute("SELECT id FROM scan_foto WHERE karte_id = ? ORDER BY id", (k["id"],))]
             s, ziel_karte = _verschieben(con, nutzer, k, regel["kiste_id"])
+            lauf.append({"s": s, "k": k["id"], "t": ziel_karte, "n": k["anzahl"], "z": regel["kiste_id"],
+                         "name": k["name"], "f": fotos})
         else:
             aendern(con, nutzer, QUELLE_NUTZER, "karte", k["id"], {"kiste_id": regel["kiste_id"]}, schritt=schritt)
             s, ziel_karte = schritt, k["id"]
         verschoben.append({"karte_id": k["id"], "nach": ziel_karte, "kiste_id": regel["kiste_id"],
                            "kiste": regel["ziel"], "regel": regel["name"], "schritt": s})
+    if lauf:
+        lauf_protokollieren(con, nutzer, eingang, lauf)
     return verschoben
+
+
+# Ein automatischer Lauf (Paket 2, 10.11.2026) steht als Protokollzeile in der Historie (Tabelle „einsortierlauf“, wie
+# „abzug“ ohne eigenen Datensatz). Sie nennt je Karte den Schritt, die Zielkarte (nach dem Zusammenfassen), die Anzahl,
+# die Zielkiste und die Scan-Fotos der Karte; damit lässt sich der Lauf je Karte zurücknehmen (`sortieren/laeufe.py`).
+LAUF_TABELLE = "einsortierlauf"
+
+
+def lauf_protokollieren(con, nutzer: int, eingang: int, lauf: list[dict]) -> str:
+    kennung = schritte.neuer_schritt()
+    meta = {"eingang": eingang, "posten": len(lauf), "karten": sum(e["n"] for e in lauf), "karten_liste": lauf}
+    _protokoll(con, nutzer, QUELLE, LAUF_TABELLE, 0, "angelegt", None, meta, kennung)
+    return kennung
 
 
 def _offen_beenden(con, nutzer: int, karte_id: int, schritt: str | None) -> None:

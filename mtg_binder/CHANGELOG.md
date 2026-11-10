@@ -1,5 +1,52 @@
 # Änderungen
 
+## 0.48.0
+- **Startpaket für die PC-Erkennung.** Das Add-on hält auf dem Netzlaufwerk den fertigen Bildindex und das
+  Namensverzeichnis bereit (Ordner `startpaket` neben den Bildern); die installierte PC-Erkennung schickt beides
+  selbst, beim Start und danach täglich, wenn das Add-on keinen oder einen älteren Stand hat. Der Installer lädt
+  Startpaket und Katalog über das Heimnetz (rund 1 GB) statt rund 20 GB von Scryfall und baut keinen Index mehr; die
+  Kartenbilder lädt die Erkennung danach im Hintergrund nach. Ohne Netzlaufwerk oder Startpaket installiert der PC
+  wie bisher. Neue Adressen am Port 8099: `GET /pc/startpaket`, `GET|PUT /pc/startpaket/{datei}`,
+  `POST /pc/startpaket/fertig`, `GET /pc/katalog`.
+- **Update der PC-Erkennung zuverlässiger.** Kurz gesperrte Dateien werden bei jedem Dateifehler wiederholt (nicht
+  nur bei „Zugriff verweigert“), die neue exe liegt vor dem Tausch bereit, ein gesperrtes Setup kippt das Update
+  nicht mehr, ein hängengebliebener Rückweg wird beim nächsten Start vollendet, und lässt sich die alte exe nicht
+  ersetzen, läuft die neue weiter statt ohne Symbol zu enden. Wirkt ab der nächsten PC-Erkennung.
+
+## 0.47.0
+- **Regeln an der Kiste.** Jede Kiste zeigt unter dem Titel den Block „Regeln dieser Kiste“: die Sortierregeln mit
+  dieser Kiste als Ziel, mit Bedingungen, an oder aus und ihrem Platz in der Reihenfolge. Dort lassen sich die Regeln
+  ein- und ausschalten, kopieren, bearbeiten und löschen; „Regel hinzufügen“ hat die Kiste schon als Ziel, neue Regeln
+  kommen ans Ende. Die Reihenfolge bleibt auf der Seite „Sortierregeln“. Eine Kiste ohne Regel zeigt „Bekommt nichts
+  automatisch“. Keine Änderung an der Datenbank.
+
+## 0.46.0
+- **Gewinner und Verlierer.** Im Dashboard je zehn Karten mit der größten Preisänderung, jetzt auch für eine Woche
+  und einen Monat (dazu wie bisher seit gestern und 3 Tage). Sortiert nach Euro (Anzahl mal Preisänderung) oder,
+  umschaltbar, nach Prozent des Einzelpreises. Es zählen nur Karten, deren heutiger oder früherer Preis mindestens
+  0,50 € ist. Alles aus echten Preistagen und in der gewählten Preisart.
+- Home Assistant: neuer Sensor „Gewinner und Verlierer Woche“ mit den Top 5 der Woche als Attribute `gewinner` und
+  `verlierer` (Beispielkarte in der Anleitung). Keine Änderung an der Datenbank.
+
+## 0.45.0
+- **Fehlende Karten je Set.** In jedem Set klappt „Fehlende Karten mit Preis“ die Namen auf, von denen aus diesem Set
+  noch kein Druck in der Sammlung ist (Varianten zählen nicht extra), je Name mit dem Preis des günstigsten Drucks aus
+  genau diesem Set in der gewählten Preisart (ohne Foil) und der Summe oben.
+- „Liste kopieren“ legt die Liste als Text in die Zwischenablage, eine Zeile „1 Kartenname (SET)“ je Karte.
+- Die Preise kommen aus der täglichen Preisdatei, auch für Karten, die noch nicht in der Sammlung sind. Die Liste lädt
+  erst beim Aufklappen; die Sets-Übersicht bleibt so schnell wie bisher. Keine Änderung an der Datenbank.
+
+## 0.44.0
+- **Einräumen zurücknehmen.** Im Scan-Eingang zeigt „Einräumen zurücknehmen“ die letzten zehn automatischen
+  Einsortier-Läufe nach dem Scannen mit Zeit, Kartenzahl und Zielkisten. Jeder Lauf lässt sich einzeln zurücknehmen:
+  Die Karten liegen danach wieder im Scan-Eingang und werden nicht von selbst erneut einsortiert („Jetzt einsortieren“
+  räumt sie wieder ein).
+- Zusammengefasste Posten werden dabei wieder getrennt: Die eingeräumte Karte entsteht im Scan-Eingang mit ihrem
+  Scan-Foto, der Posten in der Kiste behält den Rest.
+- Karten, die du seit dem Einräumen bewegt oder geändert hast, bleiben, wo sie sind; die App nennt sie nach dem
+  Zurücknehmen.
+- Läufe vor diesem Update stehen nicht in der Liste. Keine Änderung an der Datenbank.
+
 ## 0.43.0
 - **Preisart wählbar.** Im Dashboard steht neben dem Wert der Sammlung die Wahl der Preisart: Low, Trend, Ø 1 Tag,
   Ø 7 Tage (wie bisher) oder Ø 30 Tage von Cardmarket, bei Foil-Karten jeweils der Foil-Preis. Die Wahl gilt überall:

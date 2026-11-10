@@ -31,7 +31,9 @@ const SPRACHEN = { de: 'Deutsch', en: 'Englisch', ja: 'Japanisch', fr: 'Französ
 const ERKENNUNG = [['geprueft', 'Von dir geprüft'], ['sicher', 'Sicher erkannt'], ['name_sicher', 'Name sicher, Druck offen'],
   ['unsicher', 'Unsicher']];
 const ZEITRAEUME = [{ wert: '30', text: '30 Tage' }, { wert: '90', text: '90 Tage' }, { wert: 'alle', text: 'Alles' }];
-const ABSTAENDE = [{ wert: 'vortag', text: 'Seit gestern' }, { wert: 'tage3', text: '3 Tage' }, { wert: 'tage30', text: '30 Tage' }];
+const ABSTAENDE = [{ wert: 'vortag', text: 'Seit gestern' }, { wert: 'tage3', text: '3 Tage' }, { wert: 'tage7', text: 'Woche' },
+  { wert: 'tage30', text: 'Monat' }];
+const SORTIERUNGEN = [{ wert: 'euro', text: 'Euro' }, { wert: 'prozent', text: 'Prozent' }];
 const SICHTEN = [{ wert: 'karten', text: 'Karten' }, { wert: 'euro', text: 'Wert' }];
 const ORTE_MAX = 8;
 const SPRACHEN_MAX = 6;
@@ -326,16 +328,25 @@ function bewegungListe(titel, liste, leer) {
     + `<span class="dash-bewegt-bild">${bildHtml(k, 200)}</span>`
     + `<span class="dash-bewegt-text"><span class="dash-bewegt-name">${esc(k.name)}</span>`
     + `<span class="dash-karte-set">${esc(`${k.set} ${k.nummer ?? ''}`)}${k.foil ? ' · Foil' : ''}${k.anzahl > 1 ? ` · ${zahl(k.anzahl)}×` : ''}`
-    + ` · ${esc(euro(k.preis_vorher))} auf ${esc(euro(k.preis))}</span></span>${delta(k.euro)}</a></li>`;
+    + ` · ${esc(euro(k.preis_vorher))} auf ${esc(euro(k.preis))}</span></span>${delta(k.euro, k.prozent)}</a></li>`;
   return `<div class="dash-bewegung-spalte"><h3 class="etikett">${esc(titel)}</h3>`
     + (liste.length ? `<ul class="dash-bewegung-liste">${liste.map(zeile).join('')}</ul>` : `<p class="dash-leer">${esc(leer)}</p>`)
     + '</div>';
 }
 
+/** Gewinner und Verlierer (Paket 9): je Abstand und Sortierung höchstens 10, nur Karten ab dem Mindestpreis. */
 function bewegungZeichnen() {
-  const b = Z.daten.bewegung[Z.abstand];
-  const vergleich = Z.daten.veraenderung[Z.abstand]?.tag;
-  const leer = (richtung) => (vergleich ? `In diesem Zeitraum ist keine Karte ${richtung}.` : 'Für diesen Zeitraum gibt es noch keinen Preistag zum Vergleich.');
+  const r = Z.daten.bewegung;
+  const a = r.abstaende[Z.abstand];
+  const b = a[Z.sortierung];
+  // Beide Listen leer: oft fehlt der gewählten Preisart der Vergleichstag (Trend, Ø 1 und Ø 30 Tage erst ab 0.43.0)
+  const beideLeer = !b.gewinner.length && !b.verlierer.length;
+  const leer = (richtung) => (!a.tag ? 'Für diesen Zeitraum gibt es noch keinen Preistag zum Vergleich.'
+    : beideLeer ? `Keine Karte ab ${euro(r.mindestpreis)} hat an beiden Tagen einen Preis in dieser Preisart und hat sich bewegt.`
+      : `In diesem Zeitraum ist keine Karte ab ${euro(r.mindestpreis)} ${richtung}.`);
+  const art = Z.sortierung === 'prozent' ? 'Nach Prozent des Einzelpreises' : 'Nach Anzahl mal Preisänderung';
+  Z.bereich.querySelector('.dash-bewegung-unter').textContent = `${art} · nur Karten ab ${euro(r.mindestpreis)}`
+    + (a.tag ? ` · verglichen mit ${datum(a.tag)}` : '');
   Z.bereich.querySelector('.dash-bewegung').innerHTML = bewegungListe('Gewinner', b.gewinner, leer('gestiegen'))
     + bewegungListe('Verlierer', b.verlierer, leer('gefallen'));
 }
@@ -343,8 +354,9 @@ function bewegungZeichnen() {
 function bewegungHtml(d) {
   if (!d.tag) return '';
   return '<section class="dash-tafel dash-breit"><div class="dash-verlauf-kopf"><div><h2 class="dash-titel">Gewinner und Verlierer</h2>'
-    + '<p class="dash-unter">Anzahl mal Preisänderung</p></div>'
-    + `${pillen(ABSTAENDE, Z.abstand, 'abstand', 'Vergleich')}</div><div class="dash-bewegung"></div></section>`;
+    + '<p class="dash-unter dash-bewegung-unter"></p></div><div class="dash-bewegung-wahl">'
+    + `${pillen(ABSTAENDE, Z.abstand, 'abstand', 'Vergleich')}${pillen(SORTIERUNGEN, Z.sortierung, 'sortierung', 'Sortieren nach')}`
+    + '</div></div><div class="dash-bewegung"></div></section>';
 }
 
 function orteZeilen(d) {
@@ -455,11 +467,12 @@ function verdrahten(bereich) {
       gehe(a.getAttribute('href'));
       return;
     }
-    const b = e.target.closest('[data-zeitraum], [data-abstand], [data-sicht]');
+    const b = e.target.closest('[data-zeitraum], [data-abstand], [data-sortierung], [data-sicht]');
     if (b) {
       pillenSetzen(b.parentElement, b);
       if (b.dataset.zeitraum) { Z.zeitraum = b.dataset.zeitraum; vorliebe('dashboard.zeitraum', Z.zeitraum); verlaufZeichnen(); }
       if (b.dataset.abstand) { Z.abstand = b.dataset.abstand; vorliebe('dashboard.abstand', Z.abstand); bewegungZeichnen(); }
+      if (b.dataset.sortierung) { Z.sortierung = b.dataset.sortierung; vorliebe('dashboard.sortierung', Z.sortierung); bewegungZeichnen(); }
       if (b.dataset.sicht) { Z.sicht = b.dataset.sicht; vorliebe('dashboard.sicht', Z.sicht); verteilungZeichnen(); }
       return;
     }
@@ -508,7 +521,8 @@ export async function zeigen(wurzel) {
     return liste.some((x) => x.wert === w) ? w : standard;
   };
   const z = { bereich, daten: null, ha: false, tip: el('div', 'dash-tip'), verlaufBreite: 0, beobachter: null, taste: null,
-    zeitraum: wahl('zeitraum', ZEITRAEUME, '90'), abstand: wahl('abstand', ABSTAENDE, 'vortag'), sicht: wahl('sicht', SICHTEN, 'euro') };
+    zeitraum: wahl('zeitraum', ZEITRAEUME, '90'), abstand: wahl('abstand', ABSTAENDE, 'tage7'),
+    sortierung: wahl('sortierung', SORTIERUNGEN, 'euro'), sicht: wahl('sicht', SICHTEN, 'euro') };
   Z = z;
   z.tip.hidden = true;
   z.tip.setAttribute('role', 'status');

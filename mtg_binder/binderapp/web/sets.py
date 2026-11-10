@@ -4,23 +4,34 @@
                             vorhanden/gesamt, Karten, Wert
     GET /api/set/{code}     ein Set: alle Drucke des Katalogs (Sammlernummer, Name, Seltenheit, Merkmale) mit
                             der Anzahl in der Sammlung, dazu je Name, ob er in diesem Set vorhanden ist
+    GET /api/set/{code}/fehlt   fehlende Namen des Sets mit Preis und Summe, dazu Text zum Kopieren (Paket 6,
+                            10.11.2026); nur auf Abruf, damit die Übersicht nicht langsamer wird
 
 Zählweise:
 - **Drucke:** jede Sammlernummer des Sets im Katalog (also auch Borderless, Showcase, Extended Art …). Vorhanden ist
   eine Nummer, wenn eine Karte der Sammlung sie hat, gleich in welcher Sprache und ob Foil.
 - **Namen:** jede Karte (Oracle-ID) des Sets. Vorhanden ist ein Name, wenn irgendein Druck dieses Sets mit diesem
   Namen in der Sammlung ist.
+- **Fehlend** (Antworten des Nutzers, 10.11.2026): jeder Name des Sets, der aus genau diesem Set nicht da ist (wie
+  die Namenszählung, Varianten nicht extra). Preis je Name ist der günstigste Druck dieses Namens in genau diesem Set
+  in der gewählten Preisart, nicht Foil. Die Preise kommen aus der Preisdatei `<daten>/preise/price_guide_1.json`
+  (die Tabelle `preis` kennt nur Produkte der Sammlung); ohne Preisdatei aus `preis` vom letzten Abruf.
+  Text zum Kopieren: eine Zeile „1 Name (SET)“ je fehlendem Namen.
 Gesamtzahlen kommen aus dem Katalog; ohne Katalog gibt es die Ansicht nicht (`verfuegbar: false`). Alle Quellen
 (Scan, ManaBox, von Hand) zählen mit, Karten ohne Ort nicht.
 """
 from __future__ import annotations
 
 import re
+import sqlite3
+import threading
 from contextlib import closing
+from pathlib import Path
 
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from binderapp.preise import abruf
 from binderapp.web import kisten as k_
 from binderapp.web.helfer import Fehler, fehler
 
@@ -43,6 +54,78 @@ def _besitz(con, nutzer: int, code: str | None = None) -> list:
     sql = SQL_BESITZ.format(preis=preis, preis_join=k_.PREIS_JOIN if preise else "",
                             nur_set="AND COALESCE(kd.set_code, LOWER(k.set_code)) = ?" if code else "")
     return con.execute(sql, (nutzer, code) if code else (nutzer,)).fetchall()
+
+
+# Preise aus der Preisdatei je Set, gemerkt bis zur nächsten Datei (die ganze Datei lesen dauert am PC rund 0,3 s)
+_PREISE_MERK: dict[tuple, tuple[str, dict]] = {}
+_PREISE_SPERRE = threading.Lock()
+PREISE_MERK_MAX = 8
+
+
+def _preise_datei(datei: Path, code: str, ids: set[int]) -> tuple[str, dict[int, tuple]]:
+    """(Erstellungszeitpunkt, {Produkt: Zeile wie abruf.einlesen}) für die Produkte eines Sets."""
+    schluessel = (str(datei), datei.stat().st_mtime_ns, code)
+    with _PREISE_SPERRE:
+        if schluessel in _PREISE_MERK:
+            return _PREISE_MERK[schluessel]
+    erstellt, _, zeilen = abruf.einlesen(datei.read_bytes(), ids)
+    ergebnis = (erstellt, {z[0]: z for z in zeilen})
+    with _PREISE_SPERRE:
+        while len(_PREISE_MERK) >= PREISE_MERK_MAX:
+            _PREISE_MERK.pop(next(iter(_PREISE_MERK)))
+        _PREISE_MERK[schluessel] = ergebnis
+    return ergebnis
+
+
+def _preise_tabelle(con, spalte: str, ids: set[int]) -> tuple[str | None, dict[int, float]]:
+    """Ohne Preisdatei: Preise vom letzten Abruf aus `preis` (nur Produkte der Sammlung)."""
+    if k_.version(con) < k_.PREIS_AB_VERSION or not ids:
+        return None, {}
+    try:
+        tag = con.execute("SELECT MAX(tag) FROM preisabruf").fetchone()[0]
+        if tag is None:
+            return None, {}
+        werte, liste = {}, sorted(ids)
+        for anfang in range(0, len(liste), 400):
+            teil = liste[anfang:anfang + 400]
+            platz = ", ".join("?" for _ in teil)
+            for z in con.execute(f"SELECT cardmarket_id, {spalte} FROM preis WHERE tag = ? AND cardmarket_id IN"
+                                 f" ({platz})", (tag, *teil)):
+                if z[1]:
+                    werte[z[0]] = z[1]
+        return tag, werte
+    except sqlite3.OperationalError:
+        return None, {}
+
+
+def fehlend(drucke: list[dict], besitz_oracle: set, code: str, preise: dict[int, float]) -> dict:
+    """Fehlende Namen eines Sets mit günstigstem Druck, Summe und Text (rein, für Tests).
+
+    `drucke`: Drucke des Sets aus dem Katalog (`oracle_id`, `name`, `nummer`, `scryfall_id`, `cardmarket_id`),
+    `besitz_oracle`: Oracle-IDs, die aus diesem Set in der Sammlung sind, `preise`: {Produkt: Preis}.
+    Ohne Preis zeigt die Zeile den Druck mit der kleinsten Nummer."""
+    je_name: dict[str, dict] = {}
+    for d in drucke:
+        if d["oracle_id"] in besitz_oracle:
+            continue
+        n = je_name.setdefault(d["oracle_id"], {"name": d["name"], "oracle_id": d["oracle_id"], "preis": None,
+                                                "nummer": d["nummer"], "scryfall_id": d["scryfall_id"],
+                                                "drucke": set()})
+        n["drucke"].add(d["nummer"])
+        preis = preise.get(d.get("cardmarket_id"))
+        reihe = _nummer_sortieren(d["nummer"])
+        if preis and (n["preis"] is None or (preis, reihe) < (n["preis"], _nummer_sortieren(n["nummer"]))):
+            n.update(preis=preis, nummer=d["nummer"], scryfall_id=d["scryfall_id"])
+        elif n["preis"] is None and reihe < _nummer_sortieren(n["nummer"]):
+            n.update(nummer=d["nummer"], scryfall_id=d["scryfall_id"])
+    liste = sorted(je_name.values(), key=lambda x: (x["name"].lower(), x["name"]))
+    for n in liste:
+        n["drucke"] = len(n["drucke"])
+        n["preis"] = round(n["preis"], 2) if n["preis"] else None
+    return {"fehlend": liste, "anzahl": len(liste),
+            "summe": round(sum(n["preis"] or 0 for n in liste), 2),
+            "ohne_preis": sum(n["preis"] is None for n in liste),
+            "text": "".join(f"1 {n['name']} ({code.upper()})\n" for n in liste)}
 
 
 def _nummer_sortieren(nummer: str) -> tuple:
@@ -153,4 +236,43 @@ def routen(h) -> list[Route]:
                 "namen_gesamt": len(namen_liste), "namen_da": sum(n["anzahl"] > 0 for n in namen_liste),
                 "karten": sum(d["anzahl"] for d in drucke)}
 
-    return [Route("/sets", sets), Route("/set/{code}", set_einzeln)]
+    @lesend
+    def set_fehlt(request):
+        code = request.path_params["code"].lower()
+        if not SET_MUSTER.fullmatch(code):
+            raise Fehler("Set nicht gefunden.", 404)
+        with closing(h.db()) as con:
+            k_._ab_version_3(con, 404)
+            k_._ab_version_8(con)
+            besitz = _besitz(con, h.nutzer, code)
+            art = k_.werte.gewaehlt(con, h.nutzer)
+            spalte = k_.werte.PREISARTEN[art][0]
+            kat = h.katalog()
+            if kat is None:
+                return {"verfuegbar": False}
+            with closing(kat):
+                if kat.execute("SELECT 1 FROM satz WHERE set_code = ?", (code,)).fetchone() is None:
+                    raise Fehler("Dieses Set gibt es im Katalog nicht.", 404)
+                drucke = [dict(z) for z in kat.execute(
+                    "SELECT oracle_id, name, nummer, scryfall_id, cardmarket_id FROM druck WHERE set_code = ?"
+                    " ORDER BY (sprache = 'en') DESC", (code,))]
+            ids = {d["cardmarket_id"] for d in drucke if d["cardmarket_id"]}
+            datei = Path(h.datenbank).parent / "preise" / "price_guide_1.json"
+            stand, quelle, preise = None, None, {}
+            if ids and datei.is_file():
+                try:
+                    stand, zeilen = _preise_datei(datei, code, ids)
+                    platz = 1 + abruf.SPALTEN.index(spalte)
+                    preise = {pid: z[platz] for pid, z in zeilen.items() if z[platz]}
+                    quelle = "preisdatei"
+                except (OSError, abruf.AbrufFehler):
+                    stand, preise = None, {}
+            if quelle is None:
+                stand, preise = _preise_tabelle(con, spalte, ids)
+                quelle = "datenbank" if stand else None
+        # Namen wie in der Sets-Ansicht: ein Name ist da, wenn eine Karte der Sammlung aus diesem Set ihn hat
+        ergebnis = fehlend(drucke, {z["oracle_id"] for z in besitz}, code, preise)
+        return {"verfuegbar": True, "code": code, "preisart": art, "preisart_name": k_.werte.NAMEN[art],
+                "preisquelle": quelle, "preisstand": stand, **ergebnis}
+
+    return [Route("/sets", sets), Route("/set/{code}", set_einzeln), Route("/set/{code}/fehlt", set_fehlt)]

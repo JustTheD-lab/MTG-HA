@@ -33,6 +33,16 @@
 .kiste-admin .knopf { padding: 0 1em 0 0.85em; }
 .kiste-katalog-hinweis { font-size: 0.84rem; color: var(--text-3); }
 
+/* Regeln dieser Kiste (Paket 3, 10.11.2026; Regelkarten aus regeln.css) */
+.kiste-regeln { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--linie); border-radius: var(--radius);
+  background: var(--flaeche-1); max-width: 760px; }
+.kiste-regeln-kopf { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.kiste-regeln-link { color: var(--messing-hell); font-size: 0.86rem; min-height: 44px; display: inline-flex; align-items: center; }
+.kiste-regeln-stand { margin: 2px 0 10px; }
+.kiste-regeln-liste:not(:empty) { margin-bottom: 10px; }
+.kiste-regel-neu { padding: 0 1em 0 0.85em; }
+.kiste-regeln-meldung:empty { display: none; }
+
 /* Gesamtsammlung: Quellen, mögliche Doppel, Karten ohne Ort */
 .kiste-sammlung-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 12px;
   font-size: 0.88rem; color: var(--text-2); }
@@ -530,6 +540,14 @@
 
 /* ---------- Dialoge: Verschieben, Import ---------- */
 .kiste-ziele { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+/* Einräumen zurücknehmen (Scan-Eingang, Paket 2) */
+.kiste-laeufe { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.kiste-lauf { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-height: 52px;
+  padding: 8px 12px; border: 1px solid var(--linie-stark); border-radius: var(--radius); }
+.kl-text { display: grid; gap: 2px; min-width: 0; flex: 1 1 150px; }
+.kl-zeit { font-weight: 600; white-space: nowrap; }
+.kl-was { overflow-wrap: anywhere; }
+.kl-knopf, .kl-stand { flex: none; }
 .kiste-ziel { width: 100%; justify-content: space-between; min-height: 52px; border-radius: var(--radius); text-align: left; }
 .kz-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kz-zahl { flex: none; }

@@ -1,6 +1,7 @@
 """Dashboard (Wunsch des Nutzers, 06.11.2026): alle Kennzahlen der Sammlung auf einer Seite, nur lesend.
 
-    GET /api/dashboard   Kopf (Wert, Veränderung, Zahlen), Verlauf, teuerste Karten, Gewinner und Verlierer je Abstand,
+    GET /api/dashboard   Kopf (Wert, Veränderung, Zahlen), Verlauf, teuerste Karten, Gewinner und Verlierer je Abstand
+                         (je 10, in Euro und Prozent, ab 0,50 €; Paket 9),
                          Verteilungen (Karten und Euro je Farbe, Seltenheit, Typ, Sprache, Manawert, Preisbereich,
                          Erkennung, Set), Binder, Kisten und Decks, Zuwachs je Monat, Scans je Tag, kommende Drops,
                          eigene Secret Lairs (Kaufpreis, Wert, Gewinn/Verlust; ab Version 18)
@@ -29,7 +30,7 @@ from binderapp.web.helfer import Fehler
 __all__ = ["routen", "verlauf", "verteilungen"]
 
 TOP_KARTEN = 12
-TOP_BEWEGUNG = 5
+BEWEGUNG_ABSTAENDE = ("vortag", "tage3", "tage7", "tage30")   # Gewinner und Verlierer (Paket 9: Woche und Monat dazu)
 TOP_SETS = 10
 VERLAUF_TAGE = 400     # Preistage im Verlauf
 ZUWACHS_MONATE = 24
@@ -207,8 +208,7 @@ def _sammlung(con, nutzer: int) -> dict:
         "kaufpreis": _kaufpreis(con, nutzer, art),
         "verlauf": verlauf(con, nutzer, art),
         "teuerste": werte.teuerste(con, nutzer, TOP_KARTEN, art, mit_bild=True),
-        "bewegung": {name: werte.groesste_aenderung(con, nutzer, TOP_BEWEGUNG, art, name, mit_bild=True)
-                     for name in werte.ABSTAENDE},
+        "bewegung": werte.rangliste(con, nutzer, art, BEWEGUNG_ABSTAENDE, mit_bild=True),
         "verteilung": verteilungen(con, nutzer, art),
         "zuwachs": [dict(z) for z in con.execute(SQL_ZUWACHS, (nutzer, ZUWACHS_MONATE)).fetchall()][::-1],
     }

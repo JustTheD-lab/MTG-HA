@@ -17,18 +17,27 @@ im Datenordner). Erzeugt wird der Schlüssel in der Oberfläche (`/api/pc/schlue
   PUT  /pc/bild/{art}/{datei}         Vorschaubild (WebP) ablegen, art = foto | scryfall
   GET  /pc/bilder/fehlend             Drucke ohne Vorschaubild (für Karten, die von Hand dazukamen)
   PUT  /pc/katalog  (X-Katalog-Gebaut: …)   Katalog ersetzen (atomar, mit Prüfung)
+  GET  /pc/katalog                    Katalog des Add-ons (Köpfe X-Sha256, X-Katalog-Stand) für einen neuen PC
+  GET  /pc/startpaket                 {vorhanden, info, gesendet, dateien{name: {groesse, sha256}}} (Bildindex, Namen)
+  PUT  /pc/startpaket/{datei} (X-Sha256: …)   eine Datei des Startpakets empfangen (nur feste Liste, mit Prüfsumme)
+  POST /pc/startpaket/fertig {info}   Empfang prüfen und das neue Startpaket in Kraft setzen (Tausch)
+  GET  /pc/startpaket/{datei}         Datei des fertigen Startpakets (Kopf X-Sha256)
 
-Ohne erreichbares Netzlaufwerk sind Holen, Fotos und Bilder gesperrt (503).
+Ohne erreichbares Netzlaufwerk sind Holen, Fotos und Bilder gesperrt (503); das Startpaket liegt neben den
+Vorschaubildern (`startpaket/aktuell`, Empfang in `startpaket/neu`) und gibt es nur mit Netzlaufwerk.
 """
 from __future__ import annotations
 
 import asyncio
+import csv
 import hashlib
 import hmac
+import json
 import logging
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import time
 from contextlib import closing
@@ -56,6 +65,8 @@ RE_SCRYFALL = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 BILD_HOECHSTENS = 3 * 1024 * 1024
 JSON_HOECHSTENS = 4 * 1024 * 1024
 KATALOG_HOECHSTENS = 600 * 1024 * 1024
+STARTPAKET_HOECHSTENS = 1024 * 1024 * 1024
+STARTPAKET_DATEIEN = ("emb_karte.npy", "emb_kunst.npy", "klein.npy", "phash.npy", "meta.csv", "namen.csv", "info.json")
 HOLEN_HOECHSTENS = 16
 WARTEN_HOECHSTENS = 25   # Sekunden, die /pc/warten höchstens offen bleibt
 WARTEN_TAKT = 0.2        # Sekunden zwischen zwei Blicken in die Datenbank während des Wartens
@@ -516,6 +527,131 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
         zeitplan.anstossen()   # neuer Katalog kann fehlende Cardmarket-IDs liefern
         return JSONResponse({"katalog": stand_neu, "gemeldet": gebaut[:40], "groesse": groesse}, status_code=201)
 
+    # ------------------------------------------------------------ Startpaket
+
+    startpaket = bilder.parent / "startpaket"
+
+    def _startpaket_da():
+        # Ohne Netzlaufwerk (Bilder im Datenordner) würde das Paket den knappen lokalen Speicher füllen.
+        if bilder == daten or daten in bilder.parents:
+            raise Fehler("Das Startpaket gibt es nur mit Netzlaufwerk.", 503)
+
+    def _datei_name(request) -> str:
+        name = request.path_params["datei"]
+        if name not in STARTPAKET_DATEIEN:
+            raise Fehler("Unbekannte Datei des Startpakets.", 404)
+        return name
+
+    def _sha256(pfad: Path) -> str:
+        h = hashlib.sha256()
+        with pfad.open("rb") as f:
+            while block := f.read(1 << 20):
+                h.update(block)
+        return h.hexdigest()
+
+    def _stand_lesen() -> dict | None:
+        try:
+            return json.loads((startpaket / "aktuell" / "stand.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+    async def startpaket_stand(request):
+        _startpaket_da()
+        st = await run_in_threadpool(_stand_lesen)
+        if not st:
+            return JSONResponse({"vorhanden": False, "info": None, "gesendet": None, "dateien": {}})
+        return JSONResponse({"vorhanden": True, "info": st.get("info"), "gesendet": st.get("gesendet"),
+                              "dateien": st.get("dateien", {})})
+
+    async def startpaket_empfangen(request):
+        _startpaket_da()
+        name = _datei_name(request)
+        soll = request.headers.get("x-sha256", "").lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", soll):
+            raise Fehler("Kopf X-Sha256 fehlt oder ist ungültig.")
+        await run_in_threadpool(lambda: (startpaket / "neu").mkdir(parents=True, exist_ok=True))
+        ziel = startpaket / "neu" / name
+        groesse, teil = await _datei_empfangen(request, ziel, STARTPAKET_HOECHSTENS)
+        try:
+            ist = await run_in_threadpool(_sha256, teil)
+            if ist != soll:
+                raise Fehler("Die Prüfsumme stimmt nicht, die Datei wurde nicht übernommen.")
+            await run_in_threadpool(os.replace, teil, ziel)
+        except BaseException:
+            await run_in_threadpool(teil.unlink, True)
+            raise
+        return JSONResponse({"datei": name, "groesse": groesse, "sha256": ist}, status_code=201)
+
+    def _fertig_pruefen_und_tauschen(info: dict) -> dict:
+        neu_ordner, aktuell, alt = startpaket / "neu", startpaket / "aktuell", startpaket / "alt"
+        fehlt = [n for n in STARTPAKET_DATEIEN if not (neu_ordner / n).is_file()]
+        if fehlt:
+            raise Fehler("Es fehlen Dateien: " + ", ".join(fehlt))
+        try:
+            gesendet = json.loads((neu_ordner / "info.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            raise Fehler("info.json ist nicht lesbar.")
+        if gesendet != info:
+            raise Fehler("info.json passt nicht zur Angabe, das Paket wurde verändert.")
+        bilder_zahl = info.get("bilder")
+        if not isinstance(bilder_zahl, int) or bilder_zahl <= 0:
+            raise Fehler("info.json nennt keine Bilderzahl.")
+        with (neu_ordner / "meta.csv").open(encoding="utf-8", newline="") as f:
+            zeilen = sum(1 for _ in csv.reader(f)) - 1
+        if zeilen != bilder_zahl:
+            raise Fehler(f"meta.csv hat {zeilen} Zeilen, info.json nennt {bilder_zahl} Bilder.")
+        dateien = {n: {"groesse": (neu_ordner / n).stat().st_size, "sha256": _sha256(neu_ordner / n)}
+                   for n in STARTPAKET_DATEIEN}
+        stand_neu = {"info": info, "gesendet": time.time(), "dateien": dateien}
+        (neu_ordner / "stand.json").write_text(json.dumps(stand_neu), encoding="utf-8")
+        if alt.exists():
+            shutil.rmtree(alt)
+        if aktuell.exists():
+            os.replace(aktuell, alt)
+        try:
+            os.replace(neu_ordner, aktuell)
+        except OSError:
+            if alt.exists():
+                os.replace(alt, aktuell)
+            raise
+        shutil.rmtree(alt, ignore_errors=True)
+        return stand_neu
+
+    async def startpaket_fertig(request):
+        _startpaket_da()
+        info = (await _json(request)).get("info")
+        if not isinstance(info, dict):
+            raise Fehler("info fehlt.")
+        st = await run_in_threadpool(_fertig_pruefen_und_tauschen, info)
+        return JSONResponse({"vorhanden": True, "info": st["info"], "gesendet": st["gesendet"]}, status_code=201)
+
+    async def startpaket_holen(request):
+        _startpaket_da()
+        name = _datei_name(request)
+        st = await run_in_threadpool(_stand_lesen)
+        pfad = startpaket / "aktuell" / name
+        if not st or name not in st.get("dateien", {}) or not await run_in_threadpool(pfad.is_file):
+            raise Fehler("Diese Datei liegt nicht vor.", 404)
+        return FileResponse(pfad, headers={"X-Sha256": st["dateien"][name]["sha256"]})
+
+    katalog_sha: dict = {}
+
+    def _katalog_sha():
+        try:
+            s = katalog.stat()
+        except OSError:
+            return None
+        schluessel = (s.st_mtime_ns, s.st_size)
+        if katalog_sha.get("schluessel") != schluessel:
+            katalog_sha.update(schluessel=schluessel, sha=_sha256(katalog), stand=katalog_stand(katalog))
+        return katalog_sha["sha"], katalog_sha["stand"]
+
+    async def katalog_holen(request):
+        r = await run_in_threadpool(_katalog_sha)
+        if r is None:
+            raise Fehler("Das Add-on hat noch keinen Katalog.", 404)
+        return FileResponse(katalog, headers={"X-Sha256": r[0], "X-Katalog-Stand": r[1] or ""})
+
     routen = [
         Route("/pc/stand", geschuetzt(stand)),
         Route("/pc/version", geschuetzt(pc_version_lesen)),
@@ -529,6 +665,11 @@ def erstellen(daten: Path, fotos: Path, bilder: Path, katalog: Path | None, spei
         Route("/pc/bild/{art}/{datei}", geschuetzt(bild, braucht_speicher="bilder"), methods=["PUT"]),
         Route("/pc/bilder/fehlend", geschuetzt(bilder_fehlend)),
         Route("/pc/katalog", geschuetzt(katalog_ersetzen), methods=["PUT"]),
+        Route("/pc/katalog", geschuetzt(katalog_holen), methods=["GET"]),
+        Route("/pc/startpaket", geschuetzt(startpaket_stand, braucht_speicher="bilder")),
+        Route("/pc/startpaket/fertig", geschuetzt(startpaket_fertig, braucht_speicher="bilder"), methods=["POST"]),
+        Route("/pc/startpaket/{datei}", geschuetzt(startpaket_empfangen, braucht_speicher="bilder"), methods=["PUT"]),
+        Route("/pc/startpaket/{datei}", geschuetzt(startpaket_holen, braucht_speicher="bilder"), methods=["GET"]),
         Route("/pc/katalog/neu", geschuetzt(katalog_neu)),
         Route("/pc/warten", geschuetzt(warten)),
         Route("/pc/scan/zeiten", geschuetzt(scan_zeiten)),

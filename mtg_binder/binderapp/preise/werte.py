@@ -12,6 +12,10 @@ from datetime import date, timedelta
 from binderapp.db.datenbank import version
 
 ABSTAENDE = {"vortag": (1, 1), "tage3": (3, 1), "tage30": (30, 3)}   # Ziel in Tagen, Toleranz in Tagen
+# Zusätzliche Abstände nur für Gewinner und Verlierer (Paket 9, 10.11.2026): eine Woche, Toleranz 2 Tage (5 bis 9 Tage)
+ABSTAENDE_RANGLISTE = {"tage7": (7, 2)}
+ALLE_ABSTAENDE = {**ABSTAENDE, **ABSTAENDE_RANGLISTE}
+SORTIERUNGEN = ("euro", "prozent")   # Gewinner und Verlierer: Anzahl × Preisänderung oder Änderung des Einzelpreises
 
 # Preisarten: Spalten der Tabelle `preis` (normal, Foil) und Namen für die Oberfläche. Welche gilt, wählt der Nutzer
 # (Spalte `nutzer.preisart` ab Version 21, Paket „Preisart wählbar“, 10.11.2026); Standard Ø 7 Tage. Nur Werte aus
@@ -231,14 +235,16 @@ WHERE k.nutzer_id = ? AND {jetzt} IS NOT NULL AND {frueher} IS NOT NULL {bedingu
 """
 
 
-def vergleichstage(con) -> dict[str, str | None]:
-    """{"vortag"|"tage3"|"tage30": Tag des Vergleichs oder None} zum neuesten Tag (Toleranzen wie ABSTAENDE)."""
+def vergleichstage(con, abstaende: dict | None = None) -> dict[str, str | None]:
+    """{"vortag"|"tage3"|"tage30": Tag des Vergleichs oder None} zum neuesten Tag (Toleranzen wie ABSTAENDE;
+    mit `abstaende=ALLE_ABSTAENDE` auch die Woche)."""
+    abstaende = ABSTAENDE if abstaende is None else abstaende
     tag = neuester_tag(con)
     if tag is None:
-        return {name: None for name in ABSTAENDE}
+        return {name: None for name in abstaende}
     tage = [z[0] for z in con.execute("SELECT tag FROM preisabruf WHERE tag < ? ORDER BY tag", (tag,))]
     return {name: _naechster_tag(tage, date.fromisoformat(tag) - timedelta(days=abstand), toleranz)
-            for name, (abstand, toleranz) in ABSTAENDE.items()}
+            for name, (abstand, toleranz) in abstaende.items()}
 
 
 def veraenderung_gesamt(con, nutzer: int, preisart: str | None = None, deck_id: int | None = None) -> dict[str, dict]:
@@ -280,10 +286,10 @@ FROM karte k
 JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
 JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?
 JOIN preis q ON q.cardmarket_id = d.cardmarket_id AND q.tag = ?
-WHERE k.nutzer_id = ? AND {jetzt} IS NOT NULL AND {frueher} IS NOT NULL
+WHERE k.nutzer_id = ? AND {jetzt} IS NOT NULL AND {frueher} IS NOT NULL AND max({jetzt}, {frueher}) >= ? {extra}
 GROUP BY k.scryfall_id, k.foil
 HAVING euro {vergleich} 0
-ORDER BY euro {richtung}, name LIMIT ?
+ORDER BY {ordnung} {richtung}, name LIMIT ?
 """
 
 
@@ -306,18 +312,42 @@ def teuerste(con, nutzer: int, anzahl: int = 5, preisart: str | None = None, mit
 
 
 def groesste_aenderung(con, nutzer: int, anzahl: int = 5, preisart: str | None = None, abstand: str = "vortag",
-                       mit_bild: bool = False) -> dict[str, list[dict]]:
-    """Gewinner und Verlierer in Euro zum früheren Tag `abstand` (Schlüssel aus ABSTAENDE, Anzahl × Preisänderung):
-    {"gewinner": […], "verlierer": […]}."""
+                       mit_bild: bool = False, mindestpreis: float = 0.0, sortierung: str = "euro") -> dict[str, list[dict]]:
+    """Gewinner und Verlierer zum früheren Tag `abstand` (Schlüssel aus ALLE_ABSTAENDE): {"gewinner": […], "verlierer": […]}.
+
+    `sortierung` "euro": nach Anzahl × Preisänderung; "prozent": nach der Änderung des Einzelpreises (früherer Preis
+    muss über 0 liegen). Mit `mindestpreis` zählt eine Karte nur, wenn ihr heutiger oder früherer Preis mindestens so
+    hoch ist (Paket 9: 0,50 €, damit Cent-Karten die Prozente nicht verzerren). Nur echte Preistage."""
+    if sortierung not in SORTIERUNGEN:
+        raise ValueError(sortierung)
     preisart = aufloesen(con, preisart, nutzer)
-    tag, frueher_tag = neuester_tag(con), vergleichstage(con)[abstand]
+    tag, frueher_tag = neuester_tag(con), vergleichstage(con, ALLE_ABSTAENDE)[abstand]
     if tag is None or frueher_tag is None:
         return {"gewinner": [], "verlierer": []}
+    jetzt, frueher = preis_ausdruck(preisart, "p"), preis_ausdruck(preisart, "q")
+    ordnung, extra = ("euro", "") if sortierung == "euro" else         (f"({jetzt} - {frueher}) / {frueher}", f"AND {frueher} > 0")
     ergebnis = {}
     for liste, vergleich, richtung in (("gewinner", ">", "DESC"), ("verlierer", "<", "ASC")):
-        sql = SQL_AENDERUNG_KARTEN.format(jetzt=preis_ausdruck(preisart, "p"), frueher=preis_ausdruck(preisart, "q"),
-                                          vergleich=vergleich, richtung=richtung)
+        sql = SQL_AENDERUNG_KARTEN.format(jetzt=jetzt, frueher=frueher, vergleich=vergleich, richtung=richtung,
+                                          ordnung=ordnung, extra=extra)
         ergebnis[liste] = [{**_karte_eintrag(z, mit_bild), "preis_vorher": round(z["preis_vorher"], 2),
                             "euro": round(z["euro"], 2), "prozent": _prozent(z["preis"], z["preis_vorher"])}
-                           for z in con.execute(sql, (tag, frueher_tag, nutzer, anzahl))]
+                           for z in con.execute(sql, (tag, frueher_tag, nutzer, mindestpreis, anzahl))]
     return ergebnis
+
+
+RANGLISTE_ANZAHL = 10          # je Liste im Dashboard (Antwort des Nutzers, 10.11.2026)
+RANGLISTE_MINDESTPREIS = 0.5   # Euro, heute oder früher
+RANGLISTE_ABSTAENDE = ("tage7", "tage30")   # Woche und Monat
+
+
+def rangliste(con, nutzer: int, preisart: str | None = None, abstaende=RANGLISTE_ABSTAENDE,
+              anzahl: int = RANGLISTE_ANZAHL, mit_bild: bool = False) -> dict:
+    """Gewinner und Verlierer je Abstand und Sortierung mit Mindestpreis (Paket 9):
+    {"mindestpreis": …, "anzahl": …, "abstaende": {name: {"tag": Vergleichstag, "euro": {…}, "prozent": {…}}}}."""
+    preisart = aufloesen(con, preisart, nutzer)
+    tage = vergleichstage(con, ALLE_ABSTAENDE)
+    return {"mindestpreis": RANGLISTE_MINDESTPREIS, "anzahl": anzahl,
+            "abstaende": {name: {"tag": tage[name], **{s: groesste_aenderung(
+                con, nutzer, anzahl, preisart, name, mit_bild, RANGLISTE_MINDESTPREIS, s) for s in SORTIERUNGEN}}
+                for name in abstaende}}

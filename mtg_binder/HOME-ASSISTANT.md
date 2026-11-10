@@ -38,6 +38,7 @@ Die Entitäts-IDs entstehen aus „MTG“ und dem Namen. Wer eine ID in Home Ass
 | `sensor.mtg_karten` | Karten in Bindern und Kisten (Attribut: Posten) | 1 h |
 | `sensor.mtg_top_5_teuerste_karten` | Preis der teuersten Karte, Liste der fünf teuersten im Attribut `karten` | 1 h |
 | `sensor.mtg_top_5_gewinner` / `sensor.mtg_top_5_verlierer` | größte Steigerung / größter Verlust in € zum Vortag, Liste im Attribut `karten` | 1 h |
+| `sensor.mtg_gewinner_und_verlierer_woche` | Top 5 der Woche (Vergleich mit dem Preistag vor 7 Tagen, 5 bis 9 Tage zählen): Zustand = Steigerung des größten Gewinners in € (Anzahl × Preisänderung); Attribute `gewinner`, `verlierer` (je höchstens 5 Karten mit `euro`, `prozent`, `preis`, `preis_vorher`), `vergleichstag`, `mindestpreis`. Es zählen nur Karten, deren heutiger oder früherer Preis mindestens 0,50 € ist | 1 h |
 | `sensor.mtg_binder_<name>_wert`, `sensor.mtg_binder_<name>_karten` | je Binder | 1 h |
 | `sensor.mtg_kiste_<name>_wert`, `sensor.mtg_kiste_<name>_karten` | je Kiste | 1 h |
 | `sensor.mtg_deck_<name>_wert`, `sensor.mtg_deck_<name>_karten` | je Deck: Wert und Zahl der Karten, die im Deck liegen; Attribut `fehlt_kosten` (Kosten der Fehlt-Liste) | 1 h |
@@ -107,6 +108,19 @@ cards:
       {{ loop.index }}. {{ k.name }} ({{ k.set }} {{ k.nummer }}{{ ', Foil' if k.foil }}): {{ '%.2f' | format(k[feld]) | replace('.', ',') }} €{{ ' (' ~ k.anzahl ~ '×)' if k.anzahl > 1 }}
       {% else -%}
       noch keine Daten
+      {% endfor %}
+      {% endfor %}
+  - type: markdown
+    title: Gewinner und Verlierer der Woche
+    content: |
+      {% set e = 'sensor.mtg_gewinner_und_verlierer_woche' -%}
+      Vergleich mit {{ state_attr(e, 'vergleichstag') or 'noch keinem Preistag' }}, nur Karten ab 0,50 €
+      {% for titel, feld in [('Gewinner', 'gewinner'), ('Verlierer', 'verlierer')] -%}
+      **{{ titel }}**
+      {% for k in state_attr(e, feld) or [] -%}
+      {{ loop.index }}. {{ k.name }} ({{ k.set }} {{ k.nummer }}{{ ', Foil' if k.foil }}): {{ '%+.2f' | format(k.euro) | replace('.', ',') }} €{{ ' (' ~ k.prozent ~ ' %)' if k.prozent is not none }}
+      {% else -%}
+      keine Karte
       {% endfor %}
       {% endfor %}
   - type: markdown

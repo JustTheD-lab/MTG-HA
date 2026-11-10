@@ -10,6 +10,7 @@
 //   bedingungenEditor(container, beschreibung, bedingungen, { leerText }) → { werte(), hinzufuegen() }
 //       Editor für eine Liste von Bedingungen (Regeln und Fächer), Werte im Format der Schnittstelle.
 //   faecherBearbeiten(kisteId, kisteName) → Promise<boolean>   Dialog „Fächer“ einer Kiste (true = gespeichert)
+//   kistenRegeln(platz, kisteId, kisteName) → { neuLaden(), zeichnen() }   Block „Regeln dieser Kiste“ (Kistenansicht)
 //
 // Schreiben nur angemeldet (im Add-on ist man immer angemeldet). Fehler der Schnittstelle erscheinen als Satz.
 
@@ -442,9 +443,10 @@ async function loeschen(r) {
   }
 }
 
-/** Dialog für eine neue (`regel` = null) oder bestehende Regel. Gibt true zurück, wenn gespeichert wurde. */
-async function regelDialog(regel) {
-  const { kisten, beschreibung } = Z.daten;
+/** Dialog für eine neue (`regel` = null) oder bestehende Regel. Gibt true zurück, wenn gespeichert wurde.
+    `daten` = { kisten, beschreibung } (Seite „Sortierregeln“ oder Kistenansicht), `vorgabeKiste` = Ziel einer neuen Regel. */
+async function regelDialog(regel, daten = Z.daten, vorgabeKiste = null) {
+  const { kisten, beschreibung } = daten;
   const form = el('form');
   form.id = 'regel-form';
   form.noValidate = true;
@@ -469,7 +471,8 @@ async function regelDialog(regel) {
   aktivBox.checked = regel ? regel.aktiv : true;
   if (kiste) {
     kiste.innerHTML = kisten.map((k) => `<option value="${k.id}">${esc(k.name)}</option>`).join('');
-    if (regel?.kiste_id && kisten.some((k) => k.id === regel.kiste_id)) kiste.value = String(regel.kiste_id);
+    const start = regel?.kiste_id ?? vorgabeKiste;
+    if (start && kisten.some((k) => k.id === start)) kiste.value = String(start);
   }
   const editor = bedingungenEditor(form.querySelector('.regeln-bed-platz'), beschreibung, regel?.gueltig ? regel.bedingungen : [],
     { leerText: 'Keine Bedingung: Die Regel passt auf jede Karte.',
@@ -667,6 +670,139 @@ export async function zeigen(wurzel) {
     z.trefferStatus.textContent = '';
     probeLaden();
   });
+}
+
+// ---------------------------------------------------------------- Regeln an der Kiste (Paket 3, 10.11.2026)
+//
+// Block „Regeln dieser Kiste“ in der Kistenansicht: die Regeln mit dieser Kiste als Ziel, mit An/Aus, Kopieren,
+// Bearbeiten, Löschen und „Regel hinzufügen“ (Ziel schon gewählt, neue Regeln kommen ans Ende der Reihenfolge).
+// Die Reihenfolge selbst bleibt auf der Seite „Sortierregeln“; der Block verweist dorthin.
+
+function kistenRegelHtml(r, gesamt, schreiben) {
+  const name = esc(r.name);
+  const marken = (!r.gueltig ? '<span class="regeln-marke regeln-marke-warn">Ungültig</span>' : '')
+    + (!r.aktiv ? '<span class="regeln-marke">aus</span>' : '');
+  const note = !r.gueltig
+    ? '<p class="regeln-warnung" role="note">Diese Regel lässt sich nicht mehr lesen und wird übersprungen. Bearbeite sie neu oder lösche sie.</p>'
+    : '';
+  const aktionen = schreiben
+    ? '<div class="regeln-aktionen">'
+      + `<button type="button" class="regeln-schalter" role="switch" aria-checked="${r.aktiv}" data-aktion="schalter"`
+      + ` aria-label="Regel „${name}“ ist ${r.aktiv ? 'an' : 'aus'}"><span class="regeln-schalter-spur" aria-hidden="true"></span>`
+      + `<span class="regeln-schalter-text">${r.aktiv ? 'An' : 'Aus'}</span></button>`
+      + '<span class="regeln-aktionen-rechts">'
+      + `<button type="button" class="knopf knopf-sym" data-aktion="kopieren" aria-label="Bedingungen der Regel „${name}“ kopieren"`
+      + ` title="Bedingungen kopieren"${r.gueltig && r.bedingungen.length ? '' : ' disabled'}>${SYM.kopieren}</button>`
+      + `<button type="button" class="knopf knopf-sym" data-aktion="bearbeiten" aria-label="Regel „${name}“ bearbeiten">${SYM.stift}</button>`
+      + `<button type="button" class="knopf knopf-sym" data-aktion="loeschen" aria-label="Regel „${name}“ löschen">${SYM.muell}</button>`
+      + '</span></div>'
+    : '';
+  return `<li class="regeln-regel" data-id="${r.id}" data-aktiv="${r.aktiv}" data-gueltig="${r.gueltig}">`
+    + `<div class="regeln-regel-kopf"><span class="regeln-nr" title="Platz ${r.nr} von ${gesamt} in der Reihenfolge"`
+    + ` aria-label="Platz ${r.nr} von ${gesamt}">${r.nr}</span><h3 class="regeln-name">${name}</h3>${marken}</div>`
+    + `<div class="regeln-zeile"><span class="etikett">Wenn</span><span class="regeln-ketten">${r.gueltig ? textKette(r.texte) : '<span class="regeln-chip">nicht lesbar</span>'}</span></div>`
+    + note + aktionen + '</li>';
+}
+
+/** Zeichnet den Block „Regeln dieser Kiste“ in `platz` (leeres Element der Kistenansicht).
+    Gibt { neuLaden() } zurück; `beiAenderung` wird nach jedem gespeicherten Schritt gerufen. */
+export function kistenRegeln(platz, kisteId, kisteName, { beiAenderung = null } = {}) {
+  const k = { daten: null, lauf: 0 };
+  platz.innerHTML = '<div class="kiste-regeln-kopf"><h2 class="etikett" id="kiste-regeln-titel">Regeln dieser Kiste</h2>'
+    + '<a class="kiste-regeln-link" href="#/regeln">Reihenfolge in „Sortierregeln“</a></div>'
+    + '<p class="regeln-hinweis kiste-regeln-stand" role="status"></p>'
+    + '<ol class="regeln-liste kiste-regeln-liste" aria-labelledby="kiste-regeln-titel"></ol>'
+    + `<button type="button" class="knopf kiste-regel-neu" hidden>${SYM.plus}<span>Regel hinzufügen</span></button>`
+    + '<p class="meldung kiste-regeln-meldung" role="alert"></p>';
+  const stand = platz.querySelector('.kiste-regeln-stand');
+  const liste = platz.querySelector('.kiste-regeln-liste');
+  const neu = platz.querySelector('.kiste-regel-neu');
+  const meldungEl = platz.querySelector('.kiste-regeln-meldung');
+  const melden = (t) => { meldungEl.textContent = t || ''; };
+
+  function zeichnen(fokus = null) {
+    const d = k.daten;
+    const schreiben = angemeldet();
+    if (!d.verfuegbar) {
+      stand.textContent = 'Sortierregeln gibt es erst mit der neuen Version des Add-ons (Datenbank Version 6).';
+      liste.replaceChildren();
+      neu.hidden = true;
+      return;
+    }
+    const aktive = d.regeln.filter((r) => r.aktiv && r.gueltig).length;
+    stand.textContent = !d.regeln.length
+      ? 'Bekommt nichts automatisch: Keine Sortierregel hat diese Kiste als Ziel.'
+      : (aktive
+        ? `${d.regeln.length === 1 ? 'Eine Regel führt' : `${d.regeln.length} Regeln führen`} hierher`
+          + `${aktive < d.regeln.length ? ` (${aktive} an)` : ''}. Die Zahl ist der Platz unter allen ${d.gesamt} Regeln; die erste passende gewinnt.`
+        : 'Bekommt nichts automatisch: Alle Regeln dieser Kiste sind aus oder ungültig.');
+    liste.innerHTML = d.regeln.map((r) => kistenRegelHtml(r, d.gesamt, schreiben)).join('');
+    liste.hidden = !d.regeln.length;
+    neu.hidden = !schreiben;
+    if (fokus) {
+      const zeile = liste.querySelector(`[data-id="${fokus.id}"]`);
+      (zeile?.querySelector(`[data-aktion="${fokus.aktion}"]`) ?? neu).focus();
+    }
+  }
+
+  async function neuLaden(fokus = null) {
+    const lauf = ++k.lauf;
+    try {
+      const d = await holen(`/api/kiste/${kisteId}/regeln`);
+      if (lauf !== k.lauf || !platz.isConnected) return;
+      k.daten = d;
+      platz.hidden = d.scan_eingang;
+      zeichnen(fokus);
+    } catch (f) {
+      if (lauf !== k.lauf) return;
+      stand.textContent = '';
+      melden(`Die Regeln dieser Kiste ließen sich nicht laden: ${f.message}`);
+    }
+  }
+
+  async function nachSchritt(fokus) {
+    melden('');
+    await neuLaden(fokus);
+    beiAenderung?.();
+  }
+
+  neu.addEventListener('click', async () => {
+    if (!k.daten) return;
+    if (await regelDialog(null, k.daten, kisteId)) await nachSchritt(null);
+  });
+
+  liste.addEventListener('click', async (e) => {
+    const knopf = e.target.closest('[data-aktion]');
+    if (!knopf || knopf.disabled || !k.daten) return;
+    const r = k.daten.regeln.find((x) => x.id === Number(knopf.closest('[data-id]').dataset.id));
+    if (!r) return;
+    const aktion = knopf.dataset.aktion;
+    try {
+      if (aktion === 'schalter') {
+        await senden(`/api/regel/${r.id}`, { methode: 'PUT',
+          daten: { name: r.name, aktiv: !r.aktiv, bedingungen: r.bedingungen, kiste_id: r.kiste_id } });
+        await nachSchritt({ id: r.id, aktion: 'schalter' });
+      } else if (aktion === 'kopieren') {
+        ablageSetzen(r.bedingungen, `Regel „${r.name}“`);
+        stand.textContent = `${anzahlText(r.bedingungen.length)} der Regel „${r.name}“ kopiert. `
+          + 'Einfügen geht beim Bearbeiten jeder Regel und in den Fächern jeder Kiste.';
+      } else if (aktion === 'bearbeiten') {
+        if (await regelDialog(r, k.daten)) await nachSchritt({ id: r.id, aktion: 'bearbeiten' });
+      } else if (aktion === 'loeschen') {
+        const ja = await bestaetigen({ titel: 'Regel löschen',
+          text: `Die Regel „${r.name}“ wird gelöscht. Karten, die schon in „${kisteName}“ liegen, bleiben dort.`,
+          ja: 'Löschen', gefahr: true });
+        if (!ja) return;
+        await senden(`/api/regel/${r.id}`, { methode: 'DELETE' });
+        await nachSchritt(null);
+      }
+    } catch (f) {
+      melden(f.message);
+    }
+  });
+
+  neuLaden();
+  return { neuLaden: () => neuLaden(), zeichnen: () => { if (k.daten) zeichnen(); } };
 }
 
 export function verlassen() {
