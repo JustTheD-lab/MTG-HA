@@ -13,21 +13,63 @@ from binderapp.db.datenbank import version
 
 ABSTAENDE = {"vortag": (1, 1), "tage3": (3, 1), "tage30": (30, 3)}   # Ziel in Tagen, Toleranz in Tagen
 
-# Preisart der Werte: Spalten der Tabelle `preis` (normal, Foil). Heute gilt überall Ø 7 Tage; die spätere Wahl
-# der Preisart (Nächste Runden, Punkt 4) ergänzt hier nur Einträge. Nur Werte aus dieser Tabelle kommen ins SQL.
-PREISARTEN = {"avg7": ("avg7", "avg7_foil"), "low": ("low", "low_foil")}
+# Preisarten: Spalten der Tabelle `preis` (normal, Foil) und Namen für die Oberfläche. Welche gilt, wählt der Nutzer
+# (Spalte `nutzer.preisart` ab Version 21, Paket „Preisart wählbar“, 10.11.2026); Standard Ø 7 Tage. Nur Werte aus
+# dieser Tabelle kommen ins SQL. Trend, Ø 1 und Ø 30 Tage gibt es erst ab Version 21 (Verlauf ab dem Speichern).
+PREISARTEN = {"low": ("low", "low_foil"), "trend": ("trend", "trend_foil"), "avg1": ("avg1", "avg1_foil"),
+              "avg7": ("avg7", "avg7_foil"), "avg30": ("avg30", "avg30_foil")}
+NAMEN = {"low": "Low", "trend": "Trend", "avg1": "Ø 1 Tag", "avg7": "Ø 7 Tage", "avg30": "Ø 30 Tage"}
 PREISART = "avg7"
+NEU_AB_VERSION = 21
+ALT = ("low", "avg7")   # Arten, die es schon vor Version 21 gab
 
 
-def preis_ausdruck(preisart: str = PREISART, tabelle: str = "p") -> str:
+def arten(con) -> tuple[str, ...]:
+    """Die Preisarten, die diese Datenbank speichert."""
+    return tuple(PREISARTEN) if version(con) >= NEU_AB_VERSION else ALT
+
+
+def gewaehlt(con, nutzer: int | None = None) -> str:
+    """Die Preisart des Nutzers (ohne Nutzer: des ersten, solange es keine Benutzerverwaltung gibt)."""
+    if version(con) < NEU_AB_VERSION:
+        return PREISART
+    if nutzer is None:
+        z = con.execute("SELECT preisart FROM nutzer ORDER BY id LIMIT 1").fetchone()
+    else:
+        z = con.execute("SELECT preisart FROM nutzer WHERE id = ?", (nutzer,)).fetchone()
+    return z[0] if z and z[0] in PREISARTEN else PREISART
+
+
+def aufloesen(con, preisart: str | None, nutzer: int | None = None) -> str:
+    art = preisart or gewaehlt(con, nutzer)
+    if art not in PREISARTEN:
+        raise ValueError(f"unbekannte Preisart {art!r}")
+    return art
+
+
+def waehlen(con, nutzer: int, preisart: str) -> bool:
+    """Setzt die Preisart des Nutzers (in der Transaktion des Aufrufers, mit Historie). True, wenn sich etwas ändert."""
+    from binderapp.db.datenbank import aendern   # erst hier: datenbank importiert nichts aus preise
+    if version(con) < NEU_AB_VERSION:
+        raise ValueError("Die Preisart lässt sich erst ab Datenbankversion 21 wählen.")
+    if preisart not in PREISARTEN:
+        raise ValueError(f"unbekannte Preisart {preisart!r}")
+    return bool(aendern(con, nutzer, "nutzer", "nutzer", nutzer, {"preisart": preisart}))
+
+
+def auswahl(con, nutzer: int | None = None) -> dict:
+    """Für die Oberfläche: gewählte Art und alle wählbaren mit Namen."""
+    return {"preisart": gewaehlt(con, nutzer), "name": NAMEN[gewaehlt(con, nutzer)],
+            "arten": [{"wert": a, "text": NAMEN[a]} for a in arten(con)]}
+
+
+def preis_ausdruck(preisart: str | None = None, tabelle: str = "p", karte: str = "k") -> str:
     """SQL-Ausdruck für den Preis einer Karte `k` in der Preisart (Foil-Karten mit Foil-Preis)."""
     normal, foil = PREISARTEN[preisart]
-    return f"(CASE WHEN k.foil THEN {tabelle}.{foil} ELSE {tabelle}.{normal} END)"
+    return f"(CASE WHEN {karte}.foil THEN {tabelle}.{foil} ELSE {tabelle}.{normal} END)"
 
 SQL_PREIS_KARTE = """
-SELECT k.id,
-       CASE WHEN k.foil THEN p.low_foil ELSE p.low END AS low,
-       CASE WHEN k.foil THEN p.avg7_foil ELSE p.avg7 END AS avg7
+SELECT k.id, {spalten}
 FROM karte k
 JOIN kartendaten d ON d.scryfall_id = k.scryfall_id
 JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ?
@@ -70,18 +112,23 @@ def stand(con) -> dict:
     return {"tag": z[0], "erstellt": z[1], "abgerufen": z[2] + "Z", "produkte": z[3], "tage": tage}
 
 
-def preise_fuer_karten(con, karten_ids: list[int]) -> dict[int, dict]:
-    """{karte_id: {"low": …, "avg7": …}} des neuesten Tages (nur Karten mit Preis)."""
+def preise_fuer_karten(con, karten_ids: list[int], preisart: str | None = None) -> dict[int, dict]:
+    """{karte_id: {"low": …, "avg7": …, (ab Version 21) "trend", "avg1", "avg30", "art": gewählte Art,
+    "wert": Preis der gewählten Art}} des neuesten Tages (nur Karten mit Preis)."""
     tag = neuester_tag(con)
     ids = [int(i) for i in karten_ids if i is not None]
     if tag is None or not ids:
         return {}
+    art, namen = aufloesen(con, preisart), arten(con)
+    spalten = ", ".join(preis_ausdruck(a) for a in namen)
     ergebnis = {}
     for anfang in range(0, len(ids), 500):
         teil = ids[anfang:anfang + 500]
-        for z in con.execute(SQL_PREIS_KARTE.format(platz=", ".join("?" for _ in teil)), (tag, *teil)):
-            if z[1] is not None or z[2] is not None:
-                ergebnis[z[0]] = {"low": z[1], "avg7": z[2]}
+        sql = SQL_PREIS_KARTE.format(spalten=spalten, platz=", ".join("?" for _ in teil))
+        for z in con.execute(sql, (tag, *teil)):
+            preise = dict(zip(namen, z[1:]))
+            if any(v is not None for v in preise.values()):
+                ergebnis[z[0]] = {**preise, "art": art, "wert": preise[art]}
     return ergebnis
 
 
@@ -101,36 +148,39 @@ def _prozent(jetzt, frueher):
     return round((jetzt - frueher) / frueher * 100, 1)
 
 
-def verlauf_karte(con, karte_id: int) -> dict | None:
-    """Preise einer Karte mit Veränderung für Low und Durchschnitt 7 Tage (Kartenansicht)."""
+def verlauf_karte(con, karte_id: int, preisart: str | None = None) -> dict | None:
+    """Preise einer Karte in allen gespeicherten Arten mit Veränderung (Kartenansicht); `art` ist die gewählte."""
     tag = neuester_tag(con)
     if tag is None:
         return None
+    art, namen = aufloesen(con, preisart), arten(con)
     k = con.execute("SELECT k.foil, d.cardmarket_id FROM karte k LEFT JOIN kartendaten d ON d.scryfall_id = k.scryfall_id"
                     " WHERE k.id = ?", (karte_id,)).fetchone()
     if k is None or k[1] is None:
-        return {"tag": tag, "cardmarket_id": None}
+        return {"tag": tag, "cardmarket_id": None, "art": art}
     foil = bool(k[0])
-    spalten = ("low_foil", "avg7_foil") if foil else ("low", "avg7")
-    zeilen = {z[0]: (z[1], z[2]) for z in con.execute(
-        f"SELECT tag, {spalten[0]}, {spalten[1]} FROM preis WHERE cardmarket_id = ? AND tag <= ? AND tag >= ?",
+    spalten = ", ".join(PREISARTEN[a][1 if foil else 0] for a in namen)
+    zeilen = {z[0]: z[1:] for z in con.execute(
+        f"SELECT tag, {spalten} FROM preis WHERE cardmarket_id = ? AND tag <= ? AND tag >= ?",
         (k[1], tag, (date.fromisoformat(tag) - timedelta(days=40)).isoformat()))}
     jetzt = zeilen.get(tag)
-    ergebnis = {"tag": tag, "cardmarket_id": k[1], "foil": foil,
-                "low": jetzt[0] if jetzt else None, "avg7": jetzt[1] if jetzt else None,
-                "veraenderung": {"low": {}, "avg7": {}}}
+    ergebnis = {"tag": tag, "cardmarket_id": k[1], "foil": foil, "art": art, "arten": list(namen),
+                **{a: (jetzt[i] if jetzt else None) for i, a in enumerate(namen)},
+                "veraenderung": {a: {} for a in namen}}
+    ergebnis["wert"] = ergebnis[art]
     frueher_tage = sorted(t for t in zeilen if t != tag)
     for name, (tage, toleranz) in ABSTAENDE.items():
         t = _naechster_tag(frueher_tage, date.fromisoformat(tag) - timedelta(days=tage), toleranz)
         alt = zeilen.get(t) if t else None
-        for i, feld in enumerate(("low", "avg7")):
+        for i, feld in enumerate(namen):
             ergebnis["veraenderung"][feld][name] = _prozent(jetzt[i] if jetzt else None, alt[i] if alt else None)
     return ergebnis
 
 
-def werte(con, nutzer: int, art: str, preisart: str = PREISART) -> dict[int, dict]:
-    """Wert (Preisart, Standard Durchschnitt 7 Tage) je Binder (`art="binder"`) oder je Kiste (`art="kiste"`):
+def werte(con, nutzer: int, art: str, preisart: str | None = None) -> dict[int, dict]:
+    """Wert (Preisart, ohne Angabe die gewählte) je Binder (`art="binder"`) oder je Kiste (`art="kiste"`):
     {id: {"wert": Euro, "ohne_preis": Zahl der Karten ohne Preis}}."""
+    preisart = aufloesen(con, preisart, nutzer)
     tag = neuester_tag(con)
     if tag is None:
         return {}
@@ -147,9 +197,10 @@ def werte(con, nutzer: int, art: str, preisart: str = PREISART) -> dict[int, dic
     return {z[0]: {"wert": round(z[1] or 0, 2), "ohne_preis": z[2]} for z in con.execute(sql, (tag, nutzer))}
 
 
-def fach_werte(con, nutzer: int, kiste_id: int, preisart: str = PREISART) -> dict[int, dict]:
+def fach_werte(con, nutzer: int, kiste_id: int, preisart: str | None = None) -> dict[int, dict]:
     """Wert je Fach einer Kiste aus der temporären Tabelle fachwahl (`web.kisten.fach_vorbereiten`):
     {Platz des Fachs oder -1 für Karten ohne Fach: {"wert": Euro, "ohne_preis": Karten ohne Preis}}."""
+    preisart = aufloesen(con, preisart, nutzer)
     tag = neuester_tag(con)
     if tag is None:
         return {}
@@ -158,7 +209,8 @@ def fach_werte(con, nutzer: int, kiste_id: int, preisart: str = PREISART) -> dic
     return {z[0]: {"wert": round(z[1] or 0, 2), "ohne_preis": z[2]} for z in con.execute(sql, (tag, nutzer, kiste_id))}
 
 
-def gesamtwert(con, nutzer: int, preisart: str = PREISART) -> dict | None:
+def gesamtwert(con, nutzer: int, preisart: str | None = None) -> dict | None:
+    preisart = aufloesen(con, preisart, nutzer)
     tag = neuester_tag(con)
     if tag is None:
         return None
@@ -189,9 +241,10 @@ def vergleichstage(con) -> dict[str, str | None]:
             for name, (abstand, toleranz) in ABSTAENDE.items()}
 
 
-def veraenderung_gesamt(con, nutzer: int, preisart: str = PREISART, deck_id: int | None = None) -> dict[str, dict]:
+def veraenderung_gesamt(con, nutzer: int, preisart: str | None = None, deck_id: int | None = None) -> dict[str, dict]:
     """{"vortag"|"tage3"|"tage30": {"euro": …, "prozent": …, "tag": …}}; ohne passenden früheren Tag None-Werte.
     Mit `deck_id` nur die Karten, die in diesem Deck liegen (ab Version 8)."""
+    preisart = aufloesen(con, preisart, nutzer)
     tag = neuester_tag(con)
     ergebnis = {}
     bedingung, extra = ("AND k.deck_id = ?", (deck_id,)) if deck_id is not None else ("", ())
@@ -242,8 +295,9 @@ def _karte_eintrag(z, mit_bild: bool = False) -> dict:
     return eintrag
 
 
-def teuerste(con, nutzer: int, anzahl: int = 5, preisart: str = PREISART, mit_bild: bool = False) -> list[dict]:
+def teuerste(con, nutzer: int, anzahl: int = 5, preisart: str | None = None, mit_bild: bool = False) -> list[dict]:
     """Die `anzahl` Drucke mit dem höchsten Einzelpreis (neuester Tag)."""
+    preisart = aufloesen(con, preisart, nutzer)
     tag = neuester_tag(con)
     if tag is None:
         return []
@@ -251,10 +305,11 @@ def teuerste(con, nutzer: int, anzahl: int = 5, preisart: str = PREISART, mit_bi
     return [_karte_eintrag(z, mit_bild) for z in con.execute(sql, (tag, nutzer, anzahl))]
 
 
-def groesste_aenderung(con, nutzer: int, anzahl: int = 5, preisart: str = PREISART, abstand: str = "vortag",
+def groesste_aenderung(con, nutzer: int, anzahl: int = 5, preisart: str | None = None, abstand: str = "vortag",
                        mit_bild: bool = False) -> dict[str, list[dict]]:
     """Gewinner und Verlierer in Euro zum früheren Tag `abstand` (Schlüssel aus ABSTAENDE, Anzahl × Preisänderung):
     {"gewinner": […], "verlierer": […]}."""
+    preisart = aufloesen(con, preisart, nutzer)
     tag, frueher_tag = neuester_tag(con), vergleichstage(con)[abstand]
     if tag is None or frueher_tag is None:
         return {"gewinner": [], "verlierer": []}

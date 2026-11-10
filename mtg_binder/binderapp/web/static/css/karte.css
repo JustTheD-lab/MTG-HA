@@ -202,6 +202,8 @@
 .preis-tabelle th:first-child, .preis-tabelle td:first-child { text-align: left; }
 .preis-tabelle thead th { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
 .preis-tabelle tbody tr + tr { border-top: 1px solid var(--linie); }
+.preis-tabelle .preis-gewaehlt th, .preis-tabelle .preis-gewaehlt .preis-betrag { font-weight: 600; color: var(--messing-hell); }
+@media (max-width: 400px) { .preis-tabelle th, .preis-tabelle td { padding: 5px 2px; } }
 .preis-tabelle tbody th { font-weight: 500; color: var(--text-2); }
 .preis-betrag { color: var(--messing-hell); font-weight: 600; }
 .preis-auf { color: #6fbf73; }

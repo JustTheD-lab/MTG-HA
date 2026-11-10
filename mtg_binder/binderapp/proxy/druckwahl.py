@@ -52,7 +52,7 @@ def kandidaten(kat, oracle_id: str) -> list[dict]:
 def preise_lesen(preisdatei: Path, ids: set[int]) -> dict[int, float]:
     """Nonfoil-Preis je Cardmarket-Produkt: Ø 7 Tage, sonst Low; Produkte ohne Preis fehlen."""
     werte = {}
-    for pid, low, avg7, _low_foil, _avg7_foil in abruf.einlesen(Path(preisdatei).read_bytes(), ids)[2]:
+    for pid, low, avg7, *_ in abruf.einlesen(Path(preisdatei).read_bytes(), ids)[2]:
         wert = avg7 or low
         if wert:
             werte[pid] = wert

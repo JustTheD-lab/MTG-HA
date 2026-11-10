@@ -107,19 +107,36 @@ export function euro(wert, { rund = false } = {}) {
   });
 }
 
-/** Preisstreifen im unteren Sechzehntel einer Karte (Wunsch des Nutzers): „ab“ = Low, „Ø“ = Durchschnitt 7 Tage
-    (bei Foil-Karten die Foil-Preise). Leer, wenn es keinen Preis gibt. Das Elternelement braucht position: relative
-    und container-type: inline-size (siehe .preis-streifen in basis.css). */
+/** Preisarten (preise/werte.py, NAMEN): Name, Kurzform für Streifen und Listen, Satz für Vorleser. */
+export const PREISARTEN = {
+  low: { name: 'Low', kurz: 'ab', satz: 'ab' },
+  trend: { name: 'Trend', kurz: 'Trend', satz: 'Trend' },
+  avg1: { name: 'Ø 1 Tag', kurz: 'Ø 1 T.', satz: 'Durchschnitt 1 Tag' },
+  avg7: { name: 'Ø 7 Tage', kurz: 'Ø', satz: 'Durchschnitt 7 Tage' },
+  avg30: { name: 'Ø 30 Tage', kurz: 'Ø 30 T.', satz: 'Durchschnitt 30 Tage' },
+};
+
+/** Gewählte Preisart und ihr Wert aus einem Preis der Schnittstelle (ältere Antworten: Ø 7 Tage). */
+export function preisWahl(preis) {
+  const art = preis?.art && PREISARTEN[preis.art] ? preis.art : 'avg7';
+  return { art, wert: preis?.wert !== undefined ? preis.wert : preis?.[art], ...PREISARTEN[art] };
+}
+
+/** Preisstreifen im unteren Sechzehntel einer Karte (Wunsch des Nutzers): „ab“ = Low, daneben die gewählte Preisart
+    (Paket „Preisart wählbar“; ist Low gewählt, nur „ab“). Bei Foil-Karten die Foil-Preise. Leer, wenn es keinen Preis
+    gibt. Das Elternelement braucht position: relative und container-type: inline-size (.preis-streifen in basis.css). */
 export function preisStreifen(preis) {
-  if (!preis || (preis.low == null && preis.avg7 == null)) return '';
+  const w = preisWahl(preis);
+  if (!preis || (preis.low == null && w.wert == null)) return '';
   return `<span class="preis-streifen" aria-hidden="true"><span>ab ${euro(preis.low)}</span>`
-    + `<span>Ø ${euro(preis.avg7)}</span></span>`;
+    + (w.art === 'low' ? '' : `<span>${w.kurz} ${euro(w.wert)}</span>`) + '</span>';
 }
 
 /** Derselbe Preis als Satz für Vorleser. */
 export function preisText(preis) {
-  if (!preis || (preis.low == null && preis.avg7 == null)) return '';
-  return `Preis ab ${euro(preis.low)}, Durchschnitt 7 Tage ${euro(preis.avg7)}`;
+  const w = preisWahl(preis);
+  if (!preis || (preis.low == null && w.wert == null)) return '';
+  return `Preis ab ${euro(preis.low)}` + (w.art === 'low' ? '' : `, ${w.satz} ${euro(w.wert)}`);
 }
 
 /** srcset über alle vorbereiteten Breiten. */

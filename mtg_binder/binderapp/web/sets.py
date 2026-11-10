@@ -39,7 +39,8 @@ GROUP BY 1, 2, 3
 
 def _besitz(con, nutzer: int, code: str | None = None) -> list:
     preise = k_.version(con) >= k_.PREIS_AB_VERSION
-    sql = SQL_BESITZ.format(preis=k_.PREIS if preise else "0", preis_join=k_.PREIS_JOIN if preise else "",
+    preis = k_.preis_sql(k_.PREIS, k_.werte.gewaehlt(con, nutzer)) if preise else "0"
+    sql = SQL_BESITZ.format(preis=preis, preis_join=k_.PREIS_JOIN if preise else "",
                             nur_set="AND COALESCE(kd.set_code, LOWER(k.set_code)) = ?" if code else "")
     return con.execute(sql, (nutzer, code) if code else (nutzer,)).fetchall()
 

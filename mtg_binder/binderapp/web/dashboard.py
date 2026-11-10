@@ -15,6 +15,7 @@ from __future__ import annotations
 from contextlib import closing
 from datetime import date, timedelta
 
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
@@ -23,6 +24,7 @@ from binderapp.ha import daten as ha_daten
 from binderapp.preise import werte
 from binderapp.secretlair import drops as secret_drops
 from binderapp.web import kisten as k_
+from binderapp.web.helfer import Fehler
 
 __all__ = ["routen", "verlauf", "verteilungen"]
 
@@ -104,7 +106,7 @@ WHERE d.verkauf > ? GROUP BY d.id ORDER BY d.verkauf, d.id LIMIT ?
 """
 
 
-def verlauf(con, nutzer: int, preisart: str = werte.PREISART) -> list[dict]:
+def verlauf(con, nutzer: int, preisart: str) -> list[dict]:
     """[{"tag", "wert"}] der letzten Preistage, aufsteigend. Der letzte Wert ist der heutige Gesamtwert."""
     gesamt = werte.gesamtwert(con, nutzer, preisart)
     if gesamt is None:
@@ -144,7 +146,7 @@ def _sets(con, nutzer: int, tag: str | None, preis: str, sortierung: str) -> lis
             for z in con.execute(sql, (tag, nutzer, TOP_SETS))]
 
 
-def verteilungen(con, nutzer: int, preisart: str = werte.PREISART) -> dict:
+def verteilungen(con, nutzer: int, preisart: str) -> dict:
     tag, preis = werte.neuester_tag(con), werte.preis_ausdruck(preisart)
     ergebnis = {name: _gruppe(con, nutzer, tag, preis, name) for name in GRUPPEN}
     ergebnis["preisbereiche"] = _preisbereiche(con, nutzer, tag, preis)
@@ -194,10 +196,10 @@ def stand(con) -> tuple:
 
 def _sammlung(con, nutzer: int) -> dict:
     """Der teure Teil: alles, was nur von Karten und Preisen abhängt."""
-    art = werte.PREISART
+    art = werte.gewaehlt(con, nutzer)
     kopf = ha_daten.werte(con, nutzer, art)
     return {
-        "preisart": art,
+        "preisart": art, "preisarten": werte.auswahl(con, nutzer),
         "preise": werte.stand(con),
         "wert": kopf["gesamtwert"], "tag": kopf["preistag"], "ohne_preis": kopf["ohne_preis"],
         "karten": kopf["karten"], "posten": kopf["posten"], "veraenderung": kopf["veraenderung"],
@@ -236,4 +238,26 @@ def routen(h) -> list[Route]:
                 merk.update(daten=_sammlung(con, h.nutzer), stand=jetzt)
             return JSONResponse({**merk["daten"], **_aktuell(con, h.nutzer, date.today())})
 
-    return [Route("/dashboard", dashboard)]
+    @k_._lesen
+    def preisart(request):
+        """Gewählte Preisart und alle wählbaren (für Dashboard, Karten und Kisten)."""
+        with closing(h.db()) as con:
+            return JSONResponse(werte.auswahl(con, h.nutzer))
+
+    @h.schreibend
+    async def preisart_waehlen(request):
+        """Preisart für alle Werte wählen (Paket „Preisart wählbar“); Änderung mit Historie."""
+        d = await h.json_daten(request)
+        art = d.get("preisart")
+        if set(d) - {"preisart"} or art not in werte.PREISARTEN:
+            raise Fehler("Preisart wählen: " + ", ".join(werte.PREISARTEN) + ".")
+
+        def arbeit(con):
+            if art not in werte.arten(con):
+                raise Fehler("Diese Preisart gibt es erst ab Datenbankversion 21.", 409)
+            werte.waehlen(con, h.nutzer, art)
+            return werte.auswahl(con, h.nutzer)
+        return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
+
+    return [Route("/dashboard", dashboard), Route("/preisart", preisart),
+            Route("/preisart", preisart_waehlen, methods=["PUT"])]

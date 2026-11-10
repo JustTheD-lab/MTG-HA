@@ -91,9 +91,16 @@ FARB_RANG = _rang("kd.farbgruppe", FARBEN)
 SELTENHEIT_RANG = _rang("kd.seltenheit", SELTENHEITEN)
 TYP_RANG = _rang("kd.haupttyp", TYPEN, sonst=len(TYPEN) - 1)
 MANA_STUFE = "MIN(CAST(kd.manawert AS INTEGER), 7)"
-# Preis (Durchschnitt 7 Tage, Foil-Karten mit Foil-Preis) des neuesten Tages; `pr` gibt es nur bei dieser
-# Sortierung (PREIS_JOIN). Karten ohne Preis stehen in beiden Richtungen zuletzt.
+# Preis (gewählte Preisart, Foil-Karten mit Foil-Preis) des neuesten Tages; `pr` gibt es nur bei dieser
+# Sortierung (PREIS_JOIN). Karten ohne Preis stehen in beiden Richtungen zuletzt. PREIS ist der Platzhalter
+# mit Ø 7 Tage; `preis_sql` setzt beim Bauen der Abfrage die Spalten der gewählten Art ein.
 PREIS = "(CASE WHEN k.foil THEN pr.avg7_foil ELSE pr.avg7 END)"
+
+
+def preis_sql(sql: str, preisart: str) -> str:
+    """`sql` mit dem Preis der Preisart statt Ø 7 Tage (nur Werte aus werte.PREISARTEN)."""
+    return sql.replace(PREIS, werte.preis_ausdruck(preisart, "pr"))
+
 PREIS_JOIN = (" LEFT JOIN preis pr ON pr.cardmarket_id = kd.cardmarket_id"
               " AND pr.tag = (SELECT MAX(tag) FROM preisabruf)")
 NAME_NOCASE = "k.name COLLATE NOCASE"
@@ -142,7 +149,7 @@ SORTIERUNGEN = {
     "anzahl": Sortierung("Anzahl", "ab", (), ("k.anzahl",)),
     "neu": Sortierung("Zuletzt hinzugefügt", "ab", (), ("k.angelegt", "k.id")),
     "foil": Sortierung("Foil", "ab", (), ("k.foil",)),
-    "preis": Sortierung("Preis (Ø 7 Tage)", "ab", (f"({PREIS} IS NULL)",), (PREIS,)),
+    "preis": Sortierung("Preis", "ab", (f"({PREIS} IS NULL)",), (PREIS,)),
 }
 PREIS_AB_VERSION = 4
 RICHTUNGEN = {"auf": "ASC", "ab": "DESC"}
@@ -515,7 +522,7 @@ def sql_ids(a: Anfrage) -> str:
     return f"SELECT k.id {von(a)} WHERE {_wo(a)} ORDER BY k.id"
 
 
-def sql_karten(a: Anfrage) -> str:
+def sql_karten(a: Anfrage, preisart: str = werte.PREISART) -> str:
     """Seite der Karten einer Kiste; Reihenfolge: Gruppe, gewählte Sortierung, Name ohne Groß/Klein, ID."""
     s = SORTIERUNGEN[a.sort]
     teile: list[str] = []
@@ -534,8 +541,8 @@ def sql_karten(a: Anfrage) -> str:
     if "k.id" not in s.schluessel:
         teile.append("k.id")
     spalten = SPALTEN_SAMMLUNG if a.kiste is None else SPALTEN
-    return (f"SELECT {spalten}{gruppen_spalten} {von(a)} WHERE {_wo(a, nach_index=a.sort == 'name' and not a.gruppe)} "
-            f"ORDER BY {', '.join(teile)} LIMIT ? OFFSET ?")
+    return preis_sql(f"SELECT {spalten}{gruppen_spalten} {von(a)} WHERE {_wo(a, nach_index=a.sort == 'name' and not a.gruppe)} "
+                     f"ORDER BY {', '.join(teile)} LIMIT ? OFFSET ?", preisart)
 
 
 def sql_gesamt(a: Anfrage) -> str:
@@ -558,7 +565,8 @@ def seite_lesen(con, a: Anfrage) -> dict:
     if a.sort == "preis" and version(con) < PREIS_AB_VERSION:
         raise Fehler("Preise gibt es erst ab Datenbankversion 4.", 409)
     gesamt = con.execute(sql_gesamt(a), a.args).fetchone()
-    zeilen = con.execute(sql_karten(a), (*a.args, a.anzahl, a.ab)).fetchall()
+    art = werte.gewaehlt(con)
+    zeilen = con.execute(sql_karten(a, art), (*a.args, a.anzahl, a.ab)).fetchall()
     gruppen = None
     if a.gruppe:
         gruppen = []
@@ -569,7 +577,7 @@ def seite_lesen(con, a: Anfrage) -> dict:
             davor += g["posten"]
     ende = a.ab + len(zeilen)
     karten = [karte_dict(z, a.gruppe) for z in zeilen]
-    preise = werte.preise_fuer_karten(con, [k["id"] for k in karten])   # ab Version 4, sonst leer
+    preise = werte.preise_fuer_karten(con, [k["id"] for k in karten], art)   # ab Version 4, sonst leer
     for k in karten:
         k["preis"] = preise.get(k["id"])
     if a.kiste is None and karten:

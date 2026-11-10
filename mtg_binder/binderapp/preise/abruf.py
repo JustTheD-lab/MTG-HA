@@ -26,12 +26,16 @@ URL = "https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide
 ZEIT = 120
 EINTRAG = re.compile(rb"\{[^{}]*\}")
 ID = re.compile(rb'"idProduct"\s*:\s*(\d+)')
+# Spalten der Tabelle `preis` in der Reihenfolge der eingelesenen Zeilen, dazu die Schlüssel der Preisdatei.
+# Die ersten vier gibt es seit Version 4, die übrigen seit Version 21 (Preisart wählbar).
+SPALTEN = ("low", "avg7", "low_foil", "avg7_foil", "trend", "avg1", "avg30", "trend_foil", "avg1_foil", "avg30_foil")
+SCHLUESSEL = tuple(s.replace("_foil", "-foil") for s in SPALTEN)
 ERSTELLT = re.compile(rb'"createdAt"\s*:\s*"([^"]{10,40})"')
 
 # Aufräumen (Entscheidung des Nutzers, 05.11.2026): Alles bleibt täglich, bis die Preise die Grenze erreichen; dann
 # fallen die ältesten Tage weg. Die Größe wird aus der Zeilenzahl geschätzt (dbstat fehlt in manchem SQLite).
 GRENZE_MB = 200
-BYTES_JE_ZEILE = 95    # gemessen am 05.11.2026 auf einer Kopie: Tabelle preis mit Primärschlüssel
+BYTES_JE_ZEILE = 133   # gemessen am 10.11.2026 (Version 21, zehn Preisspalten; vorher 95 mit vier): Tabelle preis mit Primärschlüssel
 SCHUTZ_TAGE = 40       # nie löschen: Veränderung nach 30 Tagen (Toleranz 3) und verlauf_karte (40 Tage) brauchen sie
 
 log =logging.getLogger("binderapp.preise")
@@ -108,8 +112,8 @@ def einlesen(roh: bytes, ids: set[int]) -> tuple[str, int, list[tuple]]:
         if pid not in ids:
             continue
         d = json.loads(e.group())
-        zeilen.append((pid, _zahl(d.get("low")), _zahl(d.get("avg7")), _zahl(d.get("low-foil")),
-                       _zahl(d.get("avg7-foil"))))
+        # (Produkt, low, avg7, low_foil, avg7_foil, dann ab Version 21 die übrigen Arten in SPALTEN_NEU)
+        zeilen.append((pid, *(_zahl(d.get(schluessel)) for schluessel in SCHLUESSEL)))
     if produkte < 1000:
         raise AbrufFehler(f"Die Preisdatei sieht unvollständig aus ({produkte} Produkte).")
     return erstellt, produkte, zeilen
@@ -121,8 +125,10 @@ def speichern(con, erstellt: str, produkte: int, zeilen: list[tuple], nachtragen
     tag = erstellt[:10]
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", tag):
         raise AbrufFehler(f"Unbekanntes Datum in der Preisdatei: {erstellt}")
-    con.executemany("INSERT OR REPLACE INTO preis (cardmarket_id, tag, low, avg7, low_foil, avg7_foil)"
-                    " VALUES (?, ?, ?, ?, ?, ?)", [(z[0], tag, *z[1:]) for z in zeilen])
+    spalten = SPALTEN if version(con) >= 21 else SPALTEN[:4]
+    con.executemany(f"INSERT OR REPLACE INTO preis (cardmarket_id, tag, {', '.join(spalten)})"
+                    f" VALUES (?, ?, {', '.join('?' for _ in spalten)})",
+                    [(z[0], tag, *z[1:len(spalten) + 1]) for z in zeilen])
     con.execute("INSERT INTO preisabruf (tag, erstellt, abgerufen, produkte, gespeichert) VALUES (?, ?, ?, ?, ?)"
                 " ON CONFLICT(tag) DO UPDATE SET erstellt = excluded.erstellt, produkte = excluded.produkte,"
                 " gespeichert = excluded.gespeichert,"

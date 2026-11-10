@@ -168,19 +168,20 @@ def _kandidaten(pool: dict, z: dict) -> list:
     return pool[z["oracle_id"]] if z["oracle_id"] else pool["#" + z["name"].lower()]
 
 
-def zeilen_preise(con, deck_id: int, preisart: str = preise.PREISART) -> dict[int, float]:
+def zeilen_preise(con, deck_id: int, preisart: str | None = None) -> dict[int, float]:
     """{deck_karte_id: Einzelpreis} = günstigstes Produkt der Zeile am neuesten Preistag (Foil-Zeilen: Foil-Preis)."""
     tag = preise.neuester_tag(con)
     if tag is None:
         return {}
-    ausdruck = preise.preis_ausdruck(preisart)   # nutzt k.foil: hier die Deckzeile
+    ausdruck = preise.preis_ausdruck(preise.aufloesen(con, preisart))   # nutzt k.foil: hier die Deckzeile
     sql = (f"SELECT k.id, MIN({ausdruck}) FROM deck_karte k JOIN deck_produkt dp ON dp.deck_karte_id = k.id "
            f"JOIN preis p ON p.cardmarket_id = dp.cardmarket_id AND p.tag = ? WHERE k.deck_id = ? GROUP BY k.id")
     return {z[0]: round(z[1], 2) for z in con.execute(sql, (tag, deck_id)) if z[1] is not None}
 
 
-def abgleichen(con, nutzer: int, deck, preisart: str = preise.PREISART) -> dict:
-    """Deck mit Zeilen, Abgleich, Preisen und Summen."""
+def abgleichen(con, nutzer: int, deck, preisart: str | None = None) -> dict:
+    """Deck mit Zeilen, Abgleich, Preisen und Summen (ohne Preisart die Einstellung des Nutzers)."""
+    preisart = preise.aufloesen(con, preisart, nutzer)
     zeilen = [dict(z) for z in con.execute(
         "SELECT * FROM deck_karte WHERE deck_id = ? ORDER BY commander DESC, basic, name COLLATE NOCASE, id",
         (deck["id"],))]

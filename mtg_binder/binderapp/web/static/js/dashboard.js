@@ -1,4 +1,5 @@
-// Dashboard: die ganze Sammlung auf einer Seite (Wunsch des Nutzers, 06.11.2026). Nur lesend.
+// Dashboard: die ganze Sammlung auf einer Seite (Wunsch des Nutzers, 06.11.2026). Nur lesend, bis auf die Wahl der
+// Preisart (PUT /api/preisart, Paket „Preisart wählbar“, 10.11.2026): Sie gilt für alle Werte der App und Home Assistant.
 //
 //   #/dashboard            Wert mit Verlauf, Kennzahlen, teuerste Karten, Gewinner und Verlierer, Verteilungen,
 //                          Binder und Kisten, Zuwachs, Scans, fast vollständige Sets, kommende Secret-Lair-Drops
@@ -8,7 +9,7 @@
 // SVG in echter Pixelbreite, Balken und Säulen sind HTML. Alle Verteilungen sind einfarbig (Messing) und tragen ihren
 // Namen als Text, die Farbe sagt also nie allein, was gemeint ist; die Punkte bei den Magic-Farben sind nur Beiwerk.
 
-import { holen, esc, gehe, zurueck, euro, bildUrl, scryfallBild, adresse, vorliebe } from './gemeinsam.js';
+import { holen, senden, fehlerText, esc, gehe, zurueck, euro, bildUrl, scryfallBild, adresse, vorliebe } from './gemeinsam.js';
 import { dialogOffen } from './dialog.js';
 import { laden as sitzungLaden } from './anmeldung.js';
 
@@ -255,11 +256,18 @@ function mitUebrigen(liste, sicht, wieviele) {
 function kopfHtml(d) {
   const v = d.veraenderung;
   const zeile = (titel, x) => `<div class="dash-vergleich"><span class="etikett">${esc(titel)}</span>${delta(x?.euro, x?.prozent)}</div>`;
-  const stand = d.tag ? `Cardmarket, Ø 7 Tage, Preise vom ${datum(d.tag)}` : 'Noch keine Preise abgerufen';
+  const p = d.preisarten ?? { preisart: 'avg7', name: 'Ø 7 Tage', arten: [] };
+  const wahl = p.arten.length > 1
+    ? `<label class="dash-preisart-wahl">Preisart <select class="feld dash-preisart" aria-describedby="dash-preisart-hinweis">`
+      + p.arten.map((a) => `<option value="${esc(a.wert)}"${a.wert === p.preisart ? ' selected' : ''}>${esc(a.text)}</option>`).join('')
+      + '</select></label><span class="dash-preisart-hinweis" id="dash-preisart-hinweis">gilt für alle Werte der App und für Home Assistant</span>'
+      + '<span class="dash-preisart-fehler" role="alert"></span>'
+    : '';
+  const stand = d.tag ? `Cardmarket, ${p.name}, Preise vom ${datum(d.tag)}` : 'Noch keine Preise abgerufen';
   return '<section class="dash-tafel dash-kopf"><div class="dash-held"><div>'
     + '<p class="etikett">Wert der Sammlung</p>'
     + `<p class="dash-gesamt">${esc(d.wert == null ? '–' : euro(d.wert, { rund: d.wert >= 1000 }))}</p>`
-    + `<p class="dash-unter">${esc(stand)}</p></div>`
+    + `<p class="dash-unter">${esc(stand)}</p>${wahl ? `<p class="dash-unter dash-preisart-zeile">${wahl}</p>` : ''}</div>`
     + `<div class="dash-vergleiche">${zeile('Seit gestern', v.vortag)}${zeile('3 Tage', v.tage3)}${zeile('30 Tage', v.tage30)}</div></div>`
     + '<div class="dash-verlauf-kopf"><div><h2 class="dash-titel">Preisentwicklung</h2>'
     + '<p class="dash-unter">Die Karten von heute zu den Preisen des jeweiligen Tages. Neue Karten verändern die Kurve nicht.</p></div>'
@@ -506,6 +514,20 @@ export async function zeigen(wurzel) {
   z.tip.setAttribute('role', 'status');
   bereich.append(z.tip);
   verdrahten(bereich);
+  bereich.addEventListener('change', async (e) => {
+    const auswahl = e.target.closest('.dash-preisart');
+    if (!auswahl) return;
+    const fehler = bereich.querySelector('.dash-preisart-fehler');
+    auswahl.disabled = true;
+    try {
+      await senden('/api/preisart', { methode: 'PUT', daten: { preisart: auswahl.value } });
+      if (Z === z) zeigen(wurzel);   // alle Werte neu, in der neuen Preisart
+    } catch (f) {
+      auswahl.value = z.daten?.preisarten?.preisart ?? auswahl.value;
+      auswahl.disabled = false;
+      if (fehler) fehler.textContent = f?.message || fehlerText(f?.status ?? 0);
+    }
+  });
   z.taste = (e) => {
     if (e.key === 'Escape' && !dialogOffen() && Z === z && !/\/karte\/\d+/.test(location.hash)) zurueck('#/');
   };

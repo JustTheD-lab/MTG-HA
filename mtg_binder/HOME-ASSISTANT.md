@@ -42,7 +42,7 @@ Die Entitäts-IDs entstehen aus „MTG“ und dem Namen. Wer eine ID in Home Ass
 | `sensor.mtg_kiste_<name>_wert`, `sensor.mtg_kiste_<name>_karten` | je Kiste | 1 h |
 | `sensor.mtg_deck_<name>_wert`, `sensor.mtg_deck_<name>_karten` | je Deck: Wert und Zahl der Karten, die im Deck liegen; Attribut `fehlt_kosten` (Kosten der Fehlt-Liste) | 1 h |
 
-- Werte und Top-Listen nutzen die Preisart **Ø 7 Tage** von Cardmarket, Foil-Karten den Foil-Preis.
+- Werte und Top-Listen nutzen die Preisart, die im Dashboard der App gewählt ist (Standard **Ø 7 Tage**; Low, Trend, Ø 1, Ø 7 oder Ø 30 Tage von Cardmarket), Foil-Karten den Foil-Preis. Nach einer neuen Wahl kommen die Werte in der nächsten Runde (spätestens nach einer Minute).
 - Nach jedem neuen Preistag kommen die Werte sofort, nicht erst zur vollen Stunde.
 - Die **Veränderung** rechnet mit dem heutigen Bestand und den Preisen des früheren Tages. Neu hinzugekommene Karten
   verfälschen sie also nicht.

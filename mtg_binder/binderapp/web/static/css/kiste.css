@@ -213,7 +213,7 @@
 .z-meta { grid-area: meta; display: flex; align-items: center; gap: 0; min-width: 0; font-size: 0.8rem; color: var(--text-3);
   white-space: nowrap; overflow: hidden; }
 .z-meta > span { padding: 0; }
-.z-meta > span:not(:empty) + span:not(:empty)::before { content: "·"; margin: 0 7px; color: var(--linie-stark); }
+.z-meta > span:not(:empty) ~ span:not(:empty)::before { content: "·"; margin: 0 7px; color: var(--linie-stark); }
 .z-typ, .z-selt { overflow: hidden; text-overflow: ellipsis; }
 .z-foil { color: var(--messing); }
 .kiste-zeile .kiste-ab { margin-left: 2px; }

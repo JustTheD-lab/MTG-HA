@@ -206,7 +206,8 @@ const BAUER = {
     const wert = el('select', 'feld regeln-farbart');
     wert.setAttribute('aria-label', 'Preis: Art');
     wert.innerHTML = Object.entries(b.preiswerte).map(([x, text]) => `<option value="${esc(x)}">${esc(text)}</option>`).join('');
-    wert.value = w.wert && b.preiswerte[w.wert] ? w.wert : 'avg7';
+    // neue Bedingungen folgen der Preisart aus dem Dashboard; gespeicherte behalten ihre Art
+    wert.value = w.wert && b.preiswerte[w.wert] ? w.wert : (b.preiswerte.einstellung ? 'einstellung' : 'avg7');
     const [la, ab] = zahlFeld('ab €', w.ab);
     const [lu, unter] = zahlFeld('unter €', w.unter);
     const reihe = el('div', 'regeln-zahlen');

@@ -1,5 +1,20 @@
 # Änderungen
 
+## 0.43.0
+- **Preisart wählbar.** Im Dashboard steht neben dem Wert der Sammlung die Wahl der Preisart: Low, Trend, Ø 1 Tag,
+  Ø 7 Tage (wie bisher) oder Ø 30 Tage von Cardmarket, bei Foil-Karten jeweils der Foil-Preis. Die Wahl gilt überall:
+  Karten, Binder, Kisten, Sammlung, Sets, Decks, Sortierung nach Preis, Dashboard und die Werte in Home Assistant.
+- Die Kartenansicht zeigt alle fünf Preise, die gewählte Art ist hervorgehoben. Auf den Karten steht weiter „ab“ (Low)
+  und daneben die gewählte Art.
+- Sortierregeln behalten ihre eigene Preisart; neu sind alle fünf Arten und „wie Einstellung“.
+- Trend, Ø 1 Tag und Ø 30 Tage speichert das Add-on ab dem ersten Preisabruf nach dem Update. Veränderungen dieser
+  Arten (Vortag, 3 und 30 Tage) erscheinen, sobald genug Tage gesammelt sind.
+- Datenbank Version 21 (wird beim Start angepasst).
+- **PC-Erkennung: Updates zuverlässiger.** Ist eine Datei beim Austauschen kurz gesperrt (zum Beispiel durch den
+  Virenscanner), versucht das Update es rund 20 Sekunden lang erneut, statt abzubrechen. Jeder Fehler beim Update steht
+  mit allen Einzelheiten in `data\addon_zwischen\update.log` im Programmordner. Scheitert das Update auf 0.43.0 noch
+  mit der alten Version, einmal das neue Setup über die bestehende Installation ausführen.
+
 ## 0.42.0
 - **Sicherung zurückspielen.** In der Verwaltung gibt es „Sicherung zurückspielen …“: eine Liste aller Sicherungen
   (täglich im Add-on und auf dem Netzlaufwerk, vor Updates, Importen und Abzügen, vor „Datenbank löschen“) mit Datum,

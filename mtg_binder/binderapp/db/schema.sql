@@ -16,7 +16,9 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS nutzer (
     id        INTEGER PRIMARY KEY,
     name      TEXT NOT NULL UNIQUE,
-    angelegt  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+    angelegt  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    -- ab Version 21: Preisart für alle Werte (preise.werte.PREISARTEN), Änderung mit Historie
+    preisart  TEXT NOT NULL DEFAULT 'avg7' CHECK (preisart IN ('low', 'trend', 'avg1', 'avg7', 'avg30'))
 );
 
 -- Originalfoto einer Binderseite. Das Original selbst wird nie verändert.
@@ -170,6 +172,13 @@ CREATE TABLE IF NOT EXISTS preis (
     avg7           REAL,
     low_foil       REAL,
     avg7_foil      REAL,
+    -- ab Version 21 (Preisart wählbar): weitere Werte der Preisdatei; Verlauf erst ab dem Speichern
+    trend          REAL,
+    avg1           REAL,
+    avg30          REAL,
+    trend_foil     REAL,
+    avg1_foil      REAL,
+    avg30_foil     REAL,
     PRIMARY KEY (cardmarket_id, tag)
 );
 
@@ -484,4 +493,4 @@ CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 -- ab Version 14: Ausschnitt je Scan-Foto
 CREATE INDEX IF NOT EXISTS i_scan_foto_karte  ON scan_foto(karte_id);
 
-PRAGMA user_version = 20;
+PRAGMA user_version = 21;

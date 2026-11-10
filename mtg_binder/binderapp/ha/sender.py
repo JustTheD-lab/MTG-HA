@@ -175,10 +175,10 @@ class Sender(threading.Thread):
     """Schickt Status (jede Minute) und Werte (stündlich, nach neuem Preistag sofort) an den Broker."""
 
     def __init__(self, db: Path, daten_ordner: Path, version: str, dienst=supervisor_dienst,
-                 preisart: str = preise.PREISART, takt_status: float = TAKT_STATUS, takt_werte: float = TAKT_WERTE,
+                 preisart: str | None = None, takt_status: float = TAKT_STATUS, takt_werte: float = TAKT_WERTE,
                  warten_fehler: float = WARTEN_FEHLER):
         super().__init__(name="ha-mqtt", daemon=True)
-        if preisart not in preise.PREISARTEN:
+        if preisart is not None and preisart not in preise.PREISARTEN:
             raise ValueError(f"unbekannte Preisart {preisart!r}")
         self.db, self.stand_datei, self.version, self.dienst = Path(db), Path(daten_ordner) / STAND_DATEI, version, dienst
         self.preisart, self.takt_status, self.takt_werte, self.warten_fehler = preisart, takt_status, takt_werte, warten_fehler
@@ -186,7 +186,7 @@ class Sender(threading.Thread):
         self.halt = threading.Event()
         self.letzter_fehler: str | None = None
         self.letzte_werte = float("-inf")   # monotonic() kann klein sein (frisch gestarteter Rechner)
-        self.preistag: str | None = None
+        self.preistag: tuple | None = None   # (Preistag, Preisart) der zuletzt gesendeten Werte
 
     # ------------------------------------------------------------ Verbindung
 
@@ -216,7 +216,8 @@ class Sender(threading.Thread):
             return
         with closing(verbinden(self.db, nur_lesen=True)) as con:
             status = daten.status(con)
-            tag = preise.neuester_tag(con)
+            # Neuer Preistag oder eine andere Preisart (Einstellung in der App): Werte sofort
+            tag = (preise.neuester_tag(con), preise.aufloesen(con, self.preisart))
             neue_werte = None
             if jetzt - self.letzte_werte >= self.takt_werte or tag != self.preistag:
                 neue_werte = daten.werte(con, preisart=self.preisart)

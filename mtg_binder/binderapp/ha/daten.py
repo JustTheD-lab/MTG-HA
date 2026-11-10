@@ -5,7 +5,7 @@ Zwei Gruppen mit eigenem Takt (Entscheidung des Nutzers, 02.11.2026):
   werte()   stündlich: Gesamtwert mit Veränderung (Euro und Prozent), Kartenzahlen, Binder und Kisten, Top 5
 
 Nichts wird neu berechnet oder gespeichert: Es sind dieselben Abfragen wie in der App (Regal, Sammlung,
-Prüfansicht, preise.werte). Die Preisart ist eine Einstellung (preise.werte.PREISARTEN), heute Ø 7 Tage.
+Prüfansicht, preise.werte). Die Preisart ist eine Einstellung (preise.werte.PREISARTEN), wählt der Nutzer in der App (Standard Ø 7 Tage).
 """
 from __future__ import annotations
 
@@ -95,7 +95,8 @@ def status(con, nutzer: int = NUTZER) -> dict:
     }
 
 
-def werte(con, nutzer: int = NUTZER, preisart: str = preise.PREISART) -> dict:
+def werte(con, nutzer: int = NUTZER, preisart: str | None = None) -> dict:
+    preisart = preise.aufloesen(con, preisart, nutzer)   # ohne Angabe die Einstellung des Nutzers
     gesamt = preise.gesamtwert(con, nutzer, preisart)
     sammlung = con.execute(SQL_SAMMLUNG.format(deck="OR deck_id IS NOT NULL" if version(con) >= 8 else ""),
                            (nutzer,)).fetchone()

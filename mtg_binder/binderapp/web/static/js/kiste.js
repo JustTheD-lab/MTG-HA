@@ -21,7 +21,7 @@
 // und späte Antworten verworfen (Zählung `gen`). Es werden nur transform und opacity animiert.
 
 import { esc, bildUrl, gehe, zurueck, senden, fehlerText, SchnittstellenFehler, vorliebe, bewegungReduziert,
-  adresse as serverAdresse, scryfallBild, euro, preisStreifen, preisText, warten } from './gemeinsam.js';
+  adresse as serverAdresse, scryfallBild, euro, preisStreifen, preisText, preisWahl, warten } from './gemeinsam.js';
 import { knopf as anmeldeKnopf, angemeldet, sitzung } from './anmeldung.js';
 import { dialog, bestaetigen, dialogOffen } from './dialog.js';
 import { druckWaehlen } from './pruefen.js';
@@ -301,7 +301,7 @@ function listeHtml(k, i) {
     + `<span class="z-selt">${esc(selt)}</span>`
     + `<span class="z-spr" title="${esc(sprachName(k.sprache))}">${esc((k.sprache ?? '').toUpperCase())}</span>`
     + `<span class="z-foil">${k.foil ? 'Foil' : ''}</span>`
-    + `<span class="z-preis">${k.preis?.avg7 != null ? `Ø ${esc(euro(k.preis.avg7))}` : ''}</span>`
+    + `<span class="z-preis">${preisWahl(k.preis).wert != null ? `${esc(preisWahl(k.preis).kurz)} ${esc(euro(preisWahl(k.preis).wert))}` : ''}</span>`
     + '</span>'
     + (S.sammlung ? `<span class="z-ort" title="${esc(ort)}">${esc(ort) || '–'}</span>` : '')
     + '</a></li>';
@@ -480,7 +480,7 @@ function geruestHtml(s) {
     <div class="kiste-huelle" aria-live="off">
       <div class="fachkasten-platz" hidden></div>
       <div class="kiste-listenkopf" aria-hidden="true"><span>Anz.</span><span>Name</span>${s.sammlung ? '<span>Ort</span>' : ''}<span>Set</span><span class="lk-mw">MW</span>
-        <span class="lk-typ">Typ</span><span class="lk-selt">Seltenheit</span><span>Spr.</span><span>Foil</span><span class="lk-preis">Ø 7 T.</span></div>
+        <span class="lk-typ">Typ</span><span class="lk-selt">Seltenheit</span><span>Spr.</span><span>Foil</span><span class="lk-preis">Preis</span></div>
       <div class="kiste-oben" hidden></div>
       <ul class="kiste-liste" aria-label="Karten der Kiste"></ul>
       <div class="kiste-hub" aria-hidden="true"><div class="kiste-hub-bild"></div><div class="kiste-hub-kante"></div></div>

@@ -7,7 +7,8 @@
 // „×", Esc und Tippen auf den Hintergrund rufen zurueck(basis) auf. Der Wegweiser (app.js) ruft dann
 // schliessen() auf. Gezeichnet wird in #ebene-karte; animiert werden nur transform und opacity.
 
-import { holen, bildUrl, bildSrcset, BREITEN, esc, zurueck, bewegungReduziert, vorliebe, scryfallBild, euro }
+import { holen, bildUrl, bildSrcset, BREITEN, esc, zurueck, bewegungReduziert, vorliebe, scryfallBild, euro,
+  PREISARTEN, preisWahl }
   from './gemeinsam.js';
 import { dialogOffen } from './dialog.js';
 import { angemeldet, anmelden } from './anmeldung.js';
@@ -283,16 +284,21 @@ function preiseHtml(k) {
     return `<section class="karte-preise"><h3 class="etikett">Preise</h3>
       <p class="karte-neben">Für diesen Druck ist kein Cardmarket-Produkt bekannt.</p></section>`;
   }
-  const v = p.veraenderung ?? { low: {}, avg7: {} };
-  const zeile = (name, feld) => `<tr><th scope="row">${name}</th><td class="preis-betrag">${euro(p[feld])}</td>`
+  const v = p.veraenderung ?? {};
+  const arten = p.arten ?? ['low', 'avg7'];
+  const art = preisWahl(p).art;
+  // Alle gespeicherten Preisarten; die gewählte (Dashboard) ist hervorgehoben und gilt für alle Werte
+  const zeile = (feld) => `<tr${feld === art ? ' class="preis-gewaehlt"' : ''}><th scope="row">`
+    + `${esc(PREISARTEN[feld]?.name ?? feld)}${feld === art ? '<span class="nur-vorleser"> (gewählt)</span>' : ''}</th>`
+    + `<td class="preis-betrag">${euro(p[feld])}</td>`
     + ['vortag', 'tage3', 'tage30'].map((t) => `<td>${veraenderungHtml(v[feld]?.[t])}</td>`).join('') + '</tr>';
   const stand = p.tag ? new Date(`${p.tag}T12:00:00`).toLocaleDateString('de-DE') : '';
-  const fehltNoch = ['vortag', 'tage3', 'tage30'].some((t) => v.low?.[t] == null && v.avg7?.[t] == null);
+  const fehltNoch = ['vortag', 'tage3', 'tage30'].some((t) => v[art]?.[t] == null);
   return `<section class="karte-preise" aria-labelledby="karte-preise-titel">
       <h3 class="etikett" id="karte-preise-titel">Preise${p.foil ? ' (Foil)' : ''}</h3>
       <table class="preis-tabelle">
         <thead><tr><th></th><th scope="col">Preis</th><th scope="col">Vortag</th><th scope="col">3 Tage</th><th scope="col">30 Tage</th></tr></thead>
-        <tbody>${zeile('Low', 'low')}${zeile('Ø 7 Tage', 'avg7')}</tbody>
+        <tbody>${arten.map(zeile).join('')}</tbody>
       </table>
       <p class="karte-neben">Cardmarket, Stand ${esc(stand)}${fehltNoch ? ' · Veränderungen erscheinen, sobald genug Tage gesammelt sind' : ''}</p>
     </section>`;

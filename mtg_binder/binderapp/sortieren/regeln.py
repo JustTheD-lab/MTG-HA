@@ -11,7 +11,9 @@ Eine Bedingung ist ein Wörterbuch mit `feld` aus FELDER, den Werten ihrer Art u
     {"feld": "set", "werte": ["sld", "plst"]}                   Set-Kürzel
     {"feld": "typzeile", "text": "Legendary"}                   enthält (auch name), ohne Groß-/Kleinschreibung
     {"feld": "foil"}                                            ja (auch promo); mit "nicht": true = nein
-    {"feld": "preis", "wert": "avg7" | "low", "ab": 5, "unter": null}   Euro, Foil-Karten mit Foil-Preis
+    {"feld": "preis", "wert": "avg7" | "low" | … | "einstellung", "ab": 5, "unter": null}
+                                                                Euro, Foil-Karten mit Foil-Preis; Arten wie
+                                                                preise.werte.PREISARTEN, „einstellung“ = gewählte
 
 Alle Bedingungen einer Regel müssen zutreffen (UND). Die Auswertung kennt drei Werte: zutreffend, nicht zutreffend
 und unbekannt (ein Wert fehlt, zum Beispiel der Preis oder die Kartendaten). SQL liefert dafür 1, 0 und NULL; eine
@@ -27,6 +29,7 @@ import re
 
 from binderapp.db.seiten import Fehler
 from binderapp.katalog.kartendaten import BESONDERHEITEN, FARBFOLGE, FOIL_SONDERARTEN, HAUPTTYPEN
+from binderapp.preise import werte as werte_preise
 
 HOECHSTENS_BEDINGUNGEN = 12
 HOECHSTENS_WERTE = 60
@@ -53,7 +56,10 @@ SET_ARTEN = {"expansion": "Erweiterung", "core": "Grundset", "masters": "Masters
 SPRACHEN = {"en": "Englisch", "de": "Deutsch", "fr": "Französisch", "it": "Italienisch", "es": "Spanisch",
             "pt": "Portugiesisch", "ja": "Japanisch", "ko": "Koreanisch", "ru": "Russisch", "zhs": "Chinesisch (verein.)",
             "zht": "Chinesisch (trad.)", "ph": "Phyrexianisch"}
-PREISWERTE = {"avg7": "Ø 7 Tage", "low": "Low"}
+# Preisart je Preisbedingung (Paket „Preisart wählbar“, 10.11.2026): jede Art einzeln oder „wie Einstellung“, dann
+# gilt die Preisart des Nutzers (nutzer.preisart, ab Version 21). Bestehende Regeln behalten ihre Art.
+EINSTELLUNG = "einstellung"
+PREISWERTE = {EINSTELLUNG: "wie Einstellung", **werte_preise.NAMEN}
 
 # Feld → Art und Anzeige. Die Oberfläche bekommt das als Beschreibung (`beschreibung()`).
 FELDER = {
@@ -80,8 +86,7 @@ _SPALTE = {
     "set": "lower(k.set_code)", "set_art": "d.set_art", "promo": "d.promo", "foil": "k.foil",
     "sprache": "k.sprache", "name": "k.name",
 }
-_ROHPREIS = {"avg7": "(CASE WHEN k.foil THEN p.avg7_foil ELSE p.avg7 END)",
-             "low": "(CASE WHEN k.foil THEN p.low_foil ELSE p.low END)"}
+_ROHPREIS = {art: werte_preise.preis_ausdruck(art) for art in werte_preise.PREISARTEN}
 # Fehlt der Preis endgültig, zählt er als 0 € (Entscheidung des Nutzers, 01.11.2026): Die Karte hat kein Produkt bei
 # Cardmarket, oder der Preisabruf des neuesten Tages lief nach dem Eintragen ihrer Kartendaten und fand keinen
 # Preis. Fehlen die Kartendaten oder steht der Preisnachtrag noch aus, bleibt der Preis unbekannt (die Karte wartet).
@@ -89,6 +94,8 @@ _ROHPREIS = {"avg7": "(CASE WHEN k.foil THEN p.avg7_foil ELSE p.avg7 END)",
 _PREIS = {wert: (f"(CASE WHEN {roh} IS NOT NULL THEN {roh} WHEN d.scryfall_id IS NULL THEN NULL"
                  " WHEN d.cardmarket_id IS NULL THEN 0 WHEN pa.abgerufen > d.geaendert THEN 0 ELSE NULL END)")
           for wert, roh in _ROHPREIS.items()}
+_PREIS[EINSTELLUNG] = ("(CASE (SELECT n.preisart FROM nutzer n WHERE n.id = k.nutzer_id) "
+                       + " ".join(f"WHEN '{art}' THEN {sql}" for art, sql in _PREIS.items()) + " END)")
 _SET = re.compile(r"^[a-z0-9]{2,8}$")
 
 # Fürs Grund-Feld: welcher Wert fehlt, wenn eine Bedingung unbekannt ist
@@ -178,7 +185,7 @@ def bedingung_pruefen(roh) -> dict:
     elif art == "preis":
         wert = roh.get("wert", "avg7")
         if wert not in PREISWERTE:
-            raise Fehler("Preis: Low oder Ø 7 Tage wählen.")
+            raise Fehler("Preis: eine Preisart wählen (" + ", ".join(PREISWERTE.values()) + ").")
         ab = _zahl(roh.get("ab"), "Preis ab", 0, 100000)
         unter = _zahl(roh.get("unter"), "Preis unter", 0, 100000)
         if ab is None and unter is None:
