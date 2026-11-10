@@ -107,6 +107,37 @@ export function euro(wert, { rund = false } = {}) {
   });
 }
 
+// ---------- Gewinn und Verlust gegen den Kaufpreis (Paket 8, preise/gewinn.py) ----------
+
+/** „+4,50 € (+17,6 %)“ bzw. „−3,00 € (−60,0 %)“; ohne Wert „–“. */
+export function gewinnText(b) {
+  if (b?.gewinn == null) return '–';
+  const v = b.gewinn > 0 ? '+' : b.gewinn < 0 ? '−' : '±';
+  const p = b.prozent == null ? '' : ` (${v}${Math.abs(b.prozent).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %)`;
+  return `${v}${euro(Math.abs(b.gewinn))}${p}`;
+}
+
+/** Klasse für die Farbe: gewinn-plus, gewinn-minus oder leer. */
+export const gewinnKlasse = (b) => (b?.gewinn > 0 ? 'gewinn-plus' : b?.gewinn < 0 ? 'gewinn-minus' : '');
+
+const kartenWort = (n) => `${Number(n).toLocaleString('de-DE')} ${n === 1 ? 'Karte' : 'Karten'}`;
+
+/** Karten, die nicht mitzählen: „12 ohne Kaufpreis · 2 andere Währung · 1 ohne heutigen Preis“ (leer, wenn keine). */
+export function ausgenommenText(b) {
+  if (!b) return '';
+  return [b.ohne_kaufpreis ? `${kartenWort(b.ohne_kaufpreis)} ohne Kaufpreis` : '',
+    b.fremdwaehrung ? `${kartenWort(b.fremdwaehrung)} in anderer Währung` : '',
+    b.ohne_preis ? `${kartenWort(b.ohne_preis)} ohne heutigen Preis` : ''].filter(Boolean).join(' · ');
+}
+
+/** Kaufpreis aus einem Eingabefeld: Zahl (Komma erlaubt, „€“ darf dabei stehen), null bei leerem Feld, NaN bei Unsinn. */
+export function kaufpreisLesen(text) {
+  const t = String(text ?? '').trim().replace(/\s*€$/, '').replace(',', '.');
+  if (t === '') return null;
+  if (!/^\d{1,6}(\.\d{1,2})?$/.test(t)) return NaN;
+  return Number(t);
+}
+
 /** Preisarten (preise/werte.py, NAMEN): Name, Kurzform für Streifen und Listen, Satz für Vorleser. */
 export const PREISARTEN = {
   low: { name: 'Low', kurz: 'ab', satz: 'ab' },

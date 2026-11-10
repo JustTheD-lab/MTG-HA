@@ -1,5 +1,35 @@
 # Änderungen
 
+## 0.52.0
+- **Gewinn und Verlust aus Kaufpreisen.** Den Kaufpreis (Euro je Karte) trägst du jetzt in der App ein: in der
+  Kartenansicht („Kaufpreis eintragen“ bzw. „ändern“) oder für viele Karten auf einmal im Auswahlmodus von Kiste und
+  Sammlung („Kaufpreis eintragen …“). „Entfernen“ löscht ihn wieder; jede Änderung lässt sich rückgängig machen.
+- Kaufpreis gegen den heutigen Wert (gewählte Preisart) mit Gewinn oder Verlust in Euro und Prozent: in der
+  Kartenansicht, im Kopf jeder Kiste und der Sammlung, im Binder neben dem Wert und im Dashboard (Kachel „Gegen
+  Kaufpreis“). Es zählen nur Karten mit Kaufpreis in Euro und heutigem Preis; wie viele ohne Kaufpreis, in anderer
+  Währung oder ohne heutigen Preis sind, steht sichtbar daneben. Keine Kaufempfehlung, nur Zahlen.
+- Die Änderungshistorie der Karte nennt Kaufpreis und Währung.
+- Keine Änderung an der Datenbank.
+
+## 0.51.0
+- **Kaufliste mit Preisalarm.** Neuer Knopf „Kaufliste“ im Regal: die fehlenden Karten der Decks, deren Schalter
+  „In Kaufliste“ an ist (in der Kaufliste oder in der Deckansicht), dazu eigene Einträge (Name oder genauer Druck,
+  Foil, Anzahl), mit Preis der gewählten Preisart und Summe. Je Karte ein Wunschpreis; der Knopf „90 %“ übernimmt
+  90 % des heutigen Preises. Karten, deren Preis auf oder unter den Wunschpreis fällt, sind markiert und lassen sich
+  allein anzeigen; „Liste kopieren“ liefert den Text für Cardmarket. Jede Änderung lässt sich rückgängig machen.
+  Keine Kaufempfehlung, nur Zahlen.
+- **Home Assistant:** neuer Sensor „Kaufliste unter Wunschpreis“ (Zahl der Karten, Liste als Attribut); Anleitung für
+  eine Benachrichtigung in `HOME-ASSISTANT.md`.
+- Datenbank Version 23 (neue Tabellen für die Kaufliste); die Umstellung läuft beim Start von selbst.
+
+## 0.50.0
+- **Kisten nach geänderten Regeln umräumen.** Knopf „Umräumen“ in jeder Kiste und in der Gesamtsammlung: Liste der
+  Karten, die nach den heutigen Sortierregeln in eine andere Kiste gehören (mit Zielfach und Regel), für diese Kiste
+  oder alle Kisten. Abhaken wie im Deckbau (bleibt gespeichert); „Fertig“ verschiebt die abgehakten Karten in der App
+  als ein Schritt mit Rückgängig. Die echten Karten räumst du von Hand um. Scan-Eingang, „Zurückgestellt“, Binder und
+  Decks bleiben, wie sie sind; das Limit je Karte wird berücksichtigt.
+- Datenbank Version 22 (neue Tabelle für die Haken der Umräumliste); die Umstellung läuft beim Start von selbst.
+
 ## 0.49.0
 - **Limit je Karte als Bedingung der Sortierregeln.** Neue Bedingung „Über dem Limit“ (z. B. „mehr als 4
   Exemplare“): Gezählt wird je Druck, Foil getrennt, Sprache nicht; Binder, Kisten und Decks zählen mit. Steht eine

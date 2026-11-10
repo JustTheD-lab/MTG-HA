@@ -17,7 +17,7 @@
 // Exporte für den Wegweiser (app.js): zeigen, aktualisieren, verlassen.
 
 import { holen, senden, geaendert, bildUrl, bildSrcset, esc, gehe, zurueck, bewegungReduziert, istBreit, vorliebe, warten,
-  euro, preisStreifen, preisText, scryfallBild } from './gemeinsam.js';
+  euro, preisStreifen, preisText, scryfallBild, gewinnText, gewinnKlasse, ausgenommenText } from './gemeinsam.js';
 import { dialog, bestaetigen, dialogOffen } from './dialog.js';
 import { angemeldet, knopf as anmeldeKnopf } from './anmeldung.js';
 import { BINDERFARBEN, farbwahl, tischFarbe } from './farbrad.js';
@@ -225,6 +225,18 @@ function titelSetzen(titel, binder) {
   w.title = 'Wert: Summe aus Anzahl × Durchschnittspreis der letzten 7 Tage (Cardmarket)'
     + (binder.wert.ohne_preis ? `; ${binder.wert.ohne_preis} Karten ohne Preis` : '');
   titel.append(' ', w);
+  const g = binder.gewinn;
+  if (!(g?.mit_kaufpreis > 0)) return;   // Paket 8: erst, wenn eine Karte des Binders einen Kaufpreis hat
+  const aus = ausgenommenText(g);
+  const nicht = (g.ohne_kaufpreis ?? 0) + (g.fremdwaehrung ?? 0) + (g.ohne_preis ?? 0);
+  const b = Object.assign(document.createElement('span'), { className: 'tisch-wert tisch-gewinn' });
+  // Kurz (ohne Prozent), damit Betrag und Zahl der nicht gezählten Karten auch auf dem Handy sichtbar bleiben
+  b.innerHTML = `Kauf <span class="gewinn ${gewinnKlasse(g)}">${esc(gewinnText({ ...g, prozent: null }))}</span>`
+    + (nicht ? ` <span class="gewinn-aus">(${nicht.toLocaleString('de-DE')} nicht gezählt)</span>` : '');
+  b.title = `Gegen Kaufpreis${g.gewinn != null ? ` ${gewinnText(g)}` : ''}: ${g.karten} ${g.karten === 1 ? 'Karte zählt' : 'Karten zählen'}`
+    + `${g.kauf != null ? `, bezahlt ${euro(g.kauf)}, heute ${euro(g.wert)}` : ''}`
+    + (aus ? `. Zählen nicht: ${aus}` : '');
+  titel.append(' ', b);
 }
 
 function anwenden(binder) {

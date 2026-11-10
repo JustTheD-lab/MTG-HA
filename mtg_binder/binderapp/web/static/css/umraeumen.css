@@ -1,0 +1,36 @@
+/* Umräumliste (Paket 5, Dialog aus Kiste und Gesamtsammlung, js/umraeumen.js). Klassen mit Vorsatz um-. */
+
+@media (min-width: 700px) {
+  .dialog.um-dialog { width: min(900px, calc(100vw - 32px)); height: min(860px, calc(100dvh - 32px)); }
+}
+.um { display: grid; gap: 12px; padding-top: 12px; min-width: 0; }
+.um-wahl { display: flex; flex-wrap: wrap; gap: 8px; }
+.um-wahl[hidden] { display: none; }
+.um-pille { min-height: 44px; }
+.um-erkl { margin: 0; font-size: 0.84rem; color: var(--text-3); }
+.um-summe { margin: 0; font-variant-numeric: tabular-nums; }
+.um-rest { color: var(--text-3); font-size: 0.86rem; }
+.um-gruppen { display: grid; gap: 16px; min-width: 0; }
+.um-gruppe-titel { margin: 0 0 6px; font-size: 0.95rem; font-weight: 600; }
+.um-gruppe-zahl { font-weight: 400; color: var(--text-3); font-size: 0.86rem; margin-left: 6px; }
+.um-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.um-zeile { background: var(--flaeche-1); border: 1px solid var(--linie); border-radius: var(--radius); }
+.um-zeile--ab { opacity: 0.6; }
+.um-zeile--ab .um-name { text-decoration: line-through; }
+.um-label { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, auto); align-items: center; gap: 4px 12px;
+  padding: 8px 12px; min-height: 44px; cursor: pointer; }
+.um-haken { width: 22px; height: 22px; margin: 0; accent-color: var(--messing); cursor: pointer; }
+.um-karte { display: grid; min-width: 0; }
+.um-name { font-weight: 600; overflow-wrap: anywhere; }
+.um-anzahl { font-variant-numeric: tabular-nums; }
+.um-foil { font-size: 0.74rem; font-weight: 500; color: var(--messing-hell); margin-left: 6px; }
+.um-druck { font-size: 0.8rem; color: var(--text-3); overflow-wrap: anywhere; }
+.um-ziel { display: grid; justify-items: end; text-align: right; overflow-wrap: anywhere; }
+.um-wohin { font-weight: 600; }
+.um-pfeil { color: var(--messing-hell); }
+.um-fach { color: var(--text-2); font-weight: 400; }
+.um-regel { font-size: 0.74rem; color: var(--text-3); }
+@media (max-width: 699px) {
+  .um-label { grid-template-columns: auto minmax(0, 1fr); }
+  .um-ziel { grid-column: 2; justify-items: start; text-align: left; }
+}

@@ -121,6 +121,11 @@
 .tisch-titel:has(.tisch-wert) { display: flex; align-items: baseline; gap: 0.4em; }
 .tisch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tisch-wert { flex: none; font-size: 0.78em; font-weight: 500; letter-spacing: 0; }
+/* Gegen Kaufpreis (Paket 8): schrumpft vor dem Namen, der Rest steht im Tooltip */
+.tisch-gewinn { color: var(--text-2); flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Handy: eigene Zeile unter Name und Wert, damit beides sichtbar bleibt */
+.tisch-einzel .tisch-titel:has(.tisch-gewinn) { flex-wrap: wrap; row-gap: 0; }
+.tisch-einzel .tisch-gewinn { flex: 1 1 100%; font-size: 0.7em; white-space: normal; }
 .tisch-einzel .tisch-aktionen { grid-column: 1 / -1; gap: 8px; justify-content: flex-end; }
 .tisch-einzel .tisch-bildart { flex: 1 1 auto; min-width: 0; }
 .tisch-einzel .tisch-bildart .knopf { flex: 1; justify-content: center; }

@@ -64,7 +64,8 @@ def sammlung_ids(con) -> set[int]:
     """Produkte, deren Preise gespeichert werden: die Sammlung, (ab Version 8) die Decklisten, auch fehlende Karten
     (bei Zeilen ohne Druck alle Drucke der Karte, für den günstigsten Preis), und (ab Version 12) die Secret-Lair-Drops
     der letzten 12 Monate, damit ab dem Verkaufsstart ein echter Verlauf entsteht. Ab Version 18 kennt die App alle
-    Drops seit 2019; in den Verlauf kommen weiter nur die der letzten 12 Monate, kommende und (immer) eigene."""
+    Drops seit 2019; in den Verlauf kommen weiter nur die der letzten 12 Monate, kommende und (immer) eigene. Ab Version
+    23 auch die Produkte der Kaufliste."""
     ids = {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM kartendaten WHERE cardmarket_id IS NOT NULL")}
     if version(con) >= 8:
         ids |= {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM deck_produkt")}
@@ -75,7 +76,18 @@ def sammlung_ids(con) -> set[int]:
         for z in con.execute(f"SELECT k.cardmarket_id{stern} FROM secret_karte k JOIN secret_drop d ON d.id = k.drop_id"
                              f" WHERE d.verkauf IS NULL OR d.verkauf >= ?{eigene}", (grenze,)):
             ids |= {i for i in z if i is not None}
+    if version(con) >= 23:   # Kaufliste (Paket 7): eigene Einträge und Wunschpreise
+        ids |= {z[0] for z in con.execute("SELECT DISTINCT cardmarket_id FROM kauf_produkt")}
     return ids
+
+
+def kauf_produkte_nachtragen(con, katalog: Path | None) -> int:
+    """Einträge der Kaufliste ohne Cardmarket-Produkte (Katalog fehlte beim Anlegen) aus dem Katalog ergänzen."""
+    if katalog is None or not Path(katalog).is_file() or version(con) < 23:
+        return 0
+    from binderapp.decks import kaufliste
+    with closing(verbinden(katalog, nur_lesen=True)) as kat:
+        return kaufliste.produkte_nachtragen(con, kat)
 
 
 def deck_produkte_nachtragen(con, katalog: Path | None) -> int:
@@ -189,6 +201,7 @@ def abrufen(datenbank: Path, ordner: Path, katalog: Path | None = None, datei: P
         with schreiben(con):
             ergaenzt = cardmarket_nachtragen(con, katalog)
             deck_produkte_nachtragen(con, katalog)
+            kauf_produkte_nachtragen(con, katalog)
         ids = sammlung_ids(con)
     quelle = datei or herunterladen(Path(ordner) / "price_guide_1.json", oeffnen=oeffnen)
     erstellt, produkte, zeilen = einlesen(Path(quelle).read_bytes(), ids)

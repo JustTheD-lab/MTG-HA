@@ -204,6 +204,8 @@ function setsHtml(s) {
   if (!s || typeof s.karten !== 'number') return '';
   return '<p class="regal-sets-zeile"><button type="button" class="knopf regal-sets"'
     + ' aria-label="Sets öffnen: wie vollständig die Sammlung je Set ist">Sets</button>'
+    + '<button type="button" class="knopf regal-kaufliste"'
+    + ' aria-label="Kaufliste öffnen: fehlende Karten und Wunschpreise">Kaufliste</button>'
     + '<button type="button" class="knopf regal-dashboard"'
     + ' aria-label="Dashboard öffnen: Werte und Graphen der ganzen Sammlung">Dashboard</button>'
     + `<button type="button" class="knopf regal-secretlair"${sitzung().ha ? '' : ' hidden'}`
@@ -776,6 +778,7 @@ export async function zeigen(wurzel, parameter, vorher) {
     if (ereignis.target.closest('.regal-regeln')) { gehe('#/regeln'); return; }
     if (ereignis.target.closest('.regal-sets')) { gehe('#/sets'); return; }
     if (ereignis.target.closest('.regal-dashboard')) { gehe('#/dashboard'); return; }
+    if (ereignis.target.closest('.regal-kaufliste')) { gehe('#/kaufliste'); return; }
     if (ereignis.target.closest('.regal-secretlair')) { gehe('#/secretlair'); return; }
     if (ereignis.target.closest('.regal-proxy')) { gehe('#/proxy'); return; }
     if (ereignis.target.closest('.regal-sammlung')) { gehe('#/sammlung'); return; }
@@ -868,6 +871,8 @@ export async function zeigen(wurzel, parameter, vorher) {
     zustand.szene.querySelector(`.regal-deck[data-deck="${Number(vorher.deck)}"]`)?.focus({ preventScroll: true });
   } else if ((vorher?.ansicht === 'sets' || vorher?.ansicht === 'set') && !sucheDa) {
     zustand.szene.querySelector('.regal-sets')?.focus({ preventScroll: true });   // zurück aus den Sets
+  } else if (vorher?.ansicht === 'kaufliste' && !sucheDa) {
+    zustand.szene.querySelector('.regal-kaufliste')?.focus({ preventScroll: true });
   } else if (vorher?.ansicht === 'dashboard' && !sucheDa) {
     zustand.szene.querySelector('.regal-dashboard')?.focus({ preventScroll: true });
   } else if (vorher?.ansicht === 'secretlair' && !sucheDa) {

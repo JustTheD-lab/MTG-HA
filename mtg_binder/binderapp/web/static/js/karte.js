@@ -8,8 +8,9 @@
 // schliessen() auf. Gezeichnet wird in #ebene-karte; animiert werden nur transform und opacity.
 
 import { holen, bildUrl, bildSrcset, BREITEN, esc, zurueck, bewegungReduziert, vorliebe, scryfallBild, euro,
-  PREISARTEN, preisWahl }
+  PREISARTEN, preisWahl, senden, gewinnText, gewinnKlasse }
   from './gemeinsam.js';
+import { kaufpreisFragen } from './kaufpreis.js';
 import { dialogOffen } from './dialog.js';
 import { angemeldet, anmelden } from './anmeldung.js';
 import { bearbeiten } from './pruefen.js';  // gegenseitiger Import: wird erst beim Antippen gebraucht
@@ -44,6 +45,7 @@ const FELDER = {
   name: 'Name', set: 'Set', set_code: 'Set', nummer: 'Nummer', sprache: 'Sprache', foil: 'Foil',
   anzahl: 'Anzahl', status: 'Erkennung', konfidenz: 'Konfidenz', gruende: 'Gründe',
   geprueft: 'Von dir geprüft', bild: 'Scryfall-Bild', ausschnitt: 'Foto-Ausschnitt',
+  kaufpreis: 'Kaufpreis', kaufpreis_waehrung: 'Währung des Kaufpreises',
 };
 const HAKEN = '<svg class="karte-haken" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6.5"/></svg>';
 const KREUZ = '<svg class="karte-kreuz" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -57,6 +59,7 @@ function wert(feld, v) {
   if (feld === 'status') return ERKENNUNG[v] ?? String(v);
   if (feld === 'konfidenz') return prozent(v);
   if (feld === 'sprache') return SPRACHEN[v] ?? String(v);
+  if (feld === 'kaufpreis' && typeof v === 'number') return v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
 }
@@ -304,6 +307,34 @@ function preiseHtml(k) {
     </section>`;
 }
 
+/** Gewinn und Verlust gegen den Kaufpreis (Paket 8). Ohne Kaufpreis, in anderer Währung oder ohne heutigen Preis
+    steht sichtbar, dass die Karte nicht mitzählt. Eintragen nur angemeldet (wie „Bearbeiten“). */
+function gewinnHtml(k) {
+  const g = k.gewinn;
+  if (!g) return '';   // vor Datenbankversion 11
+  const stueck = g.anzahl > 1 ? ` je Karte, ${g.anzahl} Stück` : '';
+  const kauf = g.kaufpreis == null ? 'keiner'
+    : g.grund === 'fremdwaehrung'
+      ? `${Number(g.kaufpreis).toLocaleString('de-DE', { minimumFractionDigits: 2 })} ${g.waehrung}`
+      : `${euro(g.kaufpreis)}${stueck}`;
+  const grund = {
+    ohne_kaufpreis: 'Ohne Kaufpreis zählt die Karte nicht für Gewinn und Verlust.',
+    fremdwaehrung: `Kaufpreis in ${g.waehrung}: Für Gewinn und Verlust zählt nur Euro.`,
+    ohne_preis: 'Heute ohne Preis: Die Karte zählt nicht für Gewinn und Verlust.',
+  }[g.grund];
+  const zahlen = g.zaehlt
+    ? `<div><dt>Heute</dt><dd>${esc(euro(g.wert))}</dd></div>`
+      + `<div><dt>${g.gewinn < 0 ? 'Verlust' : 'Gewinn'}</dt><dd class="gewinn ${gewinnKlasse(g)}">${esc(gewinnText(g))}</dd></div>`
+    : '';
+  return `<section class="karte-gewinn" aria-labelledby="karte-gewinn-titel">
+      <h3 class="etikett" id="karte-gewinn-titel">Gegen Kaufpreis</h3>
+      <dl class="karte-gewinn-zahlen"><div><dt>Kaufpreis</dt><dd>${esc(kauf)}</dd></div>${zahlen}</dl>
+      ${grund ? `<p class="karte-neben">${esc(grund)}</p>` : ''}
+      <button type="button" class="knopf karte-kaufpreis" hidden>${g.kaufpreis == null ? 'Kaufpreis eintragen' : 'Kaufpreis ändern'}</button>
+      <p class="karte-neben karte-kaufpreis-meldung" role="status" hidden></p>
+    </section>`;
+}
+
 /** Dezente Herkunft der Karte, ganz unten auf der Tafel. */
 function quelleHtml(k) {
   const text = { manabox: 'aus ManaBox', manuell: 'von Hand angelegt' }[k.quelle];
@@ -355,6 +386,7 @@ function inhaltHtml(k) {
       ${druck ? `<p class="karte-druck">${esc(druck)}</p>` : ''}
       ${aktionenHtml(k)}
       ${preiseHtml(k)}
+      ${gewinnHtml(k)}
       ${datenHtml(k)}
       ${historieHtml(k.historie ?? [])}
       ${quelleHtml(k)}
@@ -481,6 +513,8 @@ function aktionenZeigen(overlay) {
   const anmeldenKnopf = overlay.querySelector('.karte-anmelden');
   if (bearbeitenKnopf) bearbeitenKnopf.hidden = !an;
   if (anmeldenKnopf) anmeldenKnopf.hidden = an;
+  const kaufKnopf = overlay.querySelector('.karte-kaufpreis');
+  if (kaufKnopf) kaufKnopf.hidden = !an;
 }
 
 /** Lädt die Karte neu und zeichnet sie ohne Animation (nach Änderungen im Dialog „Prüfen/Bearbeiten"). */
@@ -505,6 +539,47 @@ async function neuLaden(eintrag) {
   overlay.focus({ preventScroll: true });
 }
 
+/** Kaufpreis dieser Karte eintragen, ändern oder entfernen (ein Schritt); danach neu laden mit „Rückgängig“. */
+async function kaufpreisAendern(knopf, k, eintrag) {
+  const g = k.gewinn;
+  const vorher = g?.kaufpreis != null && g.grund !== 'fremdwaehrung' ? g.kaufpreis : null;
+  const antwort = await kaufpreisFragen(k.anzahl > 1 ? `diese Karte (${k.anzahl} Stück)` : 'diese Karte', vorher);
+  if (!antwort || !eintrag || offen !== eintrag) return;
+  knopf.disabled = true;
+  let a;
+  try {
+    a = await senden('/api/karten/kaufpreis', { methode: 'PUT', daten: { kaufpreis: antwort.kaufpreis, karten: [k.id] } });
+  } catch (f) {
+    knopf.disabled = false;
+    meldungZeigen(eintrag.overlay, f.message);
+    return;
+  }
+  if (offen !== eintrag) return;
+  await neuLaden(eintrag);
+  if (!a.schritt) { meldungZeigen(eintrag.overlay, 'Nichts geändert.'); return; }
+  meldungZeigen(eintrag.overlay, antwort.kaufpreis == null ? 'Kaufpreis entfernt.' : `Kaufpreis ${euro(antwort.kaufpreis)} gespeichert.`,
+    async () => {
+      await senden(`/api/schritt/${encodeURIComponent(a.schritt)}/rueckgaengig`);
+      if (offen === eintrag) await neuLaden(eintrag);
+    });
+}
+
+/** Meldung unter dem Kaufpreis, optional mit „Rückgängig“. */
+function meldungZeigen(overlay, text, rueckgaengig = null) {
+  const p = overlay?.querySelector('.karte-kaufpreis-meldung');
+  if (!p) return;
+  p.textContent = text;
+  if (rueckgaengig) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'knopf karte-kaufpreis-zurueck', textContent: 'Rückgängig' });
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try { await rueckgaengig(); } catch (f) { p.textContent = f.message; }
+    });
+    p.append(' ', b);
+  }
+  p.hidden = false;
+}
+
 function verdrahten(overlay, k, eintrag = offen) {
   overlay.querySelector('.karte-schliessen').addEventListener('click', () => zurueck(basis()));
   overlay.addEventListener('click', (e) => {
@@ -526,6 +601,7 @@ function verdrahten(overlay, k, eintrag = offen) {
       knopf.disabled = false;
     }
   });
+  overlay.querySelector('.karte-kaufpreis')?.addEventListener('click', (e) => kaufpreisAendern(e.currentTarget, k, eintrag));
   overlay.querySelector('.karte-anmelden')?.addEventListener('click', async () => {
     if (await anmelden()) aktionenZeigen(overlay);
   });

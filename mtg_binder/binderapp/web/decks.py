@@ -32,7 +32,7 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
 from binderapp.db.datenbank import aendern, loeschen, version
-from binderapp.decks import abgleich, bau, lesen
+from binderapp.decks import abgleich, bau, kaufliste, lesen
 from binderapp.preise import zeitplan
 from binderapp.web.helfer import Fehler, fehler
 
@@ -157,6 +157,9 @@ def routen(h) -> list[Route]:
     def deck(request):
         with closing(h.db()) as con:
             a = abgleich.abgleichen(con, h.nutzer, _lesen(con, _deck_id(request)))
+            # Paket 7: Schalter „in Kaufliste“ (ab Version 23; vorher None, die Oberfläche blendet ihn aus)
+            a["kaufliste"] = (a["id"] in kaufliste.decks_in_liste(con, h.nutzer)
+                              if version(con) >= kaufliste.AB_VERSION else None)
         ordner = h.bilder / "scryfall"   # ohne Vorschaubild lädt die Oberfläche gleich das Bild von Scryfall
         for z in a["karten"]:
             z["vorschau"] = bool(z["scryfall_id"]) and (ordner / f"{z['scryfall_id']}_200.webp").is_file()

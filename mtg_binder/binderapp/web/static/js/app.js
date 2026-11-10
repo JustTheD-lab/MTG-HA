@@ -21,6 +21,7 @@
 //   #/dashboard/karte/12       dazu Karte 12 groß
 //   #/proxy                    Proxys: Deckliste prüfen, druckfertiges PDF erzeugen (proxy.js, nur im Add-on)
 //   #/proxy/deck/7             dazu die Liste aus Deck 7 übernehmen (fehlende und als Proxy markierte Karten)
+//   #/kaufliste                Kaufliste mit Wunschpreisen (kaufliste.js, Paket 7)
 //   #/deck/7                   Deck 7: Abgleich mit der Sammlung, Fehlt-Liste (deck.js)
 //   #/deck/7/bauen             Entnahme für Deck 7 (Karten aus Binder und Kisten holen, deckbau.js)
 //   #/deck/7/zerlegen[?karten=1,2]   Deck zerlegen: Karten zurücklegen (deckbau.js)
@@ -47,11 +48,12 @@ import * as secretlair from './secretlair.js';
 import * as deck from './deck.js';
 import * as dashboard from './dashboard.js';
 import * as proxy from './proxy.js';
+import * as kaufliste from './kaufliste.js';
 import { laden as sitzungLaden } from './anmeldung.js';
 import { holen } from './gemeinsam.js';
 
 // `sets` (Übersicht) und `set` (ein Set) sind dasselbe Modul; es unterscheidet sie am Parameter `set`.
-const ANSICHTEN = { regal, lesetisch, kiste, pruefen, scan, eingang, regeln, sets, set: sets, deck, secretlair, dashboard, proxy };
+const ANSICHTEN = { regal, lesetisch, kiste, pruefen, scan, eingang, regeln, sets, set: sets, deck, secretlair, dashboard, proxy, kaufliste };
 const buehne = document.getElementById('buehne');
 let aktuell = null;  // { name, parameter }
 let laeuft = Promise.resolve();
@@ -99,6 +101,9 @@ export function lesen(hash) {
   if (teile[0] === 'dashboard') {
     return { ansicht: 'dashboard', binder: null, kiste: null, sammlung: false, seite: null,
              karte: teile[1] === 'karte' ? zahl(teile[2]) : null };
+  }
+  if (teile[0] === 'kaufliste') {
+    return { ansicht: 'kaufliste', binder: null, kiste: null, sammlung: false, seite: null, karte: null };
   }
   if (teile[0] === 'proxy') {
     return { ansicht: 'proxy', binder: null, kiste: null, sammlung: false, seite: null, karte: null,

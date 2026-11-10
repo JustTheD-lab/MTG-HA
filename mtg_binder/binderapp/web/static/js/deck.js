@@ -389,6 +389,10 @@ function zeichnen() {
   z.zerlegen.setAttribute('href', `#/deck/${z.id}/zerlegen`);
   for (const b of z.sortierung.querySelectorAll('[data-sort]')) b.setAttribute('aria-pressed', String(b.dataset.sort === z.sort));
   z.basics.checked = Boolean(d.basics_auslassen);
+  // Paket 7: Schalter „in Kaufliste“ (ab Datenbankversion 23; ältere Antworten ohne Feld blenden ihn aus)
+  z.kaufSchalter.hidden = d.kaufliste == null;
+  z.kauf.checked = Boolean(d.kaufliste);
+  z.kauf.disabled = !schreiben;
   for (const b of z.abgleich.children) b.setAttribute('aria-pressed', String(b.dataset.abgleich === d.abgleich));
   z.umbenennen.hidden = !schreiben;
   z.loeschen.hidden = !schreiben;
@@ -608,6 +612,8 @@ export async function zeigen(wurzel, parameter) {
     + '<div class="deck-schalter-zeile">'
     + '<label class="deck-schalter"><input type="checkbox" role="switch" class="deck-basics"><span class="deck-schalter-spur" aria-hidden="true"></span>'
     + '<span>Basic Lands auslassen</span></label>'
+    + '<label class="deck-schalter deck-kaufliste-schalter" hidden><input type="checkbox" role="switch" class="deck-kaufliste">'
+    + '<span class="deck-schalter-spur" aria-hidden="true"></span><span>In Kaufliste</span></label>'
     + '<div class="deck-segmente" role="group" aria-label="Abgleich"><span class="etikett deck-segmente-titel">Abgleich</span>'
     + '<button type="button" class="knopf deck-pille" data-abgleich="name" aria-pressed="false">Name</button>'
     + '<button type="button" class="knopf deck-pille" data-abgleich="druck" aria-pressed="false">Genauer Druck</button></div></div>'
@@ -643,6 +649,7 @@ export async function zeigen(wurzel, parameter) {
     toast: bereich.querySelector('.deck-toast'), bauen: bereich.querySelector('.deck-bauen'),
     zurSammlung: bereich.querySelector('.deck-zur-sammlung'), zerlegen: bereich.querySelector('.deck-zerlegen'),
     sortierung: bereich.querySelector('.deck-sortierung'),
+    kauf: bereich.querySelector('.deck-kaufliste'), kaufSchalter: bereich.querySelector('.deck-kaufliste-schalter'),
     sort: SORTIERUNGEN.some(([s]) => s === vorliebe('deck.sort')) ? vorliebe('deck.sort') : 'gruppe',
   };
   Z = z;
@@ -661,6 +668,20 @@ export async function zeigen(wurzel, parameter) {
   }
   bereich.querySelector('.deck-zurueck').addEventListener('click', () => zurueck('#/'));
   z.basics.addEventListener('change', () => aendern(z, { basics_auslassen: z.basics.checked }));
+  z.kauf.addEventListener('change', async () => {
+    const an = z.kauf.checked;
+    try {
+      const a = await senden(`/api/kaufliste/deck/${z.id}`, { daten: { an } });
+      await laden(z, { still: true });
+      if (a.schritt) {
+        toastZeigen(z.toast, an ? 'Die fehlenden Karten stehen jetzt in der Kaufliste.' : 'Das Deck ist aus der Kaufliste genommen.',
+          { schritt: a.schritt, nachRueck: () => laden(z, { still: true }) });
+      }
+    } catch (f) {
+      toastZeigen(z.toast, f.message, { art: 'fehler' });
+      await laden(z, { still: true });
+    }
+  });
   z.abgleich.addEventListener('click', (e) => {
     const b = e.target.closest('[data-abgleich]');
     if (b && b.getAttribute('aria-pressed') !== 'true') aendern(z, { abgleich: b.dataset.abgleich });

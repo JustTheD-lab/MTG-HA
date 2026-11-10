@@ -123,7 +123,10 @@ def werte(con, nutzer: int = NUTZER, preisart: str | None = None) -> dict:
     aenderung = preise.groesste_aenderung(con, nutzer, TOP, preisart)
     # Paket 9: Top 5 der Woche in Euro, nur Karten ab 0,50 € (heute oder am Vergleichstag)
     woche = preise.groesste_aenderung(con, nutzer, TOP, preisart, "tage7", mindestpreis=preise.RANGLISTE_MINDESTPREIS)
+    from binderapp.decks import kaufliste   # Paket 7: Karten der Kaufliste unter Wunschpreis (ab Version 23)
+    kauf = kaufliste.fuer_home_assistant(con, nutzer, preisart)
     return {
+        "kaufliste": kauf,
         "preisart": preisart,
         "preistag": gesamt["tag"] if gesamt else None,
         "gesamtwert": gesamt["wert"] if gesamt else None,

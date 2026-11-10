@@ -209,3 +209,13 @@
 .preis-auf { color: #6fbf73; }
 .preis-ab { color: #e07a6d; }
 .preis-gleich, .preis-leer { color: var(--text-3); }
+
+/* Gegen Kaufpreis (Paket 8) */
+.karte-gewinn { margin: 1rem 0 0.4rem; }
+.karte-gewinn h3 { margin: 0 0 0.4rem; }
+.karte-gewinn-zahlen { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; font-variant-numeric: tabular-nums; }
+.karte-gewinn-zahlen dt { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+.karte-gewinn-zahlen dd { margin: 2px 0 0; font-weight: 600; }
+.karte-kaufpreis { margin-top: 0.6rem; min-height: 44px; }
+.karte-kaufpreis[hidden], .karte-kaufpreis-meldung[hidden] { display: none; }
+.karte-kaufpreis-zurueck { min-height: 36px; padding: 4px 12px; margin-left: 4px; }

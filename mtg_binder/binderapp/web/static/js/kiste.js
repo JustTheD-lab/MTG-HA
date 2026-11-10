@@ -21,10 +21,12 @@
 // und späte Antworten verworfen (Zählung `gen`). Es werden nur transform und opacity animiert.
 
 import { esc, bildUrl, gehe, zurueck, senden, fehlerText, SchnittstellenFehler, vorliebe, bewegungReduziert,
-  adresse as serverAdresse, scryfallBild, euro, preisStreifen, preisText, preisWahl, warten } from './gemeinsam.js';
+  adresse as serverAdresse, scryfallBild, euro, preisStreifen, preisText, preisWahl, warten, gewinnText, gewinnKlasse,
+  ausgenommenText } from './gemeinsam.js';
 import { knopf as anmeldeKnopf, angemeldet, sitzung } from './anmeldung.js';
 import { dialog, bestaetigen, dialogOffen } from './dialog.js';
 import { druckWaehlen } from './pruefen.js';
+import { kaufpreisFragen } from './kaufpreis.js';
 import { KISTENFARBEN, farbwahl, kistenAussehen } from './farbrad.js';
 
 const SEITE = 60;
@@ -501,6 +503,7 @@ function geruestHtml(s) {
         <button type="button" class="knopf" data-wahl="keine">Keine</button>
       </div>
       <button type="button" class="knopf knopf-haupt kiste-verschieben" disabled>${SYM.weiter}<span>Verschieben nach …</span></button>
+      <button type="button" class="knopf kiste-kaufpreis" disabled>Kaufpreis eintragen …</button>
       <button type="button" class="knopf kiste-zurueckstellen" hidden disabled>Für Binder zurückstellen</button>
     </div>
     <button type="button" class="knopf knopf-sym kiste-hoch" aria-label="Nach oben" hidden>${SYM.hoch}</button>`;
@@ -530,6 +533,16 @@ function zahlenZeichnen() {
     w.title = 'Summe aus Anzahl × Durchschnittspreis der letzten 7 Tage (Cardmarket)'
       + (k.wert.ohne_preis ? `; ${zahl(k.wert.ohne_preis)} Karten ohne Preis` : '');
     z.append(w);
+  }
+  const g = k.gewinn;
+  if (g?.mit_kaufpreis > 0) {   // Paket 8: Kaufpreis gegen heutigen Wert; was nicht zählt, steht sichtbar daneben
+    const aus = ausgenommenText(g);
+    const teil = Object.assign(document.createElement('span'), { className: 'kiste-gewinn' });
+    teil.innerHTML = ` · gegen Kaufpreis <span class="gewinn ${gewinnKlasse(g)}">${esc(gewinnText(g))}</span>`
+      + (g.karten ? ` <span class="gewinn-aus">(${esc(karten(g.karten))}, bezahlt ${esc(euro(g.kauf))})</span>` : '')
+      + (aus ? ` <span class="gewinn-aus">· zählen nicht: ${esc(aus)}</span>` : '');
+    teil.title = 'Nur Karten mit Kaufpreis in Euro und heutigem Preis zählen (gewählte Preisart)';
+    z.append(teil);
   }
   z.title = gefiltert && S.gesamt ? `${zahl(S.gesamt.posten)} Posten mit ${zahl(S.gesamt.karten)} Karten passen zu den Filtern` : '';
   S.wurzel.querySelector('.fachkopf-zahl').textContent = S.fach !== null && S.gesamt ? karten(S.gesamt.karten) : '';
@@ -1214,7 +1227,13 @@ function adminZeichnen() {
     neu('kiste-abzugknopf', SYM.abzug, 'Liste abziehen', 'Liste von der Sammlung abziehen', abziehenOeffnen);
     neu('kiste-ueberknopf', SYM.stapel, 'Überzählige', 'Überzählige Karten über einem Limit je Druck ansehen',
       ueberzaehligeOeffnen);
+    neu('kiste-umraeumknopf', SYM.faecher, 'Umräumen', 'Karten aller Kisten nach den heutigen Sortierregeln umräumen',
+      umraeumenOeffnen);
     return;
+  }
+  if (s.kopf.umraeumbar) {
+    neu('kiste-umraeumknopf', SYM.faecher, 'Umräumen', 'Karten nach den heutigen Sortierregeln umräumen',
+      umraeumenOeffnen);
   }
   if (s.kopf.scan_eingang) {
     neu('kiste-einsortierknopf', SYM.weiter, 'Jetzt einsortieren', 'Karten des Scan-Eingangs nach den Sortierregeln einsortieren',
@@ -1515,6 +1534,7 @@ function wahlAnzeigen() {
     ? `${zahl(z.karten)} ${z.karten === 1 ? 'Karte' : 'Karten'} gewählt (${zahl(z.posten)} Posten)`
     : 'Nichts gewählt – Karten antippen';
   leiste.querySelector('.kiste-verschieben').disabled = z.posten === 0;
+  leiste.querySelector('.kiste-kaufpreis').disabled = z.posten === 0;
   const zurueck = leiste.querySelector('.kiste-zurueckstellen');
   zurueck.hidden = !s.kopf?.scan_eingang;
   zurueck.disabled = z.posten === 0;
@@ -1647,6 +1667,38 @@ async function verschieben() {
   const dort = a.schon_dort ? `, ${zahl(a.schon_dort)} lagen schon dort` : '';
   hinweisZeigen(`${zahl(a.karten)} ${a.karten === 1 ? 'Karte' : 'Karten'} (${zahl(a.verschoben)} Posten) nach „${ziel.name}“`
     + ` verschoben${leer}${dort}.`, { schritt: a.schritt });
+}
+
+// ---------- Kaufpreis für eine Auswahl (Paket 8) ----------
+
+async function kaufpreisFuerAuswahl() {
+  const s = S;
+  const z = wahlZahl();
+  if (!z.posten) return;
+  const antwort = await kaufpreisFragen(`${karten(z.karten)} (${zahl(z.posten)} Posten)`);
+  if (!antwort || S !== s) return;
+  const daten = s.alleGefiltert
+    ? { kaufpreis: antwort.kaufpreis, auswahl: { kiste: s.sammlung ? null : s.id, abfrage: kartenFilter(s).toString() } }
+    : { kaufpreis: antwort.kaufpreis, karten: [...s.gewaehlt.keys()] };
+  const knopf = s.wurzel.querySelector('.kiste-kaufpreis');
+  knopf.disabled = true;
+  let a;
+  try {
+    a = await senden('/api/karten/kaufpreis', { methode: 'PUT', daten });
+  } catch (f) {
+    if (S === s) { knopf.disabled = false; hinweisZeigen(f.message, { art: 'fehler' }); }
+    return;
+  }
+  if (S !== s) return;
+  await neuAufbauen({ wahlBehalten: true });
+  if (!a.schritt) {
+    hinweisZeigen('Nichts geändert: Die gewählten Karten hatten schon diesen Kaufpreis.');
+    return;
+  }
+  hinweisZeigen(a.kaufpreis == null
+    ? `Kaufpreis bei ${karten(a.karten)} (${zahl(a.posten)} Posten) entfernt.`
+    : `Kaufpreis ${euro(a.kaufpreis)} je Karte bei ${karten(a.karten)} (${zahl(a.posten)} Posten) eingetragen.`,
+  { schritt: a.schritt });
 }
 
 // ---------- Jetzt einsortieren (Scan-Eingang) ----------
@@ -2012,6 +2064,28 @@ async function ueberzaehligeOeffnen() {
   }
 }
 
+/** Umräumliste (Paket 5): Karten, die nach den heutigen Regeln in eine andere Kiste gehören; „Fertig“ ist ein Schritt
+    mit Rückgängig. Aus der Gesamtsammlung immer für alle Kisten. */
+async function umraeumenOeffnen() {
+  const s = S;
+  let a;
+  try {
+    const { oeffnen } = await import('./umraeumen.js');
+    a = await oeffnen({ kisteId: s.sammlung ? null : s.id, kisteName: s.kopf?.name ?? '', schreiben: angemeldet() });
+  } catch (f) {
+    if (S === s) hinweisZeigen(f.message || 'Die Umräumliste ließ sich nicht laden.', { art: 'fehler' });
+    return;
+  }
+  if (!a || S !== s) return;
+  if (!a.schritt) {
+    hinweisZeigen('Nichts verschoben: Die abgehakten Karten liegen inzwischen anders oder die Regeln haben sich geändert.');
+    return;
+  }
+  await neuAufbauen({ wahlBehalten: true });
+  const ziele = a.kisten.map((k) => `${k.kiste} ${zahl(k.karten)}`).join(', ');
+  hinweisZeigen(`${karten(a.karten)} umgeräumt: ${ziele}.`, { schritt: a.schritt });
+}
+
 // ---------- Ereignisse ----------
 
 function verdrahten(s) {
@@ -2212,6 +2286,7 @@ function verdrahten(s) {
     if (b.classList.contains('kiste-wahl-fertig')) wahlUmschalten(false);
     else if (b.classList.contains('kiste-verschieben')) verschieben();
     else if (b.classList.contains('kiste-zurueckstellen')) zurueckstellen();
+    else if (b.classList.contains('kiste-kaufpreis')) kaufpreisFuerAuswahl();
     else if (b.dataset.wahl === 'seite') wahlAlleSeite();
     else if (b.dataset.wahl === 'gefiltert') wahlAlleGefiltert();
     else if (b.dataset.wahl === 'keine') wahlLeeren();

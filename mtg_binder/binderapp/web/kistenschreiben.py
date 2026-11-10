@@ -11,6 +11,8 @@
          oder null (Sammlung), "abfrage": "Filter wie bei …/karten"}}: alle Karten in die Ziel-Kiste, aus einem
          Binder heraus wird die Tasche „leer“. Die Quelle bleibt. Summenprüfung: Karten über alle Binder und
          Kisten vorher = nachher (sonst Abbruch).
+    PUT  /api/karten/kaufpreis  {"kaufpreis": Euro je Karte oder null, "karten": [IDs] oder "auswahl": wie oben}
+         Kaufpreis setzen oder entfernen (Paket 8, preise/gewinn.py), Währung „EUR“, ein Schritt.
     POST /api/schritt/{kennung}/rueckgaengig   nimmt einen Bedienschritt exakt zurück (db/schritte.py).
 
 Jeder Bedienschritt hat eine Kennung `schritt` (Quelle „nutzer“) und lässt sich als Ganzes zurücknehmen.
@@ -29,7 +31,7 @@ from starlette.routing import Route
 from binderapp.db import datenbank, listen_import, schritte
 from binderapp.db.manabox_import import ImportFehler
 from binderapp.katalog import kartendaten
-from binderapp.preise import zeitplan
+from binderapp.preise import gewinn, zeitplan
 from binderapp.web.helfer import Fehler
 from binderapp.web.kisten import (GROSSE_ID, _ab_version_3, _kiste_holen, _kiste_id, anfrage_lesen, fach_vorbereiten,
                                   sql_ids)
@@ -264,6 +266,21 @@ def routen(h) -> list[Route]:
         return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
 
     @h.schreibend
+    async def kaufpreis_setzen(request):
+        """Paket 8: Kaufpreis (Euro je Karte, null entfernt) für eine Karte oder eine Auswahl, ein Schritt."""
+        d = await h.json_daten(request)
+        unbekannt = set(d) - {"kaufpreis", "karten", "auswahl"}
+        if unbekannt or "kaufpreis" not in d or ("karten" in d) == ("auswahl" in d):
+            raise Fehler("Bitte „kaufpreis“ (Euro oder null) und entweder „karten“ (Liste von IDs) oder „auswahl“ angeben.")
+        preis = gewinn.preis_pruefen(d["kaufpreis"])
+        ids, a = auswahl_lesen(d, h.nutzer)
+
+        def arbeit(con):
+            _ab_version_3(con, 409)
+            return gewinn.setzen(con, h.nutzer, auswahl_ids(con, h.nutzer, ids, a), preis)
+        return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
+
+    @h.schreibend
     async def schritt_zuruecknehmen(request):
         alter = schritte.kennung(request.path_params["kennung"])
 
@@ -277,5 +294,6 @@ def routen(h) -> list[Route]:
         Route("/kiste/{id:int}/liste", liste_importieren, methods=["POST"]),
         Route("/kiste/{id:int}/karte", karte_hinzufuegen, methods=["POST"]),
         Route("/karten/verschieben", karten_verschieben, methods=["POST"]),
+        Route("/karten/kaufpreis", kaufpreis_setzen, methods=["PUT"]),
         Route("/schritt/{kennung}/rueckgaengig", schritt_zuruecknehmen, methods=["POST"]),
     ]

@@ -39,6 +39,7 @@ Die Entitäts-IDs entstehen aus „MTG“ und dem Namen. Wer eine ID in Home Ass
 | `sensor.mtg_top_5_teuerste_karten` | Preis der teuersten Karte, Liste der fünf teuersten im Attribut `karten` | 1 h |
 | `sensor.mtg_top_5_gewinner` / `sensor.mtg_top_5_verlierer` | größte Steigerung / größter Verlust in € zum Vortag, Liste im Attribut `karten` | 1 h |
 | `sensor.mtg_gewinner_und_verlierer_woche` | Top 5 der Woche (Vergleich mit dem Preistag vor 7 Tagen, 5 bis 9 Tage zählen): Zustand = Steigerung des größten Gewinners in € (Anzahl × Preisänderung); Attribute `gewinner`, `verlierer` (je höchstens 5 Karten mit `euro`, `prozent`, `preis`, `preis_vorher`), `vergleichstag`, `mindestpreis`. Es zählen nur Karten, deren heutiger oder früherer Preis mindestens 0,50 € ist | 1 h |
+| `sensor.mtg_kaufliste_unter_wunschpreis` | Zahl der Karten der Kaufliste, deren Preis heute höchstens ihr Wunschpreis ist. Attribute: `treffer`, `karten` (Stück), `preisart`, `preistag`, `gekuerzt` und `liste` (je Karte `name`, `set`, `nummer`, `foil`, `anzahl`, `preis`, `wunschpreis`; größte Ersparnis zuerst, höchstens 50) | 1 h, nach jedem neuen Preistag und gleich nach einer Änderung an der Kaufliste |
 | `sensor.mtg_binder_<name>_wert`, `sensor.mtg_binder_<name>_karten` | je Binder | 1 h |
 | `sensor.mtg_kiste_<name>_wert`, `sensor.mtg_kiste_<name>_karten` | je Kiste | 1 h |
 | `sensor.mtg_deck_<name>_wert`, `sensor.mtg_deck_<name>_karten` | je Deck: Wert und Zahl der Karten, die im Deck liegen; Attribut `fehlt_kosten` (Kosten der Fehlt-Liste) | 1 h |
@@ -212,6 +213,41 @@ Gewünschte Drops markiert man in der App (Secret Lair → Drop → „Möchte i
 `sensor.mtg_secret_lair_nachster_wunsch` zeigt den Verkaufsbeginn des nächsten, das Attribut `wuensche` alle kommenden.
 Die Uhrzeit des Verkaufsbeginns stellt man in der App ein („Verkauf ab 17:00 Uhr“), einen falsch erkannten Tag je Drop
 über „Verkaufstag ändern“.
+
+### Preisalarm der Kaufliste
+
+Die Kaufliste (Regal → „Kaufliste“) enthält die fehlenden Karten der Decks, deren Schalter „In Kaufliste“ an ist, und
+eigene Einträge. Je Karte trägt man einen Wunschpreis ein (der Knopf „90 %“ übernimmt 90 % des heutigen Preises).
+Fällt der Preis einer Karte auf oder unter ihren Wunschpreis, zählt sie zu `sensor.mtg_kaufliste_unter_wunschpreis`.
+Die Preise kommen einmal am Tag (Cardmarket), der Sensor ändert sich also meist nach dem morgendlichen Preisabruf.
+Die App gibt keine Kaufempfehlung, sie meldet nur Zahlen.
+
+```yaml
+- alias: "MTG: Karte der Kaufliste unter Wunschpreis"
+  description: Meldet, sobald neue Karten der Kaufliste ihren Wunschpreis erreichen.
+  triggers:
+    - trigger: state
+      entity_id: sensor.mtg_kaufliste_unter_wunschpreis
+  conditions:
+    # nur wenn es mehr Treffer werden (nicht bei „nicht verfügbar“ oder wenn eine Karte wieder teurer wird)
+    - condition: template
+      value_template: >-
+        {{ trigger.from_state is not none
+           and trigger.to_state.state | is_number and trigger.from_state.state | is_number
+           and trigger.to_state.state | int > trigger.from_state.state | int }}
+  actions:
+    - action: notify.mobile_app_DEIN_GERAET
+      data:
+        title: Kaufliste
+        message: >-
+          {% set s = 'sensor.mtg_kaufliste_unter_wunschpreis' %}
+          {{ states(s) }} Karten unter Wunschpreis:
+          {% for k in (state_attr(s, 'liste') or [])[:5] %}{{ k.name }}{{ ' (Foil)' if k.foil }} {{ '%.2f' | format(k.preis) }} € (Wunsch {{ '%.2f' | format(k.wunschpreis) }} €){{ ', ' if not loop.last }}{% endfor %}
+  mode: queued
+```
+
+Wer jede Karte nur einmal gemeldet bekommen möchte, auch wenn eine andere zwischendurch wieder teurer wird, vergleicht
+statt der Zahl die Namen in `liste` (`trigger.from_state.attributes.liste`).
 
 ## Fehlersuche
 

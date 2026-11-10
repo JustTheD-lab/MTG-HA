@@ -46,6 +46,11 @@ def was_tun(con, datei: Path) -> str | None:
         fehlt = con.execute("SELECT 1 FROM deck_karte k WHERE k.produkte > 0 AND NOT EXISTS (SELECT 1 FROM deck_produkt"
                             " d JOIN preis p ON p.cardmarket_id = d.cardmarket_id AND p.tag = ? WHERE"
                             " d.deck_karte_id = k.id) LIMIT 1", (neuester,)).fetchone()
+    if version(con) >= 23 and not (fehlt or offen):   # Kaufliste (Paket 7): Einträge ganz ohne Preis des Tages
+        fehlt = con.execute("SELECT 1 FROM kauf_karte k WHERE EXISTS (SELECT 1 FROM kauf_produkt d WHERE"
+                            " d.kauf_karte_id = k.id) AND NOT EXISTS (SELECT 1 FROM kauf_produkt d JOIN preis p ON"
+                            " p.cardmarket_id = d.cardmarket_id AND p.tag = ? WHERE d.kauf_karte_id = k.id) LIMIT 1",
+                            (neuester,)).fetchone()
     return "nachtragen" if (fehlt or offen) and datei.is_file() else None
 
 
@@ -63,6 +68,8 @@ def _stand(con, tag: str | None, katalog: Path | None = None) -> tuple:
     if version(con) >= 8:
         teile += [con.execute("SELECT COUNT(*) FROM deck_produkt").fetchone()[0],
                   con.execute("SELECT COUNT(*) FROM deck_karte WHERE produkte IS NULL").fetchone()[0]]
+    if version(con) >= 23:
+        teile.append(con.execute("SELECT COUNT(*) FROM kauf_produkt").fetchone()[0])
     return tuple(teile)
 
 

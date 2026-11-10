@@ -13,6 +13,9 @@
     POST   /api/regeln/einsortieren       Regeln auf den ganzen Scan-Eingang anwenden (ein Schritt mit Rückgängig)
     GET    /api/regeln/laeufe             die letzten 10 automatischen Einsortier-Läufe (Paket 2, 10.11.2026)
     POST   /api/regeln/lauf/{kennung}/rueckgaengig   einen Lauf zurücknehmen (von Hand Geändertes bleibt, mit Hinweis)
+    GET    /api/regeln/umraeumen[?kiste=ID]          Umräumliste: Karten, die heute in eine andere Kiste gehören (Paket 5)
+    POST   /api/regeln/umraeumen/haken    {karte_id, abgehakt} merkt einen Posten vor (ohne Historie)
+    POST   /api/regeln/umraeumen/fertig   {kiste: ID oder null} verschiebt die abgehakten Posten, ein Schritt mit Rückgängig
 
 Schreiben mit Historie (Quelle „nutzer“). Bedingungen nur aus festen Feldern, Werte als Parameter.
 """
@@ -26,7 +29,7 @@ from starlette.routing import Route
 
 from binderapp.db.erkennung import SCAN_MARKE
 from binderapp.db import schritte
-from binderapp.sortieren import einsortieren, laeufe, regeln
+from binderapp.sortieren import einsortieren, laeufe, regeln, umraeumen
 from binderapp.web.helfer import Fehler, fehler
 
 GROSSE_ID = 2 ** 31
@@ -132,6 +135,20 @@ def routen(h) -> list[Route]:
         _version(con, 404)
         return einsortieren.eingang_vorschau(con, h.nutzer)
 
+    def _kiste_wert(wert):
+        if wert is None or wert == "":
+            return None
+        if isinstance(wert, bool) or not (isinstance(wert, int) or (isinstance(wert, str) and wert.isdigit())):
+            raise Fehler("Bitte eine Kiste wählen.")
+        if int(wert) >= GROSSE_ID:
+            raise Fehler("Diese Kiste gibt es nicht.", 404)
+        return int(wert)
+
+    @lesend
+    def umraeum_plan(con, request):
+        _version(con, 404)
+        return umraeumen.plan(con, h.nutzer, _kiste_wert(request.query_params.get("kiste")))
+
     @lesend
     def lauf_liste(con, request):
         return {"laeufe": laeufe.laeufe(con, h.nutzer)}
@@ -142,6 +159,22 @@ def routen(h) -> list[Route]:
     async def lauf_zuruecknehmen(request):
         kennung = schritte.kennung(request.path_params["kennung"])
         return await schreiben(lambda con: laeufe.zuruecknehmen(con, h.nutzer, kennung))
+
+    @h.schreibend
+    async def umraeum_haken(request):
+        d = await h.json_daten(request)
+        karte_id, abgehakt = d.get("karte_id"), d.get("abgehakt")
+        if isinstance(karte_id, bool) or not isinstance(karte_id, int) or not 0 < karte_id < GROSSE_ID:
+            raise Fehler("Bitte eine Karte wählen.")
+        if not isinstance(abgehakt, bool):
+            raise Fehler("Abgehakt: ja oder nein.")
+        return await schreiben(lambda con: umraeumen.haken(con, h.nutzer, karte_id, abgehakt))
+
+    @h.schreibend
+    async def umraeum_fertig(request):
+        d = await h.json_daten(request)
+        kiste_id = _kiste_wert(d.get("kiste"))
+        return await schreiben(lambda con: umraeumen.fertig(con, h.nutzer, kiste_id))
 
     @h.schreibend
     async def eingang_einsortieren(request):
@@ -199,6 +232,9 @@ def routen(h) -> list[Route]:
         Route("/regeln/einsortieren", eingang_vorschau),
         Route("/regeln/einsortieren", eingang_einsortieren, methods=["POST"]),
         Route("/regeln/laeufe", lauf_liste),
+        Route("/regeln/umraeumen", umraeum_plan),
+        Route("/regeln/umraeumen/haken", umraeum_haken, methods=["POST"]),
+        Route("/regeln/umraeumen/fertig", umraeum_fertig, methods=["POST"]),
         Route("/regeln/lauf/{kennung}/rueckgaengig", lauf_zuruecknehmen, methods=["POST"]),
         Route("/regel/{id:int}", aendern, methods=["PUT"]),
         Route("/regel/{id:int}", loeschen, methods=["DELETE"]),

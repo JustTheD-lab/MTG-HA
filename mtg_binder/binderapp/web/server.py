@@ -60,9 +60,9 @@ from binderapp.addon import pc_version
 from binderapp.db import leeren, seiten
 from binderapp.db.datenbank import MINDEST, aendern, einfuegen, mit_scan_ausschnitt, schreiben, verbinden, version
 from binderapp.db.seiten import Fehler
-from binderapp.preise import werte
-from binderapp.web import (abzug, bearbeiten, dashboard, decks, hochladen, kisten, kistenschreiben, manabox, pc, proxy,
-                           pruefen, regeln, sammlung, scan, secretlair, sets, verwaltung)
+from binderapp.preise import gewinn, werte
+from binderapp.web import (abzug, bearbeiten, dashboard, decks, hochladen, kaufliste, kisten, kistenschreiben, manabox, pc,
+                           proxy, pruefen, regeln, sammlung, scan, secretlair, sets, verwaltung)
 from binderapp.web.anmeldung import COOKIE, DAUER, Anmeldung
 from binderapp.web.helfer import Helfer
 from binderapp.web.speicher import MELDUNG as MELDUNG_SPEICHER
@@ -324,6 +324,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
             status = verarbeiter_status(con)
             preise = werte.preise_fuer_karten(con, [z["karte_id"] for z in zeilen if z["karte_id"] is not None])
             wert = werte.werte(con, NUTZER, "binder").get(int(binder_id))
+            bilanz = gewinn.je(con, NUTZER, "binder").get(int(binder_id))   # Paket 8: gegen Kaufpreis
         zeilen_n, spalten_n = seiten.raster_masse(b["raster"])
         seiten_je: dict[int, dict] = {}
         taschen: dict[int, dict] = {}
@@ -348,7 +349,8 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         for tasche in taschen.values():  # meist genau eine Karte je Tasche
             tasche["karte"] = tasche["karten"][0] if tasche["karten"] else None
         return JSONResponse({**dict(b), "zeilen": zeilen_n, "spalten": spalten_n,
-                             "seiten": list(seiten_je.values()), "verarbeiter": status, "wert": wert})
+                             "seiten": list(seiten_je.values()), "verarbeiter": status, "wert": wert,
+                             "gewinn": bilanz})
 
     def verlauf(request):
         binder_id = request.path_params["id"]
@@ -372,12 +374,15 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
                 "SELECT zeitpunkt, aktion, quelle, alt, neu FROM historie"
                 f" WHERE tabelle = 'karte' AND datensatz = :k {ab} ORDER BY id", {"k": k["id"]}).fetchall()
             preise = werte.verlauf_karte(con, k["id"])   # Low, Durchschnitt 7 Tage, Veränderungen (ab Version 4)
+            heute = werte.preise_fuer_karten(con, [k["id"]]).get(k["id"], {}).get("wert")
+            bilanz = gewinn.karte(con, k, heute)   # Paket 8: Kaufpreis gegen heutigen Wert (ab Version 11)
         antwort = dict(k)
         antwort["foil"] = bool(antwort["foil"])
         antwort["geprueft"] = bool(antwort["geprueft"])
         antwort["set"] = antwort.pop("set_code")
         antwort["markierung"] = markierung(k["status"])
         antwort["preise"] = preise
+        antwort["gewinn"] = bilanz
         antwort["historie"] = [
             {**dict(h), "alt": json.loads(h["alt"]) if h["alt"] else None,
              "neu": json.loads(h["neu"]) if h["neu"] else None}
@@ -676,6 +681,7 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         *kistenschreiben.routen(h),
         *bearbeiten.routen(h),
         *decks.routen(h),
+        *kaufliste.routen(h),
         *sammlung.routen(h),
         *abzug.routen(h),
         *scan.routen(h),

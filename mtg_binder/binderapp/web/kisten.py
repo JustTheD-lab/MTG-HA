@@ -36,9 +36,9 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from binderapp.db.datenbank import einfuegen, aendern, loeschen, version
-from binderapp.db.erkennung import SCAN_MARKE
+from binderapp.db.erkennung import SCAN_MARKE, ZURUECK_MARKE
 from binderapp.db.seiten import EIGENE_FARBE
-from binderapp.preise import werte
+from binderapp.preise import gewinn, werte
 from binderapp.sortieren import einsortieren
 from binderapp.web.helfer import Fehler, fehler
 
@@ -787,15 +787,19 @@ def routen(h) -> list[Route]:
             saetze = con.execute(SQL_SAETZE, (h.nutzer, kiste_id)).fetchall()
             sprachen = con.execute(SQL_SPRACHEN, (h.nutzer, kiste_id)).fetchall()
             wert = werte.werte(con, h.nutzer, "kiste").get(kiste_id)
+            bilanz = gewinn.je(con, h.nutzer, "kiste").get(kiste_id)   # Paket 8: gegen Kaufpreis
             faecher = einsortieren.faecher_lesen(con, h.nutzer, kiste_id)
             scan_eingang = einsortieren.aktiv(con) and k["extern_name"] == SCAN_MARKE
+            umraeumbar = einsortieren.aktiv(con) and k["extern_name"] not in (SCAN_MARKE, ZURUECK_MARKE)
         maximum = kopf["manawert_max"]
         return JSONResponse({
             "faecher": faecher,   # ab Version 6: Fächer der Kiste (Sortierregeln), sonst leer
             "scan_eingang": scan_eingang,   # zeigt den Knopf „Jetzt einsortieren“
+            "umraeumbar": umraeumbar,   # zeigt den Knopf „Umräumen“ (Paket 5)
             "id": k["id"], "name": k["name"], "etikettfarbe": k["etikettfarbe"], "regalplatz": k["regalplatz"],
             "posten": kopf["posten"], "karten": kopf["karten"],
             "wert": wert,   # {"wert": Euro (Durchschnitt 7 Tage), "ohne_preis": Karten} oder None
+            "gewinn": bilanz,   # preise/gewinn.py, ab Version 11 (sonst None)
             "werte": {
                 "sets": [dict(z) for z in saetze],
                 "sprachen": [dict(z) for z in sprachen],

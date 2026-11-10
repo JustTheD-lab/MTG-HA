@@ -1,0 +1,45 @@
+/* Kaufliste mit Preisalarm (#/kaufliste, Paket 7). Baut auf deck.css auf (Kopf, Schalter, Zeilen, Meldung);
+   eigene Klassen mit Vorsatz kauf-. Handy zuerst. */
+
+.kauf-titel { margin: 0 0 6px; }
+.kauf-decks { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px 24px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .kauf-decks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kauf-deck { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; min-width: 0; }
+.kauf-deck .deck-schalter span:last-child { overflow-wrap: anywhere; }
+.kauf-treffer-zeile { margin-top: 2px; }
+.kauf-treffer-zeile--da { color: var(--messing-hell); font-weight: 600; }
+
+.kauf-filter { margin-top: 18px; }
+
+.kauf-zeile--treffer { border-left: 2px solid var(--messing); }
+.kauf-marke { padding: 1px 8px; border-radius: 999px; background: var(--messing-schleier, rgba(201, 163, 94, 0.2));
+  color: var(--messing-hell); font-size: 0.78rem; font-weight: 600; }
+.kauf-zeile .deck-zeile-unter a { color: var(--text); text-decoration: underline; text-decoration-color: var(--linie-stark);
+  text-underline-offset: 3px; }
+
+.kauf-felder { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px; margin-top: 4px; }
+.kauf-felder label, .kauf-formular label { display: grid; gap: 4px; min-width: 0; }
+.kauf-wunsch-feld { width: 7.5em; min-height: 44px; }
+.kauf-anzahl-feld { width: 5em; min-height: 44px; }
+.kauf-felder .knopf { min-height: 44px; font-size: 0.85rem; }
+
+.kauf-formular { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--linie); border-radius: var(--radius);
+  background: var(--flaeche-3); }
+.kauf-formular[hidden] { display: none; }
+.kauf-formular-zeile { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; }
+.kauf-formular-zeile[hidden] { display: none; }
+.kauf-suche { flex: 1 1 260px; }
+.kauf-suche-feld, .kauf-druck { width: 100%; min-height: 44px; }
+.kauf-gewaehlt label:has(.kauf-druck) { flex: 1 1 240px; }
+.kauf-neu-anzahl { width: 5em; min-height: 44px; }
+.kauf-neu-wunsch { width: 7.5em; min-height: 44px; }
+.kauf-foil-wahl { display: flex !important; align-items: center; gap: 8px; min-height: 44px; }
+.kauf-gewaehlt-name { flex-basis: 100%; margin: 0; font-weight: 600; }
+.kauf-gewaehlt .knopf { min-height: 44px; }
+.kauf-treffer { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.kauf-treffer:empty { display: none; }
+.kauf-treffer-knopf { min-height: 44px; font-size: 0.88rem; }
+
+/* Einstieg im Regal (neben Sets und Dashboard) */
+.regal-kaufliste { min-height: 44px; font-size: 0.84rem; color: var(--text-2); border-color: var(--linie); }
+.regal-kaufliste:hover { color: var(--text); }

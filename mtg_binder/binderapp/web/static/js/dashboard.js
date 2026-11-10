@@ -9,7 +9,7 @@
 // SVG in echter Pixelbreite, Balken und Säulen sind HTML. Alle Verteilungen sind einfarbig (Messing) und tragen ihren
 // Namen als Text, die Farbe sagt also nie allein, was gemeint ist; die Punkte bei den Magic-Farben sind nur Beiwerk.
 
-import { holen, senden, fehlerText, esc, gehe, zurueck, euro, bildUrl, scryfallBild, adresse, vorliebe } from './gemeinsam.js';
+import { holen, senden, fehlerText, esc, gehe, zurueck, euro, bildUrl, scryfallBild, adresse, vorliebe, ausgenommenText } from './gemeinsam.js';
 import { dialogOffen } from './dialog.js';
 import { laden as sitzungLaden } from './anmeldung.js';
 
@@ -300,7 +300,11 @@ function kachelnHtml(d) {
   ];
   if (d.kaufpreis) {
     const k = d.kaufpreis;
-    teile.push(kachel('Gegen Kaufpreis', '', `${betrag(k.kauf)} bezahlt für ${karten(k.karten)}`, { inhalt: delta(Math.round((k.wert - k.kauf) * 100) / 100) }));
+    // Paket 8: nur Karten mit Kaufpreis in Euro und heutigem Preis zählen; die anderen stehen sichtbar darunter
+    const aus = ausgenommenText(k);
+    const unter = (k.karten ? `${betrag(k.kauf)} bezahlt für ${karten(k.karten)}` : 'keine Karte zählt')
+      + (aus ? ` · zählen nicht: ${aus}` : '');
+    teile.push(kachel('Gegen Kaufpreis', '', unter, { inhalt: delta(k.gewinn ?? null, k.prozent ?? null), ziel: '#/sammlung' }));
   }
   if (d.secret_besitz) {
     // Eigene Secret Lairs: Gewinn/Verlust gegen den Kaufpreis (Wert wie in der Secret-Lair-Ansicht)

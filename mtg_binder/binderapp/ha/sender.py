@@ -5,7 +5,8 @@ Supervisor (`services: mqtt:want` in config.yaml, GET http://supervisor/services
 
   mtg_binder/verfuegbar       online / offline (letzter Wille; Add-on aus → Sensoren „nicht verfügbar“)
   mtg_binder/status           JSON aus ha.daten.status(), jede Minute
-  mtg_binder/werte            JSON aus ha.daten.werte(), stündlich und nach jedem neuen Preistag
+  mtg_binder/werte            JSON aus ha.daten.werte(), stündlich, nach jedem neuen Preistag und nach Änderungen
+                              der Kaufliste (Paket 7)
   mtg_binder/binder/<id>      {wert, karten} je Binder   ┐ Sensoren entstehen und verschwinden
   mtg_binder/kiste/<id>       {wert, karten} je Kiste    ┘ mit Binder und Kiste
   homeassistant/<art>/mtg_binder/<objekt>/config   Discovery (retain)
@@ -25,6 +26,7 @@ from contextlib import closing
 from pathlib import Path
 
 from binderapp.db.datenbank import verbinden
+from binderapp.decks import kaufliste
 from binderapp.ha import daten
 from binderapp.ha.mqtt import MqttFehler, Verbindung
 from binderapp.preise import werte as preise
@@ -117,6 +119,11 @@ FEST = [
      "{{ value_json.woche.gewinner[0].euro if value_json.woche.gewinner else None }}",
      {**EURO, "state_class": None, "icon": "mdi:swap-vertical-bold", "json_attributes_topic": THEMA_WERTE,
       "json_attributes_template": "{{ value_json.woche | tojson }}"}),
+    # Paket 7: Karten der Kaufliste unter ihrem Wunschpreis; Zustand = Zahl der Karten, Liste als Attribut
+    ("sensor", "kaufliste_treffer", "Kaufliste unter Wunschpreis", THEMA_WERTE,
+     "{{ value_json.kaufliste.treffer if value_json.kaufliste else None }}",
+     {**ANZAHL, "unit_of_measurement": "Karten", "icon": "mdi:cart-arrow-down", "json_attributes_topic": THEMA_WERTE,
+      "json_attributes_template": "{{ (value_json.kaufliste or {}) | tojson }}"}),
 ]
 for _name, _text in (("vortag", "Vortag"), ("tage3", "3 Tage"), ("tage30", "30 Tage")):
     FEST.append(("sensor", f"veraenderung_{_name}", f"Veränderung {_text}", THEMA_WERTE,
@@ -222,7 +229,8 @@ class Sender(threading.Thread):
         with closing(verbinden(self.db, nur_lesen=True)) as con:
             status = daten.status(con)
             # Neuer Preistag oder eine andere Preisart (Einstellung in der App): Werte sofort
-            tag = (preise.neuester_tag(con), preise.aufloesen(con, self.preisart))
+            tag = (preise.neuester_tag(con), preise.aufloesen(con, self.preisart),
+                   kaufliste.stand(con, daten.NUTZER))   # Paket 7: geänderte Kaufliste oder Wunschpreise sofort
             neue_werte = None
             if jetzt - self.letzte_werte >= self.takt_werte or tag != self.preistag:
                 neue_werte = daten.werte(con, preisart=self.preisart)

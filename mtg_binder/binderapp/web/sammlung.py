@@ -21,7 +21,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from binderapp.db.seiten import Fehler
-from binderapp.preise import werte
+from binderapp.preise import gewinn, werte
 from binderapp.sortieren import ueberzaehlig as ue
 from binderapp.web import kisten as k_
 
@@ -98,11 +98,13 @@ def routen(h) -> list[Route]:
             sprachen = con.execute(SQL_SPRACHEN, (n,)).fetchall()
             orte = con.execute(SQL_ORTE, (n, n, n)).fetchall()
             wert = werte.gesamtwert(con, n)
+            bilanz = gewinn.gesamt(con, n)   # Paket 8: gegen Kaufpreis
         maximum = z["manawert_max"]
         return JSONResponse({
             "name": "Sammlung",
             "posten": z["posten"], "karten": z["karten"],
             "wert": wert,   # {"wert": Euro (Durchschnitt 7 Tage), "ohne_preis", "tag"} oder None
+            "gewinn": bilanz,   # preise/gewinn.py, ab Version 11, sonst None
             "binder": {"posten": z["binder_posten"], "karten": z["binder_karten"]},
             "kisten": {"posten": z["kisten_posten"], "karten": z["kisten_karten"]},
             "decks": {"posten": z["deck_posten"], "karten": z["deck_karten"]},

@@ -120,6 +120,11 @@ body {
 
 /* Gesamtwerte (Binder, Kisten, Sammlung) */
 .wert { font-variant-numeric: tabular-nums; color: var(--messing-hell); white-space: nowrap; }
+/* Gewinn und Verlust gegen den Kaufpreis (Paket 8); Farben wie die Preisänderung in der Kartenansicht */
+.gewinn { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gewinn-plus { color: #6fbf73; }
+.gewinn-minus { color: #e07a6d; }
+.gewinn-aus { opacity: 0.75; }
 
 /* Add-on: PC verbinden (pcverbinden.js) */
 .pc-angaben { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; margin: 14px 0; }

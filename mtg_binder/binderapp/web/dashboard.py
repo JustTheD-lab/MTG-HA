@@ -22,7 +22,7 @@ from starlette.routing import Route
 
 from binderapp.db.datenbank import version
 from binderapp.ha import daten as ha_daten
-from binderapp.preise import werte
+from binderapp.preise import gewinn, werte
 from binderapp.secretlair import drops as secret_drops
 from binderapp.web import kisten as k_
 from binderapp.web.helfer import Fehler
@@ -90,14 +90,6 @@ SELECT substr(f.aufgenommen, 1, 10) AS tag, COUNT(*) AS fotos
 FROM scan_foto f JOIN scan_durchgang d ON d.id = f.durchgang_id
 WHERE d.nutzer_id = ? AND f.aufgenommen >= ? AND f.status != 'verworfen' GROUP BY 1
 """
-# Kaufpreis gilt je Karte (ManaBox-Spalte „Purchase price“); verglichen werden nur Karten mit beiden Angaben in Euro
-SQL_KAUFPREIS = f"""
-SELECT COALESCE(SUM(k.anzahl * k.kaufpreis), 0) AS kauf, COALESCE(SUM(k.anzahl * {{preis}}), 0) AS wert,
-       COALESCE(SUM(k.anzahl), 0) AS karten
-{k_.VON} JOIN preis p ON p.cardmarket_id = kd.cardmarket_id AND p.tag = ?
-WHERE k.nutzer_id = ? AND {k_.ORT_DA} AND k.kaufpreis IS NOT NULL AND {{preis}} IS NOT NULL
-  AND COALESCE(UPPER(k.kaufpreis_waehrung), 'EUR') = 'EUR'
-"""
 SQL_DROPS = """
 SELECT d.id, d.name, d.verkauf, COUNT(k.id) AS karten, SUM(k.anzahl * k.teuer) AS teuer,
        (SELECT k2.scryfall_id FROM secret_karte k2 WHERE k2.drop_id = d.id AND k2.scryfall_id IS NOT NULL
@@ -157,14 +149,14 @@ def verteilungen(con, nutzer: int, preisart: str) -> dict:
 
 
 def _kaufpreis(con, nutzer: int, preisart: str) -> dict | None:
-    tag = werte.neuester_tag(con)
-    if tag is None or version(con) < 11:
+    """Gewinn und Verlust gegen den Kaufpreis (Paket 8, preise/gewinn.py): nur Karten mit Kaufpreis in Euro und
+    heutigem Preis zählen, die anderen stehen gezählt daneben. None, solange keine Karte einen Kaufpreis hat."""
+    if werte.neuester_tag(con) is None:
         return None
-    z = con.execute(SQL_KAUFPREIS.format(preis=werte.preis_ausdruck(preisart)), (tag, nutzer)).fetchone()
-    if not z["karten"]:
+    b = gewinn.gesamt(con, nutzer, preisart)
+    if not b or not b["mit_kaufpreis"]:
         return None
-    return {"kauf": round(z["kauf"], 2), "wert": round(z["wert"], 2), "karten": z["karten"]}
-
+    return {**b, "kauf": b["kauf"] or 0, "wert": b["wert"] or 0}
 
 def _scans(con, nutzer: int, heute: date) -> list[dict]:
     anfang = heute - timedelta(days=SCAN_TAGE - 1)

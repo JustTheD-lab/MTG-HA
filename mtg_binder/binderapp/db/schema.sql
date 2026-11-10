@@ -328,6 +328,50 @@ CREATE TABLE IF NOT EXISTS deck_entnahme (
     UNIQUE (deck_karte_id, karte_id)
 );
 
+-- Haken der Umräumliste (ab Version 22, Paket 5, 10.11.2026): Karten, die nach den heutigen Sortierregeln in eine
+-- andere Kiste gehören und schon von Hand umgeräumt sind, bis „Fertig“. Ein Haken gilt nur, solange die Karte noch in
+-- `von_kiste_id` liegt und die Regeln weiter `nach_kiste_id` sagen. Zwischenstand, ohne Historie.
+CREATE TABLE IF NOT EXISTS umraeum_haken (
+    karte_id      INTEGER PRIMARY KEY REFERENCES karte(id) ON DELETE CASCADE,
+    nutzer_id     INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE,
+    von_kiste_id  INTEGER NOT NULL REFERENCES kiste(id) ON DELETE CASCADE,
+    nach_kiste_id INTEGER NOT NULL REFERENCES kiste(id) ON DELETE CASCADE
+);
+
+-- Kaufliste mit Preisalarm (ab Version 23, Paket 7, 10.11.2026). Nutzerdaten mit Historie (schritte.TABELLEN):
+-- kauf_deck: Decks, deren fehlende Karten in der Kaufliste stehen (Schalter „in Kaufliste“ je Deck).
+CREATE TABLE IF NOT EXISTS kauf_deck (
+    id         INTEGER PRIMARY KEY,
+    nutzer_id  INTEGER NOT NULL REFERENCES nutzer(id),
+    deck_id    INTEGER NOT NULL UNIQUE REFERENCES deck(id) ON DELETE CASCADE
+);
+-- kauf_karte: eigene Einträge (anzahl ≥ 1) und Wunschpreise; eine Zeile mit anzahl = 0 hält nur den Wunschpreis einer
+-- fehlenden Deckkarte. `schluessel`: „d:<Scryfall-ID>“ (genauer Druck), „o:<Oracle-ID>“ (nur Name, günstigster
+-- Druck) oder „n:<name in Kleinbuchstaben>“ (Karte nicht im Katalog). Wunschpreis in Euro je Stück.
+CREATE TABLE IF NOT EXISTS kauf_karte (
+    id           INTEGER PRIMARY KEY,
+    nutzer_id    INTEGER NOT NULL REFERENCES nutzer(id),
+    schluessel   TEXT NOT NULL,
+    foil         INTEGER NOT NULL DEFAULT 0 CHECK (foil IN (0, 1)),
+    name         TEXT NOT NULL,
+    oracle_id    TEXT,
+    scryfall_id  TEXT,
+    set_code     TEXT,
+    nummer       TEXT,
+    anzahl       INTEGER NOT NULL DEFAULT 1 CHECK (anzahl BETWEEN 0 AND 999),
+    wunschpreis  REAL CHECK (wunschpreis IS NULL OR wunschpreis >= 0),
+    angelegt     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    geaendert    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    UNIQUE (nutzer_id, schluessel, foil)
+);
+-- Cardmarket-Produkte je Eintrag der Kaufliste, abgeleitet aus dem Katalog wie deck_produkt, ohne Historie. Der
+-- tägliche Preisabruf speichert auch diese Produkte.
+CREATE TABLE IF NOT EXISTS kauf_produkt (
+    kauf_karte_id INTEGER NOT NULL REFERENCES kauf_karte(id) ON DELETE CASCADE,
+    cardmarket_id INTEGER NOT NULL,
+    PRIMARY KEY (kauf_karte_id, cardmarket_id)
+);
+
 -- Änderungshistorie: eine Zeile je Änderung, mit Quelle und den geänderten Feldern als JSON.
 CREATE TABLE IF NOT EXISTS historie (
     id         INTEGER PRIMARY KEY,
@@ -492,5 +536,9 @@ CREATE INDEX IF NOT EXISTS i_deck_produkt_cm  ON deck_produkt(cardmarket_id);
 CREATE INDEX IF NOT EXISTS i_deck_entnahme    ON deck_entnahme(deck_id);
 -- ab Version 14: Ausschnitt je Scan-Foto
 CREATE INDEX IF NOT EXISTS i_scan_foto_karte  ON scan_foto(karte_id);
+-- ab Version 22: Umräumliste
+CREATE INDEX IF NOT EXISTS i_umraeum_nutzer   ON umraeum_haken(nutzer_id);
+-- ab Version 23: Kaufliste
+CREATE INDEX IF NOT EXISTS i_kauf_produkt_cm  ON kauf_produkt(cardmarket_id);
 
-PRAGMA user_version = 21;
+PRAGMA user_version = 23;
