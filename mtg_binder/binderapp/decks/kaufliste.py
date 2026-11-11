@@ -56,25 +56,38 @@ def decks_in_liste(con, nutzer: int) -> set[int]:
     return {z[0] for z in con.execute("SELECT deck_id FROM kauf_deck WHERE nutzer_id = ?", (nutzer,))}
 
 
-def _preise(con, nutzer: int, preisart: str, art: str, deck_id: int | None = None) -> dict[int, float]:
+def _preise(con, nutzer: int, preisart: str | None, art: str, deck_id: int | None = None) -> dict[int, tuple]:
     """Günstigster Preis je Kaufliste-Eintrag (`art` = "kauf") oder Deckzeile (`art` = "deck") am neuesten Preistag,
-    Foil-Zeilen mit Foil-Preis. Ein Preis 0 heißt in der Preisdatei „keine Daten“ (z. B. Trend ohne Verkäufe) und
-    zählt nicht, sonst wäre 0,00 € der günstigste Druck und jeder Wunschpreis erreicht."""
-    tag = preise.neuester_tag(con)
-    if tag is None:
-        return {}
+    Foil-Zeilen mit Foil-Preis, als (Preis, Cardmarket-Produkt dieses Preises). Ein Preis 0 heißt in der Preisdatei
+    „keine Daten“ (z. B. Trend ohne Verkäufe) und zählt nicht, sonst wäre 0,00 € der günstigste Druck und jeder
+    Wunschpreis erreicht. Zeilen ohne Preis (oder ohne Preistag, `preisart` None) bekommen (None, kleinste
+    Produktnummer), damit der Link zu Cardmarket trotzdem geht."""
     if art == "kauf":
         tabelle, produkt, bedingung, wert = "kauf_karte", "kauf_produkt kp ON kp.kauf_karte_id", "z.nutzer_id = ?", nutzer
     else:
         tabelle, produkt, bedingung, wert = "deck_karte", "deck_produkt kp ON kp.deck_karte_id", "z.deck_id = ?", deck_id
+    erg = {z[0]: (None, z[1]) for z in con.execute(
+        f"SELECT z.id, MIN(kp.cardmarket_id) FROM {tabelle} z JOIN {produkt} = z.id WHERE {bedingung} GROUP BY z.id",
+        (wert,))}
+    tag = preise.neuester_tag(con)
+    if tag is None or preisart is None:
+        return erg
     ausdruck = preise.preis_ausdruck(preisart, karte="z")
-    sql = (f"SELECT z.id, MIN(NULLIF({ausdruck}, 0)) FROM {tabelle} z JOIN {produkt} = z.id"
+    # SQLite: neben MIN() gibt eine nackte Spalte den Wert aus der Zeile mit dem kleinsten Preis
+    sql = (f"SELECT z.id, MIN(NULLIF({ausdruck}, 0)), kp.cardmarket_id FROM {tabelle} z JOIN {produkt} = z.id"
            f" JOIN preis p ON p.cardmarket_id = kp.cardmarket_id AND p.tag = ? WHERE {bedingung} GROUP BY z.id")
-    return {z[0]: round(z[1], 2) for z in con.execute(sql, (tag, wert)) if z[1] is not None}
+    for z in con.execute(sql, (tag, wert)):
+        if z[1] is not None:
+            erg[z[0]] = (round(z[1], 2), z[2])
+    return erg
 
 
-def _kleiner(a: float | None, b: float | None) -> float | None:
-    return b if a is None else a if b is None else min(a, b)
+def _guenstiger(p: dict, preis: float | None, produkt: int | None) -> None:
+    """Übernimmt Preis und Produkt, wenn der Preis kleiner ist (ein Produkt ohne Preis nur, solange keins da ist)."""
+    if preis is not None and (p["preis"] is None or preis < p["preis"]):
+        p["preis"], p["cardmarket_id"] = preis, produkt
+    elif p["cardmarket_id"] is None:
+        p["cardmarket_id"] = produkt
 
 
 def liste(con, nutzer: int, preisart: str | None = None) -> dict:
@@ -90,7 +103,7 @@ def liste(con, nutzer: int, preisart: str | None = None) -> dict:
             "schluessel": s, "foil": bool(foil), "name": basis["name"], "oracle_id": basis.get("oracle_id"),
             "scryfall_id": basis.get("scryfall_id"), "set_code": basis.get("set_code"), "nummer": basis.get("nummer"),
             "genau": s.startswith("d:"), "anzahl": 0, "eigen": 0, "eintrag_id": None, "decks": [], "preis": None,
-            "wunschpreis": None})
+            "cardmarket_id": None, "wunschpreis": None})
 
     decks = []
     for d in con.execute("SELECT * FROM deck WHERE nutzer_id = ? ORDER BY regalplatz, id", (nutzer,)).fetchall():
@@ -99,7 +112,7 @@ def liste(con, nutzer: int, preisart: str | None = None) -> dict:
         if not info["an"]:
             continue
         a = abgleich.abgleichen(con, nutzer, d, preisart)
-        zeilen_preise = _preise(con, nutzer, preisart, "deck", d["id"]) if hat_preise else {}
+        zeilen_preise = _preise(con, nutzer, preisart if hat_preise else None, "deck", d["id"])
         info["fehlt"], info["fehlt_wert"] = a["summe"]["fehlt"], 0.0 if hat_preise else None
         druck_modus = d["abgleich"] == "druck"
         for z in a["karten"]:
@@ -108,8 +121,8 @@ def liste(con, nutzer: int, preisart: str | None = None) -> dict:
             s = schluessel(z["scryfall_id"], z["oracle_id"], z["name"], druck_modus and bool(z["druck_angegeben"]))
             p = eintrag(s, int(bool(z["foil"])), z)
             p["anzahl"] += z["fehlt"]
-            preis = zeilen_preise.get(z["id"])
-            p["preis"] = _kleiner(p["preis"], preis)
+            preis, produkt = zeilen_preise.get(z["id"], (None, None))
+            _guenstiger(p, preis, produkt)
             if preis is not None:
                 info["fehlt_wert"] = round(info["fehlt_wert"] + z["fehlt"] * preis, 2)
             for e in p["decks"]:
@@ -119,7 +132,7 @@ def liste(con, nutzer: int, preisart: str | None = None) -> dict:
             else:
                 p["decks"].append({"id": d["id"], "name": d["name"], "anzahl": z["fehlt"]})
 
-    eigene_preise = _preise(con, nutzer, preisart, "kauf") if hat_preise else {}
+    eigene_preise = _preise(con, nutzer, preisart if hat_preise else None, "kauf")
     for k in con.execute("SELECT * FROM kauf_karte WHERE nutzer_id = ? ORDER BY id", (nutzer,)).fetchall():
         schl = (k["schluessel"], k["foil"])
         if k["anzahl"] == 0 and schl not in pos:
@@ -129,7 +142,7 @@ def liste(con, nutzer: int, preisart: str | None = None) -> dict:
         p["eigen"] = k["anzahl"]
         p["eintrag_id"] = k["id"]
         p["wunschpreis"] = k["wunschpreis"]
-        p["preis"] = _kleiner(p["preis"], eigene_preise.get(k["id"]))
+        _guenstiger(p, *eigene_preise.get(k["id"], (None, None)))
 
     zeilen = sorted(pos.values(), key=lambda p: (p["name"].lower(), p["foil"], p["set_code"] or "", p["nummer"] or ""))
     summe = {"positionen": len(zeilen), "karten": 0, "wert": 0.0, "ohne_preis": 0, "treffer": 0,

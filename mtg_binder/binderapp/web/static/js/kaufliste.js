@@ -12,6 +12,55 @@ const zahl = (n) => Number(n ?? 0).toLocaleString('de-DE');
 const HINWEIS_CARDMARKET = 'Für Cardmarket: Wants → Aus Text hinzufügen.';
 let Z = null;
 
+// Link je Karte auf die Produktseite des günstigsten Drucks (Produktnummer wie bei Secret Lair, keine geratenen
+// Adressen), mit den Angebotsfiltern von Cardmarket als Adressparameter (Vorlieben im Browser). Kein Preisabruf
+// von der Website: Cardmarket steht hinter einer Bot-Prüfung, die Preise kommen weiter aus der täglichen Preisdatei.
+const CARDMARKET = 'https://www.cardmarket.com/de/Magic/Products';
+const CM_FILTER = {
+  land: { name: 'Verkäuferland', param: 'sellerCountry', werte: [['', 'Alle'], ['7', 'Deutschland'], ['1', 'Österreich'],
+    ['4', 'Schweiz'], ['23', 'Niederlande'], ['2', 'Belgien'], ['20', 'Luxemburg'], ['12', 'Frankreich'], ['17', 'Italien'],
+    ['10', 'Spanien'], ['8', 'Dänemark'], ['25', 'Polen'], ['6', 'Tschechien']] },
+  sprache: { name: 'Kartensprache', param: 'language', werte: [['', 'Alle'], ['1', 'Englisch'], ['3', 'Deutsch'],
+    ['1,3', 'Englisch oder Deutsch'], ['2', 'Französisch'], ['5', 'Italienisch'], ['4', 'Spanisch'], ['7', 'Japanisch']] },
+  zustand: { name: 'Mindestzustand', param: 'minCondition', werte: [['', 'Alle'], ['1', 'Mint'], ['2', 'Near Mint'],
+    ['3', 'Excellent'], ['4', 'Good'], ['5', 'Light Played'], ['6', 'Played']] },
+};
+
+function cmFilter() {
+  const f = {};
+  for (const [k, d] of Object.entries(CM_FILTER)) {
+    const w = vorliebe(`kaufliste.cm.${k}`) ?? '';
+    f[k] = d.werte.some(([v]) => v === w) ? w : '';
+  }
+  return f;
+}
+
+function cmAdresse(p) {
+  const q = new URLSearchParams({ idProduct: String(p.cardmarket_id) });
+  const f = cmFilter();
+  for (const [k, d] of Object.entries(CM_FILTER)) if (f[k]) q.set(d.param, f[k]);
+  q.set('isFoil', p.foil ? 'Y' : 'N');
+  return `${CARDMARKET}?${q.toString().replaceAll('%2C', ',')}`;
+}
+
+function cmLinkHtml(p) {
+  if (p.cardmarket_id == null) return '';
+  return `<a class="knopf kauf-cm-link" href="${esc(cmAdresse(p))}" target="_blank" rel="noopener noreferrer">Cardmarket`
+    + `<span aria-hidden="true"> ↗</span><span class="nur-vorleser"> für ${esc(p.name)} (öffnet Cardmarket)</span></a>`;
+}
+
+function cmFilterHtml() {
+  const f = cmFilter();
+  const aktiv = Object.values(f).filter(Boolean).length;
+  return `<details class="kauf-cm"><summary class="etikett">Cardmarket-Filter${aktiv ? ` (${aktiv} aktiv)` : ''}</summary>`
+    + '<div class="kauf-formular-zeile">'
+    + Object.entries(CM_FILTER).map(([k, d]) => `<label><span class="etikett">${esc(d.name)}</span>`
+      + `<select class="feld kauf-cm-wahl" data-filter-art="${k}">`
+      + d.werte.map(([v, t]) => `<option value="${esc(v)}"${v === f[k] ? ' selected' : ''}>${esc(t)}</option>`).join('')
+      + '</select></label>').join('')
+    + '</div><p class="deck-hinweis">Gilt für die Knöpfe „Cardmarket“ je Karte; Foil-Einträge suchen nur Foil.</p></details>';
+}
+
 /** „1,5“ oder „1.50“ → 1.5; leer → null; sonst undefined (ungültig). */
 function preisLesen(text) {
   const t = String(text ?? '').trim().replace(/\s*€$/, '').replace(',', '.');
@@ -61,7 +110,7 @@ function zeileHtml(p, i, schreiben) {
     + `<p class="deck-zeile-unter etikett"><span>${druck}</span><span>${herkunft}</span></p>`
     + `<p class="deck-zeile-unter"><span>Preis ${esc(euro(p.preis))}${p.anzahl > 1 && p.wert != null ? ` · zusammen ${esc(euro(p.wert))}` : ''}</span>`
     + (p.unter_wunsch ? '<span class="kauf-marke">unter Wunschpreis</span>' : '') + '</p>'
-    + `<div class="kauf-felder">${wunschFeld}${eigen}</div></div></li>`;
+    + `<div class="kauf-felder">${wunschFeld}${eigen}${cmLinkHtml(p)}</div></div></li>`;
 }
 
 function zeichnen() {
@@ -214,6 +263,7 @@ export async function zeigen(wurzel) {
     + '<div class="deck-knoepfe"><button type="button" class="knopf kauf-kopieren">Liste kopieren</button>'
     + '<button type="button" class="knopf kauf-hinzu" aria-expanded="false" hidden>Karte hinzufügen</button></div>'
     + '<div class="kauf-formular" hidden></div>'
+    + '<div class="kauf-cm-bereich"></div>'
     + '<div><h2 class="etikett kauf-titel">Decks in der Kaufliste</h2><ul class="kauf-decks"></ul></div></div>'
     + '<div class="deck-toast" role="status" hidden></div>'
     + '<p class="deck-hinweis deck-meldung" role="alert"></p>'
@@ -234,6 +284,16 @@ export async function zeigen(wurzel) {
   };
   Z = z;
   formularEinrichten(z);
+  const cm = q('.kauf-cm-bereich');
+  cm.innerHTML = cmFilterHtml();
+  cm.addEventListener('change', (e) => {
+    const s = e.target.closest('.kauf-cm-wahl');
+    if (!s) return;
+    vorliebe(`kaufliste.cm.${s.dataset.filterArt}`, s.value);
+    const n = Object.values(cmFilter()).filter(Boolean).length;
+    cm.querySelector('summary').textContent = `Cardmarket-Filter${n ? ` (${n} aktiv)` : ''}`;
+    if (z.daten) zeichnen();
+  });
   q('.deck-zurueck').addEventListener('click', () => zurueck('#/'));
   z.hinzu.addEventListener('click', () => {
     z.formular.hidden = !z.formular.hidden;

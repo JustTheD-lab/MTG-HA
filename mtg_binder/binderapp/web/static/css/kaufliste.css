@@ -22,6 +22,12 @@
 .kauf-wunsch-feld { width: 7.5em; min-height: 44px; }
 .kauf-anzahl-feld { width: 5em; min-height: 44px; }
 .kauf-felder .knopf { min-height: 44px; font-size: 0.85rem; }
+.kauf-cm-link { display: inline-flex; align-items: center; text-decoration: none; }
+
+.kauf-cm summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.kauf-cm[open] { display: grid; gap: 8px; }
+.kauf-cm label { display: grid; gap: 4px; min-width: 0; }
+.kauf-cm-wahl { min-height: 44px; max-width: 100%; }
 
 .kauf-formular { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--linie); border-radius: var(--radius);
   background: var(--flaeche-3); }

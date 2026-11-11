@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.54.0
+- **Kaufliste: Knopf „Cardmarket“ je Karte.** Er öffnet die Produktseite des Drucks, der den angezeigten Preis
+  liefert (bei genauem Druck genau diesen). Foil-Einträge suchen nur Foil-Angebote.
+- **Cardmarket-Filter.** Oben in der Kaufliste wählst du Verkäuferland, Kartensprache und Mindestzustand; die App
+  merkt sich die Wahl im Browser, und jeder Knopf nimmt sie mit.
+- Keine Änderung an der Datenbank.
+
 ## 0.53.0
 - **Deck-Statistik.** Die Deckansicht hat einen Abschnitt „Statistik“ (auf- und zuklappbar, die App merkt sich die
   Wahl): Durchschnittsmanawert ohne Länder, Manakurve von 0 bis 7+ ohne Länder, Farben und Kartentypen, alles
