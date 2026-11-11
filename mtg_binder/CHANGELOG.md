@@ -1,5 +1,16 @@
 # Änderungen
 
+## 0.55.0
+- **Proxys: eigene Bilder.** Neue Tafel „Eigene Bilder“: Bild hochladen (PNG, JPEG, WebP) oder Adresse einfügen,
+  Vorschau prüfen, speichern. Ein Beschnittrand von 1/8 Zoll (z. B. MPC) wird automatisch entfernt, sonst wird das
+  Bild mittig auf 63 × 88 mm zugeschnitten; der Zuschnitt lässt sich vor dem Speichern ändern.
+- **Mit Kartennamen** ersetzt ein Bild diese Karte in der Liste, automatisch statt Scryfall; in der Vorschau lässt
+  sich je Zeile „Scryfall-Bild“ oder ein eigenes Bild wählen. Doppelseitige Karten bekommen auf Wunsch eine eigene
+  zweite Seite.
+- **Zusätzlich drucken:** Bilder aus der Bibliothek (z. B. Tokens) kommen mit beliebiger Anzahl ins PDF, auch ganz
+  ohne Deckliste.
+- Keine Änderung an der Datenbank.
+
 ## 0.54.0
 - **Kaufliste: Knopf „Cardmarket“ je Karte.** Er öffnet die Produktseite des Drucks, der den angezeigten Preis
   liefert (bei genauem Druck genau diesen). Foil-Einträge suchen nur Foil-Angebote.

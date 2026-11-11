@@ -2,6 +2,7 @@
 
     <wurzel>/                 lokal (/data/proxy): Stände (staende.py), Rückseiten, Arbeitsordner der Aufträge
     <wurzel>/rueckseiten/     hochgeladene Rückseiten (<id>.png|jpg und liste.json), in den HA-Sicherungen
+    <wurzel>/eigene/          eigene Kartenbilder (proxy/eigene.py), in den HA-Sicherungen
     <wurzel>/arbeit/<id>/     Bilder eines Auftrags, nach dem Auftrag gelöscht (nicht in den Sicherungen)
     <ablage>/bilder/          Bilder-Cache (Netzlaufwerk), höchstens 2 GB, nach 30 Tagen neu geladen
     <ablage>/pdf/             die letzten 50 PDFs mit <name>.json daneben
@@ -29,8 +30,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from binderapp.db.datenbank import verbinden
-from binderapp.proxy import druckwahl, liste
+from binderapp.proxy import druckwahl, eigene, liste
 from binderapp.proxy import staende as st
+from binderapp.proxy.laeufer import eigen_ablegen, schluessel
 
 log = logging.getLogger("binderapp.proxy")
 
@@ -51,6 +53,7 @@ RUECKSEITEN_MAX = 20
 ERKENNEN_ZEIT = 120
 LADEN_ZEIT = 60 * 60
 PDF_ZEIT = 30 * 60
+EINPASSEN_ZEIT = 2 * 60
 BEISPIEL = Path(__file__).with_name("rueckseite-beispiel.png")
 BEISPIEL_ID = "beispiel"
 FORMATNAMEN = {"moxfield": "Moxfield/Archidekt mit Set und Nummer", "archidekt": "Archidekt", "mtga": "MTG Arena",
@@ -282,6 +285,9 @@ class Auftrag:
     rueckseite: str
     versatz: dict | None = None        # Kalibrierung beim Anlegen (None: abgeschaltet oder nicht kalibriert)
     gewaehlt: list | None = None       # günstigster Druck: was je Zeile gewählt wurde (druckwahl.waehlen)
+    eigene: dict = field(default_factory=dict)    # eigene Bilder je Schlüssel (Bibliothek.zuordnung)
+    zusatz: list = field(default_factory=list)    # Zusatzkarten [(Läufer-Eintrag, Anzahl)]
+    eigen_genutzt: int = 0                        # Zeilen der Liste mit eigenem Bild
     _katalog: Path | None = None
     _preisdatei: Path | None = None
     zustand: str = "wartet"          # wartet → laedt → (fehlende) → baut → fertig | abgebrochen | fehler
@@ -300,7 +306,8 @@ class Auftrag:
         return {"id": self.id, "name": self.name, "format": self.format, "zustand": self.zustand,
                 "fertig": self.fertig, "gesamt": self.gesamt, "fehlende": self.fehlende, "meldung": self.meldung,
                 "pdf": self.pdf, "stand": self.stand, "zeiten": self.zeiten, "cache": self.cache, "versatz": self.versatz,
-                "druckwahl": self.optionen.get("druckwahl", "liste"), "gewaehlt": self.gewaehlt}
+                "druckwahl": self.optionen.get("druckwahl", "liste"), "gewaehlt": self.gewaehlt,
+                "eigene": self.eigen_genutzt, "zusatz": sum(n for _, n in self.zusatz)}
 
 
 class Dienst:
@@ -316,10 +323,12 @@ class Dienst:
         self._laeufer = laeufer
         self._sperre = threading.Lock()
         self.auftrag: Auftrag | None = None
+        self.eigene = eigene.Bibliothek(self.wurzel / "eigene", self._einpassen)
 
     def starten(self) -> None:
         shutil.rmtree(self.wurzel / "arbeit", ignore_errors=True)   # Reste eines Neustarts mitten im Auftrag
         self.staende.aufraeumen()
+        self.eigene.aufraeumen()
         self.abgleich.start()
 
     # Stand
@@ -355,6 +364,19 @@ class Dienst:
             auftrag.stand = tag
         return self._laeufer(py, code, befehl, argumente, zeit, arbeit)
 
+    def _einpassen(self, roh: Path, ausgabe: Path, klein: Path, zuschnitt: str) -> dict:
+        """Eigenes Bild vom Läufer einpassen lassen (Pillow im venv des Stands, nie im Server)."""
+        arbeit = self._arbeitsordner("einpassen")
+        try:
+            r = self._lauf("einpassen", ["--eingabe", str(roh), "--ausgabe", str(ausgabe), "--klein", str(klein),
+                                         "--zuschnitt", zuschnitt], EINPASSEN_ZEIT, arbeit)
+        finally:
+            shutil.rmtree(arbeit, ignore_errors=True)
+        if not r.get("ok"):
+            raise eigene.Eigenfehler(str(r.get("fehler") or "Das Bild ließ sich nicht einpassen."),
+                                     500 if r.get("standfehler") or r.get("absturz") else 400)
+        return r
+
     # Prüfen (Vorschau)
     def pruefen(self, text, format_name: str | None, sets_ignorieren: bool, kat) -> dict:
         text = text_pruefen(text)
@@ -374,6 +396,10 @@ class Dienst:
         gewaehlt = format_name or format_waehlen(formate, kat)
         f = formate.get(gewaehlt or "", {})
         karten = katalog_pruefen(kat, f.get("karten") or [], sets_ignorieren)
+        kandidaten = self.eigene.kandidaten()
+        for k in karten:   # eigene Bilder je Zeile (Vorgabe zuerst); die Wahl trifft der Nutzer im Auftrag
+            k["schluessel"] = schluessel(k.get("name") or "")
+            k["eigene"] = kandidaten.get(k["schluessel"], [])
         exemplare = sum(k["anzahl"] for k in karten)
         return {"format": gewaehlt, "formate": [{"name": n, "titel": t, "karten": len(formate.get(n, {}).get("karten") or [])}
                                                 for n, t in FORMATNAMEN.items()],
@@ -383,7 +409,14 @@ class Dienst:
     # Auftrag
     def neu(self, text, format_name, name, rueckseite, optionen: dict, katalog: Path | None = None,
             preisdatei: Path | None = None) -> dict:
-        text = text_pruefen(text)
+        zusatz = self.eigene.zusatz(optionen.get("zusatz"))
+        zusatz_summe = sum(n for _, n in zusatz)
+        if zusatz_summe > KARTEN_MAX:
+            raise Proxyfehler(f"Zu viele Zusatzkarten: höchstens {KARTEN_MAX} je PDF.")
+        nur_zusatz = zusatz_summe > 0 and not (isinstance(text, str) and text.strip())
+        text = "" if nur_zusatz else text_pruefen(text)
+        format_name = format_name or ("simple" if nur_zusatz else None)
+        zuordnung = self.eigene.zuordnung(optionen.get("eigene"))
         if format_name not in FORMATNAMEN:
             raise Proxyfehler("Unbekanntes Format.")
         druckwahl = optionen.get("druckwahl") or "liste"
@@ -406,7 +439,7 @@ class Dienst:
                          "extra_art": bool(optionen.get("extra_art")), "druckwahl": druckwahl,
                          "erster_druck": druckwahl == "erster"}, rueckseite or BEISPIEL_ID,
                         versatz=self.kalibrierung_werte() if optionen.get("versatz", True) is not False else None,
-                        _katalog=katalog, _preisdatei=preisdatei)
+                        eigene=zuordnung, zusatz=zusatz, _katalog=katalog, _preisdatei=preisdatei)
             self.auftrag = a
         threading.Thread(target=self._ausfuehren, args=(a,), name="Proxyauftrag", daemon=True).start()
         return a.anzeige()
@@ -464,7 +497,7 @@ class Dienst:
         a.optionen = {**a.optionen, "sets_ignorieren": False}   # die Liste nennt jetzt den Druck
 
     def _laden_und_bauen(self, a: Auftrag, arbeit: Path, beginn: float) -> None:
-        if a.optionen.get("druckwahl") == "guenstig":
+        if a.text and a.optionen.get("druckwahl") == "guenstig":
             self._guenstig_waehlen(a, arbeit)
             a.zeiten["waehlen_s"] = round(time.monotonic() - beginn, 1)
         start_laden = time.monotonic()
@@ -473,27 +506,39 @@ class Dienst:
         vorne, doppelt, hinten = arbeit / "vorne", arbeit / "doppelt", arbeit / "hinten"
         hinten.mkdir()
         shutil.copyfile(self._rueckseite_pfad(a.rueckseite), hinten / ("rueckseite" + self._rueckseite_pfad(a.rueckseite).suffix))
-        cache = self.ablage / "bilder" if self.ablage_ok() else None
-        argumente = ["--liste", str(arbeit / "liste.txt"), "--format", a.format, "--optionen", json.dumps(a.optionen),
-                     "--vorne", str(vorne), "--doppelt", str(doppelt), "--fortschritt", str(arbeit / "fortschritt.json")]
-        if cache is not None:
-            argumente += ["--cache", str(cache), "--cache-tage", str(CACHE_TAGE)]
-        argumente += ["--hoechstens", str(KARTEN_MAX)]
-        beobachter = threading.Thread(target=self._fortschritt, args=(a, arbeit / "fortschritt.json"), daemon=True)
-        beobachter.start()
-        with self.staende.sperre:   # kein Umschalten des Stands, solange er rechnet
-            r = self._lauf("laden", argumente, LADEN_ZEIT, arbeit, a)
-        a.zeiten["laden_s"] = round(time.monotonic() - start_laden, 1)
-        if not r.get("ok"):
-            raise RuntimeError("Bilder laden gescheitert: " + str(r.get("fehler")))
-        a.cache = r.get("cache") or {}
-        if cache is not None:
-            cache_aufraeumen(cache)
-        zeilen = r.get("zeilen") or []
-        a.gesamt = a.fertig = len(zeilen)
+        zusatz_summe = sum(n for _, n in a.zusatz)
+        zeilen = []
+        if a.text:
+            cache = self.ablage / "bilder" if self.ablage_ok() else None
+            argumente = ["--liste", str(arbeit / "liste.txt"), "--format", a.format, "--optionen", json.dumps(a.optionen),
+                         "--vorne", str(vorne), "--doppelt", str(doppelt), "--fortschritt", str(arbeit / "fortschritt.json")]
+            if cache is not None:
+                argumente += ["--cache", str(cache), "--cache-tage", str(CACHE_TAGE)]
+            if a.eigene:
+                (arbeit / "eigene.json").write_text(json.dumps(a.eigene, ensure_ascii=False), encoding="utf-8")
+                argumente += ["--eigene", str(arbeit / "eigene.json")]
+            argumente += ["--hoechstens", str(KARTEN_MAX - zusatz_summe)]
+            beobachter = threading.Thread(target=self._fortschritt, args=(a, arbeit / "fortschritt.json"), daemon=True)
+            beobachter.start()
+            with self.staende.sperre:   # kein Umschalten des Stands, solange er rechnet
+                r = self._lauf("laden", argumente, LADEN_ZEIT, arbeit, a)
+            a.zeiten["laden_s"] = round(time.monotonic() - start_laden, 1)
+            if not r.get("ok"):
+                raise RuntimeError("Bilder laden gescheitert: " + str(r.get("fehler")))
+            a.cache = r.get("cache") or {}
+            if cache is not None:
+                cache_aufraeumen(cache)
+            zeilen = r.get("zeilen") or []
+        else:
+            a.zeiten["laden_s"] = 0.0
+        # Zusatzkarten aus der Bibliothek (nur Dateien kopieren, keine Bildverarbeitung)
+        for i, (eintrag, anzahl) in enumerate(a.zusatz):
+            eigen_ablegen(eintrag, vorne, doppelt, f"zz{i:03d}eigen{eintrag['id']}", anzahl)
+        a.eigen_genutzt = sum(1 for z in zeilen if z.get("eigen"))
+        a.gesamt = a.fertig = len(zeilen) + len(a.zusatz)
         a.fehlende = [{"index": z.get("index"), "name": z.get("name"), "grund": grund(z.get("fehler")),
                        "fehler": z.get("fehler")} for z in zeilen if not z.get("ok")]
-        if not any(z.get("ok") for z in zeilen):
+        if not any(z.get("ok") for z in zeilen) and not zusatz_summe:
             raise RuntimeError("Keine einzige Karte ließ sich laden.")
         if a.fehlende:
             a.zustand = "fehlende"
@@ -525,7 +570,8 @@ class Dienst:
             "name": a.name, "erstellt": time.strftime("%Y-%m-%dT%H:%M:%S"), "karten": exemplare,
             "doppelseitig": sum(1 for _ in doppelt.iterdir()), "seiten": r.get("seiten"), "bytes": r.get("bytes"),
             "stand": a.stand, "fehlende": [f["name"] for f in a.fehlende], "rueckseite": a.rueckseite,
-            "format": a.format, "versatz": a.versatz, "druckwahl": a.optionen.get("druckwahl", "liste")},
+            "format": a.format, "versatz": a.versatz, "druckwahl": a.optionen.get("druckwahl", "liste"),
+            "eigene": a.eigen_genutzt, "zusatz": zusatz_summe},
             ensure_ascii=False), encoding="utf-8")
         pdfs_aufraeumen(ziel)
         a.pdf, a.zustand = dateiname, "fertig"

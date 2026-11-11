@@ -7,6 +7,9 @@
                                     --ergebnis E.json
     python -I laeufer.py kalibrierung --code STAND --arbeit ORDNER --ausgabe X.pdf [--versatz JSON] --ergebnis E.json
     python -I laeufer.py selbsttest --code STAND --arbeit ORDNER --ergebnis E.json
+    python -I laeufer.py einpassen  --code STAND --eingabe BILD --ausgabe X.png [--klein K.jpg]
+                                    [--zuschnitt auto|rand|mitte|strecken] --ergebnis E.json
+    (`laden` nimmt mit `--eigene E.json` eigene Bilder statt Scryfall: {Schlüssel: {id, vorne, hinten}})
 
 Eingebunden, nicht abgeschrieben: Formate liest `plugins.mtg.deck_formats.parse_deck`, Bilder holt
 `plugins.mtg.scryfall.get_handle_card`, das PDF baut `create_pdf.py` über seine Kommandozeile. Dieses Skript
@@ -27,7 +30,9 @@ import re
 import runpy
 import sys
 import time
+import shutil
 import traceback
+import unicodedata
 from pathlib import Path
 
 # Formate, die reiner Text sind und beim Lesen nichts aus dem Netz holen (url, cubecobra_csv, mpcfill_xml und
@@ -47,6 +52,13 @@ class Eingabefehler(ValueError):
 
 # Fehlerarten, die auf einen kaputten oder veränderten Stand deuten, nicht auf Liste, Bilder oder Netz
 STANDFEHLER = (ImportError, AttributeError, NameError, SyntaxError, TypeError, StandPasstNicht)
+
+
+def schluessel(name: str) -> str:
+    """Vergleichsschlüssel eines Kartennamens für eigene Bilder (auch im Server, darum nur Standardbibliothek):
+    ohne Groß-/Kleinschreibung und doppelte Leerzeichen, bei doppelseitigen Karten nur die Vorderseite."""
+    text = unicodedata.normalize("NFKC", str(name or "")).split("//")[0]
+    return " ".join(text.casefold().split())
 
 
 def _stand_laden(code: Path) -> None:
@@ -185,6 +197,7 @@ def laden(a) -> dict:
     a.vorne.mkdir(parents=True, exist_ok=True)
     a.doppelt.mkdir(parents=True, exist_ok=True)
     echt = _handle_card(scryfall, optionen, a.vorne, a.doppelt)
+    eigene = json.loads(a.eigene.read_text(encoding="utf-8")) if a.eigene else {}
     text = _liste(a.liste)
     gelesen = lesen(text, a.format)["karten"]
     gesamt = len(gelesen)
@@ -196,7 +209,13 @@ def laden(a) -> dict:
     def aufzeichnen(*args, **kwargs):
         eintrag = {"index": args[0] if args else kwargs.get("index"), "name": args[1] if len(args) > 1 else ""}
         try:
-            echt(*args, **kwargs)
+            eigen = eigene.get(schluessel(eintrag["name"]))
+            if eigen:   # eigenes Bild statt Scryfall (Wahl des Nutzers je Auftrag)
+                anzahl = args[4] if len(args) > 4 else kwargs.get("quantity", 1)
+                eigen_ablegen(eigen, a.vorne, a.doppelt, f"{eintrag['index']}eigen{eigen['id']}", int(anzahl or 1))
+                eintrag["eigen"] = eigen["id"]
+            else:
+                echt(*args, **kwargs)
             eintrag["ok"] = True
         except Exception as f:
             eintrag["ok"], eintrag["fehler"] = False, (str(f) or type(f).__name__)[:FEHLER_MAX]
@@ -211,6 +230,96 @@ def laden(a) -> dict:
         deck_formats.parse_deck(text, _format_wert(deck_formats, a.format), aufzeichnen, str(a.vorne), str(a.doppelt))
     return {"zeilen": zeilen, "cache": zaehler,
             "vorne": len(list(a.vorne.iterdir())), "doppelt": len(list(a.doppelt.iterdir()))}
+
+
+def eigen_ablegen(eigen: dict, vorne: Path, doppelt: Path, stamm: str, anzahl: int) -> None:
+    """Eigenes Bild `anzahl`-mal wie SCM ablegen (`<stamm><n>.png`); die zweite Seite mit gleichem Namen in
+    `doppelt`, so paart `create_pdf.py` Vorder- und Rückseite."""
+    vorne.mkdir(parents=True, exist_ok=True)
+    doppelt.mkdir(parents=True, exist_ok=True)
+    for n in range(1, anzahl + 1):
+        shutil.copyfile(eigen["vorne"], vorne / f"{stamm}{n}.png")
+        if eigen.get("hinten"):
+            shutil.copyfile(eigen["hinten"], doppelt / f"{stamm}{n}.png")
+
+
+# --- Eigene Bilder einpassen ----------------------------------------------------------------------------------
+
+KARTE = 63 / 88                     # Seitenverhältnis einer Karte
+RAND_MM = 3.175                     # üblicher Beschnittrand (1/8 Zoll, z. B. MPC-Vorlagen)
+MIT_RAND = (63 + 2 * RAND_MM) / (88 + 2 * RAND_MM)
+TOLERANZ = 0.008
+ZIEL_BREITE = 1488                  # doppelt 300 ppi (744 px); kleinere Bilder bleiben so groß, wie sie sind
+KLEIN_BREITE = 300
+ZUSCHNITTE = ("auto", "rand", "mitte", "strecken")
+
+
+def zuschnitt_waehlen(breite: int, hoehe: int, wunsch: str) -> str:
+    """Welcher Zuschnitt gilt: `auto` erkennt einen Beschnittrand (1/8 Zoll) oder ein passendes Bild, sonst mittig."""
+    if wunsch != "auto":
+        return wunsch
+    r = breite / hoehe
+    if abs(r - MIT_RAND) < TOLERANZ:
+        return "rand"
+    if abs(r - KARTE) < TOLERANZ:
+        return "passt"
+    return "mitte"
+
+
+def zuschnitt_box(breite: int, hoehe: int, art: str) -> tuple[int, int, int, int]:
+    """Ausschnitt (links, oben, rechts, unten) für `rand`, `mitte`, `passt` und `strecken` (ganzes Bild)."""
+    links, oben, rechts, unten = 0.0, 0.0, float(breite), float(hoehe)
+    if art == "rand":   # 1/8 Zoll je Seite im Verhältnis der Maße mit Rand, danach wie `mitte`
+        dx, dy = breite * RAND_MM / (63 + 2 * RAND_MM), hoehe * RAND_MM / (88 + 2 * RAND_MM)
+        links, oben, rechts, unten = dx, dy, breite - dx, hoehe - dy
+    if art in ("rand", "mitte"):
+        b, h = rechts - links, unten - oben
+        if b / h > KARTE:     # zu breit: links und rechts kürzen
+            neu = h * KARTE
+            links, rechts = links + (b - neu) / 2, links + (b - neu) / 2 + neu
+        else:                 # zu hoch: oben und unten kürzen
+            neu = b / KARTE
+            oben, unten = oben + (h - neu) / 2, oben + (h - neu) / 2 + neu
+    return round(links), round(oben), round(rechts), round(unten)
+
+
+def einpassen(a) -> dict:
+    """Eigenes Bild auf das Kartenformat bringen (nur hier, nie im Server): drehen nach EXIF, quer → hoch,
+    Beschnittrand entfernen oder mittig zuschneiden, höchstens `ZIEL_BREITE` breit, PNG und kleine Vorschau."""
+    from PIL import Image, ImageOps
+    wunsch = a.zuschnitt or "auto"
+    if wunsch not in ZUSCHNITTE:
+        raise Eingabefehler("Unbekannter Zuschnitt.")
+    try:
+        with Image.open(a.eingabe) as roh:
+            roh.draft("RGB", (4000, 4000))
+            bild = ImageOps.exif_transpose(roh)
+            bild.load()
+    except (OSError, ValueError, Image.DecompressionBombError) as f:
+        raise Eingabefehler(f"Das Bild ließ sich nicht lesen ({type(f).__name__}).") from None
+    original = list(bild.size)
+    gedreht = bild.width > bild.height
+    if gedreht:
+        bild = bild.rotate(-90, expand=True)
+    if bild.mode != "RGB":   # Transparenz auf Schwarz (wie der Kartenrand), Palette und Graustufen zu RGB
+        rgba = bild.convert("RGBA")
+        grund = Image.new("RGB", rgba.size, (0, 0, 0))
+        grund.paste(rgba, mask=rgba.getchannel("A"))
+        bild = grund
+    if min(bild.size) < 100:
+        raise Eingabefehler(f"Das Bild ist mit {bild.width} × {bild.height} Pixeln zu klein.")
+    art = zuschnitt_waehlen(bild.width, bild.height, wunsch)
+    box = zuschnitt_box(bild.width, bild.height, art)
+    breite = min(ZIEL_BREITE, box[2] - box[0])
+    groesse = (breite, round(breite / KARTE))
+    karte = bild.resize(groesse, Image.LANCZOS, box=box)
+    a.ausgabe.parent.mkdir(parents=True, exist_ok=True)
+    karte.save(a.ausgabe, "PNG")
+    if a.klein:
+        klein = karte.resize((KLEIN_BREITE, round(KLEIN_BREITE / KARTE)), Image.LANCZOS)
+        klein.save(a.klein, "JPEG", quality=85)
+    return {"zuschnitt": art, "gewuenscht": wunsch, "gedreht": gedreht, "original": original,
+            "breite": groesse[0], "hoehe": groesse[1]}
 
 
 # --- PDF ------------------------------------------------------------------------------------------------------
@@ -351,6 +460,15 @@ def selbsttest(a) -> dict:
         bild(vorne / f"{i:02d}test.png", f"Testkarte {i}", (200, 200 - i * 10, 160))
     bild(doppelt / f"{TEST_KARTEN:02d}test.png", "Zweite Seite", (160, 200, 220))
     bild(hinten / "rueckseite.png", "Testrückseite", (90, 90, 90))
+    # eigene Bilder: ein Bild mit Beschnittrand (822 × 1118 px, Verhältnis wie MPC) ohne Rand eingepasst
+    Image.new("RGB", (822, 1118), (30, 120, 60)).save(a.arbeit / "eigen.png")
+    try:
+        e = einpassen(argparse.Namespace(eingabe=a.arbeit / "eigen.png", ausgabe=a.arbeit / "eigen-aus.png",
+                                         klein=a.arbeit / "eigen-klein.jpg", zuschnitt="auto"))
+        if e["zuschnitt"] != "rand" or abs(e["breite"] / e["hoehe"] - KARTE) > 0.002:
+            funde.append(f"Eigenes Bild: {e}")
+    except Exception as f:
+        funde.append(f"Eigenes Bild: {str(f)[:FEHLER_MAX]}")
     ausgabe = a.arbeit / "test.pdf"
     pdf_bauen(a.code, vorne, hinten, doppelt, ausgabe)
     werte = pdf_lesen(ausgabe)
@@ -379,7 +497,11 @@ def selbsttest(a) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("befehl", choices=("erkennen", "laden", "pdf", "kalibrierung", "selbsttest"))
+    ap.add_argument("befehl", choices=("erkennen", "laden", "pdf", "kalibrierung", "selbsttest", "einpassen"))
+    ap.add_argument("--eigene", type=Path)
+    ap.add_argument("--eingabe", type=Path)
+    ap.add_argument("--klein", type=Path)
+    ap.add_argument("--zuschnitt", default="auto")
     ap.add_argument("--versatz", default=None)
     ap.add_argument("--code", type=Path, required=True)
     ap.add_argument("--ergebnis", type=Path, required=True)
@@ -397,11 +519,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--hoechstens", type=int, default=0)
     a = ap.parse_args(argv)
     for name in ("code", "ergebnis", "liste", "vorne", "hinten", "doppelt", "ausgabe", "arbeit", "cache",
-                 "fortschritt"):
+                 "fortschritt", "eigene", "eingabe", "klein"):
         if getattr(a, name) is not None:
             setattr(a, name, getattr(a, name).resolve())
     befehl = {"erkennen": erkennen, "laden": laden, "pdf": pdf, "kalibrierung": kalibrierung,
-              "selbsttest": selbsttest}[a.befehl]
+              "selbsttest": selbsttest, "einpassen": einpassen}[a.befehl]
     try:
         ergebnis = {"ok": True, **befehl(a)}
     except Exception as f:

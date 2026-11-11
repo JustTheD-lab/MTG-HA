@@ -7,6 +7,8 @@
 
 import { holen, senden, esc, zurueck, adresse, vorliebe } from './gemeinsam.js';
 import { bestaetigen, dialogOffen } from './dialog.js';
+import { verkleinern, zeichnen as eigeneZeichnen, verdrahten as eigeneVerdrahten, wahlHtml, wahlFuer, auftragDaten,
+  zusatzSumme } from './proxy-eigene.js';
 
 const sym = (d, g = 18) => `<svg viewBox="0 0 24 24" width="${g}" height="${g}" fill="none" stroke="currentColor"`
   + ` stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${d}</svg>`;
@@ -152,25 +154,30 @@ function vorschauZeichnen() {
   if (!v) { wurzel.hidden = true; wurzel.innerHTML = ''; return; }
   wurzel.hidden = false;
   const zeilen = v.zeilen ?? [];
-  const schlecht = zeilen.filter((r) => r.status !== 'ok');
-  const gut = zeilen.filter((r) => r.status === 'ok');
+  const passt = (r) => r.status === 'ok' || Boolean(wahlFuer(z, r));   // mit eigenem Bild zählt der Katalog nicht
+  const schlecht = zeilen.filter((r) => !passt(r));
+  const gut = zeilen.filter(passt);
+  const eigenZahl = zeilen.filter((r) => wahlFuer(z, r)).length;
   const formate = v.formate ?? [];
   const formatOptionen = formate.map((f) => `<option value="${esc(f.name)}"${f.name === v.format ? ' selected' : ''}>`
     + `${esc(f.titel)} (${zahl(f.karten)} ${f.karten === 1 ? 'Karte' : 'Karten'})</option>`).join('');
   const reihe = (r) => {
-    const ok = r.status === 'ok';
+    const eigen = Boolean(wahlFuer(z, r));
+    const ok = r.status === 'ok' || eigen;
     const ort = [r.set ? String(r.set).toUpperCase() : '', r.nummer ?? ''].filter(Boolean).join(' · ');
     return `<li class="proxy-zeile-karte${ok ? '' : ' proxy-auffaellig'}">`
       + `<span class="proxy-anzahl">${zahl(r.anzahl)}×</span>`
       + `<span class="proxy-kartenname">${esc(r.name)}${ort ? `<span class="proxy-ort"> ${esc(ort)}</span>` : ''}</span>`
       + `<span class="proxy-status${ok ? '' : ' proxy-status-warn'}">${ok ? '' : '<span class="proxy-punkt" aria-hidden="true">!</span>'}`
-      + `${esc(STATUS[r.status] ?? r.status)}</span></li>`;
+      + `${esc(eigen ? 'Eigenes Bild' : (STATUS[r.status] ?? r.status))}</span>`
+      + `${wahlHtml(z, r)}</li>`;
   };
   wurzel.innerHTML = '<h2 class="proxy-titel">Vorschau</h2>'
     + `<div class="proxy-felder"><div><label class="etikett feld-etikett" for="proxy-format2">Erkanntes Format</label>`
     + `<select id="proxy-format2" class="feld">${formatOptionen || `<option>${esc(v.format ?? '–')}</option>`}</select></div>`
     + `<p class="proxy-zahlen"><strong>${zahl(zeilen.length)}</strong> ${zeilen.length === 1 ? 'Zeile' : 'Zeilen'}`
-    + ` · <strong>${zahl(v.exemplare)}</strong> ${v.exemplare === 1 ? 'Exemplar' : 'Exemplare'}</p></div>`
+    + ` · <strong>${zahl(v.exemplare)}</strong> ${v.exemplare === 1 ? 'Exemplar' : 'Exemplare'}`
+    + `${eigenZahl ? ` · ${zahl(eigenZahl)} mit eigenem Bild` : ''}</p></div>`
     + (veraltet(z) ? '<p class="proxy-warnung" role="status">Die Liste wurde seit der Prüfung geändert. Bitte neu prüfen.</p>' : '')
     + (v.zu_viele ? `<p class="proxy-warnung" role="alert">Diese Liste hat ${esc(v.exemplare)} Karten, ein PDF höchstens `
       + `${esc(v.hoechstens)}. Bitte die Liste aufteilen.</p>` : '')
@@ -233,40 +240,9 @@ async function rueckseitenNeuLaden() {
   if (Z === z) { z.rueckseite = rueckseiteGewaehlt(z); rueckseitenZeichnen(); }
 }
 
-// Home Assistant reicht über Ingress nur Anfragen bis 16 MB weiter (Antwort 413 ohne Text der App). Größere Bilder
-// rechnet der Browser darum vorher herunter: Silhouette Card Maker druckt mit 300 ppi, also 744 Pixel Kartenbreite;
-// 1488 Pixel (doppelt) lassen Reserve. Kleine Bilder gehen unverändert hoch.
+// Home Assistant reicht über Ingress nur Anfragen bis 16 MB weiter: größere Bilder verkleinert der Browser vorher
+// (`verkleinern` in proxy-eigene.js, 1488 Pixel = doppelt 300 ppi).
 const RUECK_UNVERAENDERT = 12 * 1048576;
-const RUECK_BREITE = 1488;
-
-function alsBlob(leinwand, typ, guete) {
-  return new Promise((ok) => leinwand.toBlob(ok, typ, guete));
-}
-
-async function rueckseiteVerkleinern(datei) {
-  if (datei.size <= RUECK_UNVERAENDERT) return { datei, typ: datei.type };
-  const bild = await createImageBitmap(datei);
-  try {
-    const faktor = Math.min(1, RUECK_BREITE / bild.width);
-    const leinwand = document.createElement('canvas');
-    leinwand.width = Math.round(bild.width * faktor);
-    leinwand.height = Math.round(bild.height * faktor);
-    const ctx = leinwand.getContext('2d');
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(bild, 0, 0, leinwand.width, leinwand.height);
-    let blob = datei.type === 'image/png' ? await alsBlob(leinwand, 'image/png') : null;
-    if (blob && blob.size <= RUECK_UNVERAENDERT) return { datei: blob, typ: 'image/png' };
-    // JPEG kennt keine Transparenz: durchsichtige Ecken werden schwarz statt zufällig.
-    ctx.globalCompositeOperation = 'destination-over';
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, leinwand.width, leinwand.height);
-    blob = await alsBlob(leinwand, 'image/jpeg', 0.93);
-    if (!blob) throw new Error('Umrechnen fehlgeschlagen');
-    return { datei: blob, typ: 'image/jpeg' };
-  } finally {
-    bild.close?.();
-  }
-}
 
 async function rueckseiteHochladen(datei) {
   const z = Z;
@@ -278,7 +254,7 @@ async function rueckseiteHochladen(datei) {
   if (datei.size > RUECK_UNVERAENDERT) {
     meldung(fehler(), 'Bild wird verkleinert …');
     try {
-      hochzuladen = await rueckseiteVerkleinern(datei);
+      hochzuladen = await verkleinern(datei);
     } catch {
       if (Z === z) meldung(fehler(), 'Das Bild ließ sich nicht verkleinern. Bitte ein kleineres Bild wählen (höchstens 12 MB).');
       return;
@@ -369,7 +345,9 @@ function auftragHtml(a) {
       + ` download="${esc(a.pdf)}">${LADEN}<span>PDF herunterladen<small>${esc(a.pdf)}</small></span></a>`
       + `<p class="proxy-hinweis">${z.waehlen_s != null ? `Druckwahl ${esc(sek(z.waehlen_s))} · ` : ''}`
       + `Laden ${esc(sek(z.laden_s))} · PDF ${esc(sek(z.pdf_s))} · gesamt ${esc(sek(z.gesamt_s))}`
-      + `${a.cache ? ` · ${zahl(a.cache.treffer)} aus dem Zwischenspeicher, ${zahl(a.cache.neu)} neu geladen` : ''}</p>`
+      + `${a.cache?.treffer != null ? ` · ${zahl(a.cache.treffer)} aus dem Zwischenspeicher, ${zahl(a.cache.neu)} neu geladen` : ''}`
+      + `${a.eigene ? ` · ${zahl(a.eigene)} ${a.eigene === 1 ? 'Zeile' : 'Zeilen'} mit eigenem Bild` : ''}`
+      + `${a.zusatz ? ` · ${zahl(a.zusatz)} Zusatzkarten` : ''}</p>`
       + ((a.fehlende ?? []).length
         ? `<p class="proxy-warnung" role="note">Ohne: ${esc(a.fehlende.map((x) => x.name).join(', '))}</p>` : '')
       + gewaehltHtml(a)
@@ -380,16 +358,24 @@ function auftragHtml(a) {
     + `${grund ? `: ${esc(grund)}` : ''}</p>`;
 }
 
+/** Nur Zusatzkarten, ohne Deckliste: erlaubt, solange das Textfeld leer ist. */
+const nurZusatz = (z) => zusatzSumme(z) > 0 && !z.feld.text.value.trim();
+
 function erzeugenZeichnen() {
   const z = Z;
-  const v = z.vorschau;
+  const v = nurZusatz(z) ? null : z.vorschau;
+  const zusatz = zusatzSumme(z);
+  const hoechstens = z.vorschau?.hoechstens ?? 200;
   const sperre = !z.daten.ablage ? 'Netzlaufwerk nicht erreichbar'
     : laeuft(z) ? 'Es läuft schon ein Auftrag'
-      : !v ? 'Zuerst die Liste prüfen'
-        : v.zu_viele ? 'Die Liste hat zu viele Karten'
-          : veraltet(z) ? 'Die Liste wurde geändert, bitte neu prüfen' : '';
+      : nurZusatz(z) ? (zusatz > hoechstens ? 'Zu viele Zusatzkarten' : '')
+        : !v ? 'Zuerst die Liste prüfen'
+          : v.zu_viele || v.exemplare + zusatz > hoechstens ? 'Die Liste hat zu viele Karten'
+            : veraltet(z) ? 'Die Liste wurde geändert, bitte neu prüfen' : '';
   const k = z.daten.kalibrierung;
   z.teil.erzeugen.innerHTML = '<h2 class="proxy-titel">PDF erzeugen</h2>'
+    + (zusatz ? `<p class="proxy-hinweis" role="status">${nurZusatz(z) ? 'Nur Zusatzkarten: ' : 'Dazu: '}${zahl(zusatz)}`
+      + ` ${zusatz === 1 ? 'Karte' : 'Karten'} aus „Eigene Bilder“.</p>` : '')
     + (kalibriert(k) ? `<label class="proxy-haken"><input type="checkbox" id="proxy-versatz"${z.versatzAn ? ' checked' : ''}>`
       + `<span>Druckversatz einrechnen <span class="proxy-hinweis">(${esc(versatzText(k))})</span></span></label>` : '')
     + `<div class="proxy-zeile"><button type="button" class="knopf knopf-haupt" data-erzeugen${sperre ? ' disabled' : ''}>`
@@ -402,16 +388,17 @@ function erzeugenZeichnen() {
 
 async function erzeugen() {
   const z = Z;
-  const v = z.vorschau;
-  if (!v || v.zu_viele || veraltet(z) || laeuft(z)) return;
+  const nur = nurZusatz(z);
+  const v = nur ? null : z.vorschau;
+  if (laeuft(z) || (!nur && (!v || v.zu_viele || veraltet(z)))) return;
   const fehler = z.teil.erzeugen.querySelector('[data-erzeugen-fehler]');
   meldung(fehler, '');
   try {
-    const name = z.feld.name.value.trim() || 'Deck';
+    const name = z.feld.name.value.trim() || (nur ? 'Eigene-Bilder' : 'Deck');
     const a = await senden('/api/proxy/auftrag', { daten: {
-      text: z.geprueftText, format: v.format, name, rueckseite: z.rueckseite,
+      text: nur ? '' : z.geprueftText, format: v?.format ?? null, name, rueckseite: z.rueckseite,
       sets_ignorieren: z.geprueftSets, extra_art: z.feld.extra.checked, versatz: z.versatzAn,
-      druckwahl: z.feld.druckwahl.value } });
+      druckwahl: z.feld.druckwahl.value, ...auftragDaten(z) } });
     if (Z !== z) return;
     z.auftrag = a;
     erzeugenZeichnen();
@@ -772,9 +759,8 @@ function verdrahten(bereich) {
 /** Text oder Sets geändert: Vorschau und Knopf zeigen „bitte neu prüfen“. */
 function aenderung() {
   const z = Z;
-  if (!z.vorschau) return;
-  vorschauZeichnen();
-  erzeugenZeichnen();
+  if (z.vorschau) vorschauZeichnen();
+  erzeugenZeichnen();   // auch ohne Vorschau: „nur Zusatzkarten“ hängt am leeren Textfeld
 }
 
 export async function zeigen(wurzel, parameter) {
@@ -787,8 +773,22 @@ export async function zeigen(wurzel, parameter) {
     + '<div class="proxy-inhalt"><p class="proxy-hinweis" role="status">Proxys werden geladen …</p></div>';
   wurzel.replaceChildren(bereich);
   const z = { bereich, daten: null, vorschau: null, geprueftText: '', geprueftSets: false, formatWahl: null, rueckseite: null,
-    auftrag: null, pdfs: [], uhr: null, teil: {}, feld: {}, taste: null, nameGesetzt: false, versatzAn: true };
+    auftrag: null, pdfs: [], uhr: null, teil: {}, feld: {}, taste: null, nameGesetzt: false, versatzAn: true,
+    eigeneWahl: {}, zusatz: {}, eigenStatus: '' };
   Z = z;
+  // Bibliothek oder Wahl geändert: Vorschau (Status je Zeile), Tafel und Knopf neu zeichnen
+  z.geaendert = ({ nurVorschau = false, nurAuftrag = false } = {}) => {
+    if (Z !== z) return;
+    if (!nurAuftrag) vorschauZeichnen();
+    if (!nurVorschau && !nurAuftrag) eigeneZeichnen(z);
+    if (nurAuftrag) {   // die Anzahl im Feld bleibt stehen, nur die Summe in der Überschrift ändert sich
+      const s = z.teil.eigene.querySelector('details.proxy-eigen-alle > summary');
+      const fertig = (z.daten.eigene ?? []).filter((e) => !e.entwurf).length;
+      const summe = zusatzSumme(z);
+      if (s) s.textContent = `Bibliothek (${fertig}${summe ? `, ${summe} zusätzlich im nächsten PDF` : ''})`;
+    }
+    erzeugenZeichnen();
+  };
   bereich.querySelector('.proxy-zurueck').addEventListener('click', () => zurueck('#/'));
   z.taste = (e) => {
     if (e.key === 'Escape' && !dialogOffen() && Z === z && !/^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement?.tagName)) {
@@ -823,6 +823,7 @@ export async function zeigen(wurzel, parameter) {
   };
   tafel('eingabe').innerHTML = eingabeHtml(daten.formate ?? []);
   tafel('vorschau').hidden = true;
+  tafel('eigene');
   tafel('rueck');
   tafel('erzeugen');
   tafel('pdfs');
@@ -849,6 +850,8 @@ export async function zeigen(wurzel, parameter) {
   const gemerkt = vorliebe('proxy.druckwahl');
   if (gemerkt in DRUCKWAHL && !(gemerkt === 'guenstig' && !daten.guenstig_moeglich)) z.feld.druckwahl.value = gemerkt;
   verdrahten(bereich);
+  eigeneVerdrahten(z, bereich, () => Z === z);
+  eigeneZeichnen(z);
   rueckseitenZeichnen();
   erzeugenZeichnen();
   pdfsZeichnen();

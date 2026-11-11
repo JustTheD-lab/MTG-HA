@@ -24,6 +24,15 @@ und gesetztem `BINDER_PROXY` (das Add-on setzt es, am PC gibt es den Bereich nic
     POST   /api/proxy/rueckseiten?name=       Bild als Rumpf (PNG oder JPEG, höchstens 40 MB)
     GET    /api/proxy/rueckseite/{id}/bild    das Bild
     DELETE /api/proxy/rueckseite/{id}         eine hochgeladene Rückseite entfernen
+    GET    /api/proxy/eigene                  eigene Kartenbilder (proxy/eigene.py)
+    POST   /api/proxy/eigene?name=            Bild als Rumpf (PNG, JPEG, WebP) → Entwurf, automatisch eingepasst
+    POST   /api/proxy/eigene/url              {"url", "name"?} Bild von einer öffentlichen Adresse → Entwurf
+    POST   /api/proxy/eigene/{id}/hinten      Bild als Rumpf: eigene zweite Seite
+    POST   /api/proxy/eigene/{id}/hinten/url  {"url"} zweite Seite von einer Adresse
+    PATCH  /api/proxy/eigene/{id}             {"name", "karte", "vorgabe", "zuschnitt": {seite: art}, "fertig": true}
+    DELETE /api/proxy/eigene/{id}[/hinten]    Bild bzw. nur die zweite Seite entfernen
+    GET    /api/proxy/eigene/{id}/bild?seite=vorne|hinten&klein=1
+    Aufträge nehmen dazu "eigene": {Schlüssel: id oder null für Scryfall} und "zusatz": [{"id", "anzahl"}].
 """
 from __future__ import annotations
 
@@ -40,7 +49,9 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
 from binderapp.proxy import auftrag as pa
+from binderapp.proxy import eigene
 from binderapp.proxy import staende as st
+from binderapp.proxy.laeufer import ZUSCHNITTE
 from binderapp.web.helfer import Fehler, fehler
 from binderapp.web.kistenschreiben import datei_lesen, dateiname
 
@@ -59,7 +70,7 @@ def _fehler_umwandeln(handler):
     async def huelle(request):
         try:
             return await handler(request)
-        except pa.Proxyfehler as f:
+        except (pa.Proxyfehler, eigene.Eigenfehler) as f:
             return fehler(str(f), f.status)
         except st.Standfehler as f:
             return fehler(str(f), 409)
@@ -89,7 +100,8 @@ def routen(h) -> list[Route]:
         return JSONResponse({"stand": d.staende.anzeige(), "auftrag": a.anzeige() if a else None,
                              "ablage": _ablage_ok(), "katalog": h.katalog_pfad is not None
                              and Path(h.katalog_pfad).exists(), "rueckseiten": d.rueckseiten(),
-                             "kalibrierung": d.kalibrierung(),
+                             "kalibrierung": d.kalibrierung(), "eigene": d.eigene.liste(),
+                             "zuschnitte": list(ZUSCHNITTE),
                              "guenstig_moeglich": h.katalog_pfad is not None and Path(h.katalog_pfad).exists()
                              and _preisdatei().is_file(),
                              "formate": [{"name": n, "titel": t} for n, t in pa.FORMATNAMEN.items()],
@@ -253,6 +265,70 @@ def routen(h) -> list[Route]:
         await run_in_threadpool(d.rueckseite_entfernen, request.path_params["id"])
         return JSONResponse({"ok": True})
 
+    # Eigene Kartenbilder
+    @_fehler_umwandeln
+    async def eigene_liste(request):
+        return JSONResponse({"eigene": _bereit().eigene.liste(), "zuschnitte": list(ZUSCHNITTE)})
+
+    @h.schreibend
+    @_fehler_umwandeln
+    async def eigen_neu(request):
+        b = _bereit().eigene
+        daten = await datei_lesen(request, eigene.BILD_MAX)
+        name = dateiname(request).rsplit(".", 1)[0]
+        return JSONResponse(await run_in_threadpool(b.neu, daten, name, "datei"), status_code=201)
+
+    @h.schreibend
+    @_fehler_umwandeln
+    async def eigen_url(request):
+        b = _bereit().eigene
+        daten = await h.json_daten(request)
+        bild, name = await run_in_threadpool(eigene.url_holen, daten.get("url"))
+        name = eigene.text(daten.get("name")) or name.rsplit(".", 1)[0]
+        return JSONResponse(await run_in_threadpool(b.neu, bild, name, "url"), status_code=201)
+
+    @h.schreibend
+    @_fehler_umwandeln
+    async def eigen_hinten(request):
+        b = _bereit().eigene
+        daten = await datei_lesen(request, eigene.BILD_MAX)
+        return JSONResponse(await run_in_threadpool(b.seite_neu, request.path_params["id"], daten), status_code=201)
+
+    @h.schreibend
+    @_fehler_umwandeln
+    async def eigen_hinten_url(request):
+        b = _bereit().eigene
+        daten = await h.json_daten(request)
+        bild, _ = await run_in_threadpool(eigene.url_holen, daten.get("url"))
+        return JSONResponse(await run_in_threadpool(b.seite_neu, request.path_params["id"], bild), status_code=201)
+
+    @h.schreibend
+    @_fehler_umwandeln
+    async def eigen_aendern(request):
+        b = _bereit().eigene
+        daten = await h.json_daten(request)
+        return JSONResponse(await run_in_threadpool(b.aendern, request.path_params["id"], daten))
+
+    @h.schreibend
+    @_fehler_umwandeln
+    async def eigen_weg(request):
+        b = _bereit().eigene
+        await run_in_threadpool(b.entfernen, request.path_params["id"])
+        return JSONResponse({"ok": True})
+
+    @h.schreibend
+    @_fehler_umwandeln
+    async def eigen_hinten_weg(request):
+        b = _bereit().eigene
+        return JSONResponse(await run_in_threadpool(b.entfernen, request.path_params["id"], "hinten"))
+
+    @_fehler_umwandeln
+    async def eigen_bild(request):
+        klein = request.query_params.get("klein") == "1"
+        pfad = _bereit().eigene.pfad(request.path_params["id"], request.query_params.get("seite") or "vorne", klein)
+        return FileResponse(pfad, media_type="image/jpeg" if klein else "image/png",
+                            headers={"Cache-Control": "private, max-age=86400"})
+
     return [
         Route("/proxy", uebersicht),
         Route("/proxy/stand/suchen", suchen, methods=["POST"]),
@@ -273,4 +349,13 @@ def routen(h) -> list[Route]:
         Route("/proxy/rueckseiten", rueckseite_neu, methods=["POST"]),
         Route("/proxy/rueckseite/{id}/bild", rueckseite_bild),
         Route("/proxy/rueckseite/{id}", rueckseite_weg, methods=["DELETE"]),
+        Route("/proxy/eigene", eigene_liste),
+        Route("/proxy/eigene", eigen_neu, methods=["POST"]),
+        Route("/proxy/eigene/url", eigen_url, methods=["POST"]),
+        Route("/proxy/eigene/{id}", eigen_aendern, methods=["PATCH"]),
+        Route("/proxy/eigene/{id}", eigen_weg, methods=["DELETE"]),
+        Route("/proxy/eigene/{id}/hinten", eigen_hinten, methods=["POST"]),
+        Route("/proxy/eigene/{id}/hinten", eigen_hinten_weg, methods=["DELETE"]),
+        Route("/proxy/eigene/{id}/hinten/url", eigen_hinten_url, methods=["POST"]),
+        Route("/proxy/eigene/{id}/bild", eigen_bild),
     ]
