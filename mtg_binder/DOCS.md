@@ -47,17 +47,15 @@ nicht erreichbar, versucht es die Erkennung eine Stunde später wieder.
 
 ## Einbau (über das Add-on-Repository)
 
-1. Am PC das Repository füllen: `python -m binderapp.addon.paket --repo <Ordner des Repositorys>`, dann in
-   GitHub Desktop committen und pushen.
-2. In Home Assistant: Einstellungen → Add-ons → Add-on-Store → Menü oben rechts → „Repositories“ → Adresse des
-   Repositorys eintragen. „MTG Binder“ erscheint im Store → Installieren (baut das Abbild, dauert ein paar Minuten).
-3. Reiter „Konfiguration“: **Speicherort** auf einen Ordner des Netzlaufwerks setzen, z. B.
+1. In Home Assistant: Einstellungen → Add-ons (in neueren Versionen „Apps“) → Store → Menü oben rechts →
+   „Repositories“ → `https://github.com/JustTheD-lab/MTG-HA` eintragen. „MTG Binder“ erscheint im Store →
+   Installieren (baut das Abbild, dauert ein paar Minuten).
+2. Reiter „Konfiguration“: **Speicherort** auf einen Ordner des Netzlaufwerks setzen, z. B.
    `/share/netzlaufwerk/mtg-binder`. Das Netzlaufwerk bindest du vorher unter Einstellungen → System →
-   Speicher → „Netzwerkspeicher hinzufügen“ ein (Verwendung „Freigabe“ oder „Medien“).
-4. Starten und „In der Seitenleiste anzeigen“ einschalten.
-
-Ohne Repository geht es weiter als lokales Add-on: `python -m binderapp.addon.paket` und den Ordner
-`work/addon/mtg_binder` per Samba nach `addons/` kopieren.
+   Speicher → „Netzwerkspeicher hinzufügen“ ein (Verwendung „Freigabe“ oder „Medien“). Leer lassen geht zum
+   Ausprobieren; dann liegen Fotos und Bilder auf dem Rechner von Home Assistant.
+3. Starten und „In der Seitenleiste anzeigen“ einschalten.
+4. Die Erkennung am PC einrichten (Abschnitt oben) und im Regal mit „Neuer Binder“ die ersten Fotos hochladen.
 
 ## Preise
 
@@ -302,9 +300,8 @@ Die vorhandene Datenbank wird vorher gesichert, die eingespielte Datei danach um
 
 ## Update
 
-Repository neu füllen (`--repo …`) und pushen. Home Assistant zeigt „Update verfügbar“, sobald die Version in
-`config.yaml` gestiegen ist (sofort über „Nach Updates suchen“ im Store-Menü), mit den Änderungen aus
-`CHANGELOG.md`. Beim ersten Start einer neuen Version wird die Datenbank gesichert. Eine schon geöffnete Seite läuft
+Home Assistant zeigt „Update verfügbar“, sobald im Repository eine neue Version liegt (sofort über „Nach Updates
+suchen“ im Store-Menü), mit den Änderungen aus `CHANGELOG.md`. Beim ersten Start einer neuen Version wird die Datenbank gesichert. Eine schon geöffnete Seite läuft
 mit dem alten Stand weiter; die App bietet dann oben „Neu laden“ an.
 
 **Automatische Updates:** Auf der Seite des Add-ons den Schalter „Automatisch aktualisieren“ einschalten. Home

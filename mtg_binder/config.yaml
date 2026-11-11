@@ -4,6 +4,7 @@ name: MTG Binder
 version: "0.55.0"
 slug: mtg_binder
 description: Magic-Binder per Foto – Bücherregal, Lesetisch, Kisten und Prüfansicht
+url: "https://github.com/JustTheD-lab/MTG-HA"
 arch:
   - amd64
 init: false
