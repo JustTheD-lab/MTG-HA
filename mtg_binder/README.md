@@ -2,31 +2,31 @@
 
 ![Unterstützt amd64][amd64-shield] ![Oberfläche: Deutsch][sprache-shield]
 
-Deine Magic-Sammlung als Bücherregal in Home Assistant: Binderseiten fotografieren, alle Karten eines Fotos auf
-einmal erkennen und digital durchblättern.
+Deine Magic-Sammlung als Bücherregal in Home Assistant. Du fotografierst deine Binderseiten, die App erkennt jede
+Karte, und du blätterst digital durch deine Binder.
 
 ![Bücherregal mit Bindern und Kisten][regal]
 
 ## Über die App
 
-- **Binder per Foto:** Bücherregal, Lesetisch zum Durchblättern und Prüfansicht für unsichere Treffer
-- **Kisten und Gesamtsammlung:** Karteikasten, Raster oder Liste, Suche, Sets mit Vollständigkeit
-- **Bulk-Scan** mit dem Handy über einem Kartenauswurf, mit **Sortierregeln** und automatischem Einsortieren
-- **Preise** täglich von Cardmarket, Dashboard, Kaufpreise mit Gewinn und Verlust
-- **Decks** mit Fehlt-Liste, Deckbau, Statistik und **Kaufliste mit Preisalarm**
-- **Secret Lair** mit Reprint-Werten und eigenen Käufen
-- **Proxys drucken** als PDF für den Schneideplotter
-- **Sensoren per MQTT**, tägliche Sicherungen, jede Änderung mit Rückgängig
+Deine Binder stehen als Buchrücken in einem digitalen Regal, und du kannst sie aufschlagen und durchblättern wie die
+echten. Für deinen Bulk gibt es Kisten, die du mit dem Handy über einem Kartenauswurf in einem Rutsch einscannst und
+nach deinen eigenen Regeln sortieren lässt.
+
+Die App holt jeden Tag die Preise von Cardmarket und zeigt dir im Dashboard, was deine Sammlung wert ist und wie sie
+sich entwickelt. Sie kennt außerdem deine Decks, sagt dir, welche Karten dir noch fehlen, und zeigt dir, wenn eine
+davon unter deinen Wunschpreis fällt. Dazu kommen eine Übersicht aller Secret Lairs, der Druck von Proxys als PDF und
+Sensoren für Home Assistant.
 
 ## Was du brauchst
 
-- Home Assistant auf einem Rechner mit `amd64`
-- einen Windows-PC mit NVIDIA-Grafikkarte im selben Netzwerk: Dort läuft die Erkennung der Karten. Den Installer
-  lädst du nach dem Start in der App unter **„PC verbinden“** herunter.
-- empfohlen: ein Netzlaufwerk für Fotos und Vorschaubilder (Option „Speicherort“)
+Neben Home Assistant auf einem Rechner mit `amd64` brauchst du einen Windows-PC mit NVIDIA-Grafikkarte im selben
+Netzwerk, denn dort läuft die Erkennung der Karten. Den Installer dafür lädst du nach dem Start in der App unter
+**„PC verbinden“** herunter. Für Fotos und Vorschaubilder empfiehlt sich ein Netzlaufwerk, das du in der Option
+„Speicherort“ einträgst.
 
-Die Einrichtung Schritt für Schritt steht im Reiter **Dokumentation**, alle Funktionen mit Bildern auf
-[GitHub][repo].
+Wie du alles Schritt für Schritt einrichtest, steht im Reiter **Dokumentation**. Alle Funktionen mit Bildern findest
+du auf [GitHub][repo].
 
 MTG Binder is unofficial Fan Content permitted under the Fan Content Policy. Not approved/endorsed by Wizards.
 Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC.
