@@ -1,5 +1,14 @@
 # Änderungen
 
+## 0.56.0
+- **Sets: Preise der fehlenden Karten direkt in der Liste.** Sobald in einem Set der Filter „Fehlt“ gewählt ist,
+  steht an jeder fehlenden Karte ihr Preis in der gewählten Preisart (ohne Foil): in der Ansicht „Drucke“ der Preis
+  genau dieses Drucks, in „Namen“ der günstigste Druck des Namens aus diesem Set. Darüber steht, wie viele Namen
+  fehlen und was sie zusammen kosten. Der aufklappbare Bereich „Fehlende Karten mit Preis“ entfällt dafür.
+- **„Für Cardmarket kopieren“** legt die fehlenden Namen als Text in die Zwischenablage, eine Zeile
+  „1 Kartenname (Setname)“ je Karte, das Set ausgeschrieben statt als Kürzel.
+- Keine Änderung an der Datenbank.
+
 ## 0.55.0
 - **Proxys: eigene Bilder.** Neue Tafel „Eigene Bilder“: Bild hochladen (PNG, JPEG, WebP) oder Adresse einfügen,
   Vorschau prüfen, speichern. Ein Beschnittrand von 1/8 Zoll (z. B. MPC) wird automatisch entfernt, sonst wird das

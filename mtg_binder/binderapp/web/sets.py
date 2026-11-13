@@ -5,7 +5,8 @@
     GET /api/set/{code}     ein Set: alle Drucke des Katalogs (Sammlernummer, Name, Seltenheit, Merkmale) mit
                             der Anzahl in der Sammlung, dazu je Name, ob er in diesem Set vorhanden ist
     GET /api/set/{code}/fehlt   fehlende Namen des Sets mit Preis und Summe, dazu Text zum Kopieren (Paket 6,
-                            10.11.2026); nur auf Abruf, damit die Übersicht nicht langsamer wird
+                            10.11.2026) und der Preis je Druck für die Liste beim Filter „Fehlt“ (13.11.2026);
+                            nur auf Abruf, damit die Übersicht nicht langsamer wird
 
 Zählweise:
 - **Drucke:** jede Sammlernummer des Sets im Katalog (also auch Borderless, Showcase, Extended Art …). Vorhanden ist
@@ -16,7 +17,8 @@ Zählweise:
   die Namenszählung, Varianten nicht extra). Preis je Name ist der günstigste Druck dieses Namens in genau diesem Set
   in der gewählten Preisart, nicht Foil. Die Preise kommen aus der Preisdatei `<daten>/preise/price_guide_1.json`
   (die Tabelle `preis` kennt nur Produkte der Sammlung); ohne Preisdatei aus `preis` vom letzten Abruf.
-  Text zum Kopieren: eine Zeile „1 Name (SET)“ je fehlendem Namen.
+  Text zum Kopieren für Cardmarket (Antwort des Nutzers, 13.11.2026): eine Zeile „1 Name (Setname)“ je fehlendem
+  Namen, das Set ausgeschrieben, wie der Katalog (Scryfall) es nennt.
 Gesamtzahlen kommen aus dem Katalog; ohne Katalog gibt es die Ansicht nicht (`verfuegbar: false`). Alle Quellen
 (Scan, ManaBox, von Hand) zählen mit, Karten ohne Ort nicht.
 """
@@ -98,12 +100,14 @@ def _preise_tabelle(con, spalte: str, ids: set[int]) -> tuple[str | None, dict[i
         return None, {}
 
 
-def fehlend(drucke: list[dict], besitz_oracle: set, code: str, preise: dict[int, float]) -> dict:
+def fehlend(drucke: list[dict], besitz_oracle: set, code: str, preise: dict[int, float],
+            setname: str | None = None) -> dict:
     """Fehlende Namen eines Sets mit günstigstem Druck, Summe und Text (rein, für Tests).
 
     `drucke`: Drucke des Sets aus dem Katalog (`oracle_id`, `name`, `nummer`, `scryfall_id`, `cardmarket_id`),
     `besitz_oracle`: Oracle-IDs, die aus diesem Set in der Sammlung sind, `preise`: {Produkt: Preis}.
-    Ohne Preis zeigt die Zeile den Druck mit der kleinsten Nummer."""
+    Ohne Preis zeigt die Zeile den Druck mit der kleinsten Nummer. Der Text nennt das Set mit `setname`, ohne
+    Namen mit dem Kürzel."""
     je_name: dict[str, dict] = {}
     for d in drucke:
         if d["oracle_id"] in besitz_oracle:
@@ -125,7 +129,17 @@ def fehlend(drucke: list[dict], besitz_oracle: set, code: str, preise: dict[int,
     return {"fehlend": liste, "anzahl": len(liste),
             "summe": round(sum(n["preis"] or 0 for n in liste), 2),
             "ohne_preis": sum(n["preis"] is None for n in liste),
-            "text": "".join(f"1 {n['name']} ({code.upper()})\n" for n in liste)}
+            "text": "".join(f"1 {n['name']} ({setname or code.upper()})\n" for n in liste)}
+
+
+def druckpreise(drucke: list[dict], preise: dict[int, float]) -> dict[str, float]:
+    """{Sammlernummer: Preis} für alle Drucke des Sets mit Preis (je Nummer die erste Zeile, Englisch zuerst)."""
+    aus: dict[str, float] = {}
+    for d in drucke:
+        preis = preise.get(d.get("cardmarket_id"))
+        if preis and d["nummer"] not in aus:
+            aus[d["nummer"]] = round(preis, 2)
+    return aus
 
 
 def _nummer_sortieren(nummer: str) -> tuple:
@@ -251,7 +265,8 @@ def routen(h) -> list[Route]:
             if kat is None:
                 return {"verfuegbar": False}
             with closing(kat):
-                if kat.execute("SELECT 1 FROM satz WHERE set_code = ?", (code,)).fetchone() is None:
+                satz = kat.execute("SELECT name FROM satz WHERE set_code = ?", (code,)).fetchone()
+                if satz is None:
                     raise Fehler("Dieses Set gibt es im Katalog nicht.", 404)
                 drucke = [dict(z) for z in kat.execute(
                     "SELECT oracle_id, name, nummer, scryfall_id, cardmarket_id FROM druck WHERE set_code = ?"
@@ -271,8 +286,9 @@ def routen(h) -> list[Route]:
                 stand, preise = _preise_tabelle(con, spalte, ids)
                 quelle = "datenbank" if stand else None
         # Namen wie in der Sets-Ansicht: ein Name ist da, wenn eine Karte der Sammlung aus diesem Set ihn hat
-        ergebnis = fehlend(drucke, {z["oracle_id"] for z in besitz}, code, preise)
-        return {"verfuegbar": True, "code": code, "preisart": art, "preisart_name": k_.werte.NAMEN[art],
-                "preisquelle": quelle, "preisstand": stand, **ergebnis}
+        ergebnis = fehlend(drucke, {z["oracle_id"] for z in besitz}, code, preise, satz["name"])
+        return {"verfuegbar": True, "code": code, "name": satz["name"], "preisart": art,
+                "preisart_name": k_.werte.NAMEN[art], "preisquelle": quelle, "preisstand": stand,
+                "druckpreise": druckpreise(drucke, preise), **ergebnis}
 
     return [Route("/sets", sets), Route("/set/{code}", set_einzeln), Route("/set/{code}/fehlt", set_fehlt)]

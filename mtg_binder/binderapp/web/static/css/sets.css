@@ -92,11 +92,11 @@ a.sets-link:hover { background: var(--flaeche-3); border-color: var(--messing-du
   color: var(--messing-hell); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sets-anz-fehlt { font-weight: 400; font-size: 0.8rem; color: var(--text-3); }
 
-/* ---------- Detail: fehlende Karten mit Preis (Paket 6) ---------- */
+/* ---------- Detail: Preise der fehlenden Karten beim Filter „Fehlt“ (Paket 6, sichtbarer seit 13.11.2026) ---------- */
 .sets-fehlpreis { margin: 0 0 14px; background: var(--flaeche-2); border: 1px solid var(--linie); border-radius: var(--radius); }
-.sets-fehlpreis-kopf { padding: 12px 16px; cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; gap: 8px; }
-.sets-fehlpreis-kopf::marker { color: var(--messing-hell); }
-.sets-fehlpreis-inhalt { padding: 0 16px 14px; display: grid; gap: 10px; }
+.sets-fehlpreis-inhalt { padding: 12px 16px 14px; display: grid; gap: 10px; }
+.sets-fehlpreis-inhalt .sets-hinweis { margin: 0; }
+.sets-anz-fehlt .wert { font-size: 0.9rem; font-weight: 600; }
 .sets-fehlpreis-summe { margin: 0; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px;
   font-weight: 600; font-variant-numeric: tabular-nums; }
 .sets-fehlpreis-erkl { margin: 0; font-size: 0.84rem; color: var(--text-3); }
@@ -104,14 +104,9 @@ a.sets-link:hover { background: var(--flaeche-3); border-color: var(--messing-du
 .sets-fehlpreis-kopieren { display: inline-flex; align-items: center; gap: 6px; }
 .sets-fehlpreis-status { font-size: 0.86rem; color: var(--text-2); }
 .sets-fehlpreis-text { width: 100%; min-height: 140px; resize: vertical; font-family: var(--schrift); line-height: 1.45; }
-.sets-fehlpreis-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px 24px;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); max-height: 60vh; overflow-y: auto; }
-.sets-fehlpreis-zeile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px;
-  padding: 6px 0; border-bottom: 1px solid var(--linie); font-variant-numeric: tabular-nums; }
 
 @media (max-width: 480px) {
   .sets-liste, .sets-druckliste { grid-template-columns: minmax(0, 1fr); }
-  .sets-fehlpreis-liste { grid-template-columns: minmax(0, 1fr); }
   .sets-zeile-innen { gap: 10px; padding: 8px 10px; }
 }
 

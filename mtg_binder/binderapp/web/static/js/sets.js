@@ -2,8 +2,8 @@
 //
 //   #/sets         Übersicht: alle Sets, aus denen die Sammlung Karten hat (Suche, Sortierung, zwei Balken je Set)
 //   #/set/ecl      ein Set: alle Drucke bzw. Namen des Katalogs, vorhanden oder fehlend (Umschalter und Filter),
-//                  dazu aufklappbar „Fehlende Karten“ mit Preis je Name, Summe und Liste zum Kopieren
-//                  (/api/set/{code}/fehlt, erst beim Aufklappen geladen)
+//                  beim Filter „Fehlt“ dazu der Preis an jeder fehlenden Zeile, die Summe und der Knopf
+//                  „Für Cardmarket kopieren“ (/api/set/{code}/fehlt, erst mit dem Filter geladen)
 //
 // „Drucke“ zählt jede Sammlernummer (auch Borderless, Showcase …), „Namen“ jede Karte des Sets einmal.
 // Beide Ansichten kommen aus diesem Modul (app.js trägt es als `sets` und `set` ein). Nur lesend; die Daten holt
@@ -253,6 +253,12 @@ async function uebersichtZeigen(wurzel, vorher) {
 
 // ---------------------------------------------------------------- Detail
 
+/** „fehlt“ am Zeilenende, mit Preis, sobald die Preise geladen sind (Filter „Fehlt“). */
+function fehltHtml(preis) {
+  return '<span class="sets-anz sets-anz-fehlt"><span>fehlt</span>'
+    + (preis != null ? `<span class="wert">${esc(euro(preis))}</span>` : '') + '</span>';
+}
+
 function druckZeile(d) {
   const da = d.anzahl > 0;
   const abzeichen = d.besonderheiten.map((b) => `<span class="sets-abz${FOIL_SONDER.has(b) ? ' sets-abz-foil' : ''}">`
@@ -263,7 +269,7 @@ function druckZeile(d) {
     + `<span class="sets-unter"><span class="sets-selt sets-selt-${esc(d.seltenheit)}">${esc(selt)}</span>${abzeichen}</span></span>`
     + (da
       ? `<span class="sets-anz">${HAKEN}<span><span class="nur-vorleser">Anzahl: </span>×${zahl(d.anzahl)}</span></span>`
-      : '<span class="sets-anz sets-anz-fehlt">fehlt</span>');
+      : fehltHtml(Z?.preise?.druck[d.nummer]));
   if (!da || d.karte_id == null) {
     return `<li class="sets-zeile ${da ? 'sets-da' : 'sets-fehlt'}"><div class="sets-zeile-innen">${inhalt}</div></li>`;
   }
@@ -280,7 +286,7 @@ function namenZeile(n) {
     + `<span class="sets-unter"><span class="sets-selt">${esc(druckeText)}</span></span></span>`
     + (da
       ? `<span class="sets-anz">${HAKEN}<span><span class="nur-vorleser">Anzahl: </span>×${zahl(n.anzahl)}</span></span>`
-      : '<span class="sets-anz sets-anz-fehlt">fehlt</span>')
+      : fehltHtml(Z?.preise?.name.get(n.oracle_id)))
     + '</div></li>';
 }
 
@@ -305,42 +311,44 @@ function detailZeichnen() {
   z.leer.hidden = liste.length > 0;
   z.leer.textContent = gesamt === 0 ? 'Der Katalog kennt zu diesem Set keine Karten.'
     : z.filter === 'fehlt' ? 'Nichts fehlt – dieses Set ist vollständig.' : 'Hier ist nichts zu sehen.';
+  // Preise, Summe und Kopierknopf gehören zum Filter „Fehlt“ und werden erst mit ihm geladen
+  const zeigen = z.filter === 'fehlt' && gesamt > da;
+  z.fehltBlock.hidden = !zeigen;
+  if (zeigen && !z.fehlt) { z.fehlt = true; fehltLaden(z); }
 }
 
 // ---------------------------------------------------------------- Fehlende Karten mit Preis
 
-function fehltZeile(n) {
-  const preis = n.preis != null ? `<span class="wert">${esc(euro(n.preis))}</span>`
-    : '<span class="sets-anz-fehlt">kein Preis</span>';
-  const drucke = n.drucke > 1 ? ` · ${zahl(n.drucke)} Drucke` : '';
-  return `<li class="sets-fehlpreis-zeile"><span class="sets-haupt"><span class="sets-druck-name">${esc(n.name)}</span>`
-    + `<span class="sets-unter"><span class="sets-selt">Nr. ${esc(n.nummer)}${drucke}</span></span></span>${preis}</li>`;
-}
-
-async function fehltLaden(z, bereich) {
-  const inhalt = bereich.querySelector('.sets-fehlpreis-inhalt');
+async function fehltLaden(z) {
+  const inhalt = z.fehltBlock.querySelector('.sets-fehlpreis-inhalt');
   inhalt.innerHTML = hinweis('Preise werden geladen …');
   let d;
   try {
     d = await holen(`/api/set/${encodeURIComponent(z.code)}/fehlt`);
   } catch {
     if (Z !== z) return;
-    z.fehlt = null;
-    inhalt.innerHTML = hinweis('Die fehlenden Karten ließen sich nicht laden. Läuft der Server?');
+    z.fehlt = null;   // beim nächsten Wechsel auf „Fehlt“ noch einmal versuchen
+    inhalt.innerHTML = hinweis('Die Preise der fehlenden Karten ließen sich nicht laden. Läuft der Server?');
     return;
   }
   if (Z !== z) return;
   if (!d.verfuegbar) { inhalt.innerHTML = hinweis(KEIN_KATALOG); return; }
-  if (!d.anzahl) { inhalt.innerHTML = hinweis('Nichts fehlt – von jedem Namen ist mindestens ein Druck da.'); return; }
-  const ohne = d.ohne_preis ? ` · ${zahl(d.ohne_preis)} ohne Preis` : '';
+  z.preise = { druck: d.druckpreise ?? {}, name: new Map(d.fehlend.map((n) => [n.oracle_id, n.preis])) };
   const quelle = d.preisquelle ? '' : ' Es gibt noch keine Preisdatei; die Preise kommen mit dem nächsten Abruf.';
+  if (!d.anzahl) {
+    inhalt.innerHTML = `<p class="sets-fehlpreis-erkl">Von jedem Namen ist mindestens ein Druck da; es fehlen nur weitere Drucke.`
+      + ` Preise: ${esc(d.preisart_name)}, ohne Foil.${esc(quelle)}</p>`;
+    detailZeichnen();
+    return;
+  }
+  const ohne = d.ohne_preis ? ` · ${zahl(d.ohne_preis)} ohne Preis` : '';
   inhalt.innerHTML = `<p class="sets-fehlpreis-summe"><span>${zahl(d.anzahl)} ${d.anzahl === 1 ? 'Name fehlt' : 'Namen fehlen'}</span>`
     + `<span class="wert">zusammen ${esc(euro(d.summe))}</span></p>`
-    + `<p class="sets-fehlpreis-erkl">Je Name der günstigste Druck aus diesem Set, ${esc(d.preisart_name)}, ohne Foil${esc(ohne)}.${esc(quelle)}</p>`
-    + `<div class="sets-fehlpreis-knoepfe"><button type="button" class="knopf sets-fehlpreis-kopieren">${KOPIE}<span>Liste kopieren</span></button>`
-    + '<span class="sets-fehlpreis-status" role="status" aria-live="polite"></span></div>'
-    + '<ul class="sets-fehlpreis-liste" aria-label="Fehlende Karten mit Preis"></ul>';
-  inhalt.querySelector('.sets-fehlpreis-liste').innerHTML = d.fehlend.map(fehltZeile).join('');
+    + `<p class="sets-fehlpreis-erkl">Summe und kopierte Liste: je fehlendem Namen der günstigste Druck aus diesem Set,`
+    + ` ${esc(d.preisart_name)}, ohne Foil${esc(ohne)}. Die Liste hat je Zeile „1 Name (Setname)“.${esc(quelle)}</p>`
+    + `<div class="sets-fehlpreis-knoepfe"><button type="button" class="knopf sets-fehlpreis-kopieren">${KOPIE}<span>Für Cardmarket kopieren</span></button>`
+    + '<span class="sets-fehlpreis-status" role="status" aria-live="polite"></span></div>';
+  detailZeichnen();   // Preise an die fehlenden Zeilen schreiben
   const status = inhalt.querySelector('.sets-fehlpreis-status');
   inhalt.querySelector('.sets-fehlpreis-kopieren').addEventListener('click', async () => {
     try {
@@ -399,12 +407,11 @@ async function detailZeigen(wurzel, code, vorher) {
   inhalt.innerHTML = '<div class="sets-balken-gross">'
     + balkenHtml('Drucke', daten.drucke_da, daten.drucke_gesamt, 'drucke')
     + balkenHtml('Namen', daten.namen_da, daten.namen_gesamt, 'namen') + '</div>'
-    + (daten.namen_gesamt > daten.namen_da
-      ? '<details class="sets-fehlpreis"><summary class="sets-fehlpreis-kopf">Fehlende Karten mit Preis</summary>'
-        + '<div class="sets-fehlpreis-inhalt"></div></details>' : '')
     + '<div class="sets-werkzeug"><div class="sets-pillen sets-umschalter"></div>'
     + '<div class="sets-pillen sets-filter"></div></div>'
     + '<p class="sets-zaehlzeile" role="status" aria-live="polite"></p>'
+    + '<section class="sets-fehlpreis" aria-label="Preise der fehlenden Karten" hidden>'
+    + '<div class="sets-fehlpreis-inhalt"></div></section>'
     + '<p class="sets-hinweis sets-leer" hidden></p>'
     + '<ul class="sets-druckliste" aria-label="Drucke des Sets"></ul>';
   const z = {
@@ -414,6 +421,7 @@ async function detailZeigen(wurzel, code, vorher) {
     umschalter: inhalt.querySelector('.sets-umschalter'), filterZeile: inhalt.querySelector('.sets-filter'),
     zaehl: inhalt.querySelector('.sets-zaehlzeile'), liste: inhalt.querySelector('.sets-druckliste'),
     leer: inhalt.querySelector('.sets-leer'), taste: null,
+    fehltBlock: inhalt.querySelector('.sets-fehlpreis'), fehlt: null, preise: null,
   };
   Z = z;
   pillen(z.umschalter, ANSICHTEN, z.ansicht, 'ansicht', 'Ansicht');
@@ -434,10 +442,6 @@ async function detailZeigen(wurzel, code, vorher) {
     vorliebe('sets.filter', z.filter);
     for (const x of z.filterZeile.children) x.setAttribute('aria-pressed', String(x === b));
     detailZeichnen();
-  });
-  const fehlpreis = inhalt.querySelector('.sets-fehlpreis');
-  fehlpreis?.addEventListener('toggle', () => {
-    if (fehlpreis.open && Z === z && !z.fehlt) { z.fehlt = true; fehltLaden(z, fehlpreis); }
   });
   tastaturAnschliessen(z, '#/sets');
   detailZeichnen();
