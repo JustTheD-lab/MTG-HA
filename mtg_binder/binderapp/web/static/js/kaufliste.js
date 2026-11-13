@@ -4,6 +4,7 @@
 // Schnittstelle: web/kaufliste.py. Bausteine (Zeilen, Schalter, Meldung) aus deck.js und deck.css.
 
 import { holen, senden, esc, zurueck, euro, vorliebe } from './gemeinsam.js';
+import { CM_FILTER, cmFilter, cmAdresse } from './cardmarket.js';
 import { angemeldet } from './anmeldung.js';
 import { dialogOffen } from './dialog.js';
 import { el, bildHtml, bilderAbsichern, linksAnschliessen, toastZeigen, ZURUECK } from './deck.js';
@@ -12,37 +13,8 @@ const zahl = (n) => Number(n ?? 0).toLocaleString('de-DE');
 const HINWEIS_CARDMARKET = 'Für Cardmarket: Wants → Aus Text hinzufügen.';
 let Z = null;
 
-// Link je Karte auf die Produktseite des günstigsten Drucks (Produktnummer wie bei Secret Lair, keine geratenen
-// Adressen), mit den Angebotsfiltern von Cardmarket als Adressparameter (Vorlieben im Browser). Kein Preisabruf
-// von der Website: Cardmarket steht hinter einer Bot-Prüfung, die Preise kommen weiter aus der täglichen Preisdatei.
-const CARDMARKET = 'https://www.cardmarket.com/de/Magic/Products';
-const CM_FILTER = {
-  land: { name: 'Verkäuferland', param: 'sellerCountry', werte: [['', 'Alle'], ['7', 'Deutschland'], ['1', 'Österreich'],
-    ['4', 'Schweiz'], ['23', 'Niederlande'], ['2', 'Belgien'], ['20', 'Luxemburg'], ['12', 'Frankreich'], ['17', 'Italien'],
-    ['10', 'Spanien'], ['8', 'Dänemark'], ['25', 'Polen'], ['6', 'Tschechien']] },
-  sprache: { name: 'Kartensprache', param: 'language', werte: [['', 'Alle'], ['1', 'Englisch'], ['3', 'Deutsch'],
-    ['1,3', 'Englisch oder Deutsch'], ['2', 'Französisch'], ['5', 'Italienisch'], ['4', 'Spanisch'], ['7', 'Japanisch']] },
-  zustand: { name: 'Mindestzustand', param: 'minCondition', werte: [['', 'Alle'], ['1', 'Mint'], ['2', 'Near Mint'],
-    ['3', 'Excellent'], ['4', 'Good'], ['5', 'Light Played'], ['6', 'Played']] },
-};
-
-function cmFilter() {
-  const f = {};
-  for (const [k, d] of Object.entries(CM_FILTER)) {
-    const w = vorliebe(`kaufliste.cm.${k}`) ?? '';
-    f[k] = d.werte.some(([v]) => v === w) ? w : '';
-  }
-  return f;
-}
-
-function cmAdresse(p) {
-  const q = new URLSearchParams({ idProduct: String(p.cardmarket_id) });
-  const f = cmFilter();
-  for (const [k, d] of Object.entries(CM_FILTER)) if (f[k]) q.set(d.param, f[k]);
-  q.set('isFoil', p.foil ? 'Y' : 'N');
-  return `${CARDMARKET}?${q.toString().replaceAll('%2C', ',')}`;
-}
-
+// Link je Karte auf die Produktseite des günstigsten Drucks; Adresse und Angebotsfilter aus cardmarket.js
+// (dieselben Filter gelten für den Knopf in der Kartenansicht).
 function cmLinkHtml(p) {
   if (p.cardmarket_id == null) return '';
   return `<a class="knopf kauf-cm-link" href="${esc(cmAdresse(p))}" target="_blank" rel="noopener noreferrer">Cardmarket`

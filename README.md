@@ -91,7 +91,8 @@ dir „Umräumen“, welche Karten jetzt in eine andere Kiste gehören.
 ### Preise und Dashboard
 
 Die App holt jeden Tag die aktuellen Preise von Cardmarket. Welcher Preis für dich zählt, stellst du selbst ein: Low,
-Trend oder der Durchschnitt über 1, 7 oder 30 Tage. Bei Foil-Karten rechnet die App mit dem Foil-Preis.
+Trend oder der Durchschnitt über 1, 7 oder 30 Tage. Bei Foil-Karten rechnet die App mit dem Foil-Preis. Öffnest du
+eine Karte, bringt dich ein Knopf direkt zu genau diesem Druck bei Cardmarket.
 
 Das Dashboard zeigt dir, was deine Sammlung wert ist und wie sich ihr Wert entwickelt hat. Du siehst dort auch, welche
 Karten am teuersten sind und welche zuletzt am stärksten gestiegen oder gefallen sind. Wenn du bei deinen Karten den

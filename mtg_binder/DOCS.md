@@ -62,7 +62,10 @@ nicht erreichbar, versucht es die Erkennung eine Stunde später wieder.
 Das Add-on lädt einmal täglich den Price Guide von Cardmarket (etwa 25 MB) und speichert für die Karten deiner
 Sammlung **Low** und **Durchschnitt 7 Tage** (bei Foil-Karten die Foil-Preise). Jede Karte zeigt beides im unteren
 Rand („ab … · Ø …“), Binder und Kisten ihren Gesamtwert (Durchschnitt 7 Tage). Die große Kartenansicht zeigt die
-Veränderung gegen Vortag, 3 und 30 Tage – erst, wenn genug Tage gesammelt sind, vorher „–“.
+Veränderung gegen Vortag, 3 und 30 Tage – erst, wenn genug Tage gesammelt sind, vorher „–“. Der Knopf
+**„Cardmarket“** in der Kartenansicht öffnet die Seite genau dieses Drucks bei Cardmarket (bei Foil-Karten nur
+Foil-Angebote); Verkäuferland, Kartensprache und Mindestzustand stellst du in der Kaufliste unter
+„Cardmarket-Filter“ ein, sie gelten für alle Knöpfe „Cardmarket“.
 Neue Karten bekommen ihren Preis etwa eine halbe Minute nach der Erkennung aus der Datei des Tages.
 Der Verlauf bleibt Tag für Tag in der Datenbank. Erreicht er etwa 200 MB, fallen die ältesten Tage weg; die letzten
 40 Tage bleiben immer.

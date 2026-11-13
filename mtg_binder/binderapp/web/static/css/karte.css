@@ -190,6 +190,7 @@
 .karte-aktionen { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 1rem; }
 .karte-aktionen .knopf { min-height: 48px; }
 .karte-aktionen [hidden] { display: none; }
+.karte-cm { display: inline-flex; align-items: center; text-decoration: none; }
 .karte-aktionen:not(:has(:not([hidden]))) { display: none; }
 .karte-neben { display: block; margin-top: 0.15rem; font-size: 0.88rem; color: var(--text-2); }
 .karte-quelle { margin: 1rem 0 0; padding-top: 0.8rem; border-top: 1px solid var(--linie); }

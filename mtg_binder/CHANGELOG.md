@@ -1,5 +1,12 @@
 # Änderungen
 
+## 0.57.0
+- **Knopf „Cardmarket“ in der Kartenansicht.** Unter Name und Druck jeder geöffneten Karte (Binder, Kiste, Sammlung,
+  Dashboard, Prüfen) führt ein Knopf direkt zur Seite genau dieses Drucks bei Cardmarket; bei Foil-Karten zeigt er nur
+  Foil-Angebote. Karten ohne bekanntes Cardmarket-Produkt haben keinen Knopf.
+- Es gelten die „Cardmarket-Filter“ der Kaufliste (Verkäuferland, Kartensprache, Mindestzustand).
+- Keine Änderung an der Datenbank.
+
 ## 0.56.0
 - **Sets: Preise der fehlenden Karten direkt in der Liste.** Sobald in einem Set der Filter „Fehlt“ gewählt ist,
   steht an jeder fehlenden Karte ihr Preis in der gewählten Preisart (ohne Foil): in der Ansicht „Drucke“ der Preis

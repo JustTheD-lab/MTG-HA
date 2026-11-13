@@ -10,6 +10,7 @@
 import { holen, bildUrl, bildSrcset, BREITEN, esc, zurueck, bewegungReduziert, vorliebe, scryfallBild, euro,
   PREISARTEN, preisWahl, senden, gewinnText, gewinnKlasse }
   from './gemeinsam.js';
+import { cmAdresse } from './cardmarket.js';
 import { kaufpreisFragen } from './kaufpreis.js';
 import { dialogOffen } from './dialog.js';
 import { angemeldet, anmelden } from './anmeldung.js';
@@ -341,12 +342,23 @@ function quelleHtml(k) {
   return text ? `<p class="karte-quelle etikett">${text}</p>` : '';
 }
 
-/** Knopf „Prüfen" (unsichere, ungeprüfte Karte) bzw. „Bearbeiten"; nur angemeldet sichtbar. */
+/** Knopf „Cardmarket“ (Wunsch des Nutzers, 13.11.2026): Produktseite genau dieses Drucks mit den Angebotsfiltern
+    der Kaufliste; Foil-Karten suchen nur Foil. Ohne bekanntes Produkt gibt es keinen Knopf. Immer sichtbar,
+    auch ohne Anmeldung, weil die Kartenansicht überall dieselbe ist (Binder, Kiste, Sammlung, Deck, Prüfen). */
+function cardmarketHtml(k) {
+  const id = k.preise?.cardmarket_id;
+  if (id == null) return '';
+  return `<a class="knopf karte-cm" href="${esc(cmAdresse({ cardmarket_id: id, foil: k.foil }))}" target="_blank" rel="noopener noreferrer">Cardmarket`
+    + `<span aria-hidden="true"> ↗</span><span class="nur-vorleser"> für ${esc(k.name)} (öffnet Cardmarket)</span></a>`;
+}
+
+/** Knopf „Prüfen" (unsichere, ungeprüfte Karte) bzw. „Bearbeiten"; nur angemeldet sichtbar. Dazu „Cardmarket“. */
 function aktionenHtml(k) {
   const pruefbar = k.status !== 'sicher' && !k.geprueft;
   return `<div class="karte-aktionen">
       <button type="button" class="knopf ${pruefbar ? 'knopf-haupt' : ''} karte-bearbeiten" data-titel="${pruefbar ? 'Karte prüfen' : 'Karte bearbeiten'}" hidden>${pruefbar ? 'Prüfen' : 'Bearbeiten'}</button>
       <button type="button" class="knopf karte-anmelden" hidden>Zum Bearbeiten anmelden</button>
+      ${cardmarketHtml(k)}
     </div>`;
 }
 
