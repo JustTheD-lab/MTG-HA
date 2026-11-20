@@ -47,6 +47,7 @@ from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from binderapp.katalog import regeln
 from binderapp.katalog.bau import NAMENSSPRACHEN, NEBENKARTEN, SPALTEN_DRUCK, _namensvarianten, gedruckter_name, oracle_von
 from binderapp.katalog.kartendaten import zeile
 from binderapp.katalog.suche import normalisiere
@@ -54,7 +55,7 @@ from binderapp.katalog.suche import normalisiere
 API = "https://api.scryfall.com"
 KOPF = {"User-Agent": "MTG-Binder-Privat/1.0", "Accept": "application/json"}
 # Mindestabstand je Schnittstelle in Sekunden (Scryfall: Manifest 10/Minute, Sammlung 2/Sekunde, sonst 10/Sekunde)
-ABSTAND = {"/cards/manifest": 7.0, "/cards/collection": 0.6}
+ABSTAND = {"/cards/manifest": 7.0, "/cards/collection": 0.6, "/cards/search": 0.5}
 ABSTAND_SONST = 0.15
 WARTEN_429 = 35
 VERSUCHE_429 = 3
@@ -218,6 +219,19 @@ def saat_offen(pfad: Path) -> bool:
     return not z or z[0] != "fertig"
 
 
+def regeln_offen(pfad: Path) -> bool:
+    """Add-on: Die Regeldaten wurden in diesem Katalog noch nie aufgefrischt (z. B. ein Katalog vom PC ohne Tabelle
+    `regel` oder direkt nach dem Update); dann sofort nachholen, nicht erst nach 20 Stunden."""
+    if not Path(pfad).is_file():
+        return False
+    try:
+        with closing(sqlite3.connect(f"{Path(pfad).resolve().as_uri()}?mode=ro", uri=True)) as kat:
+            z = kat.execute("SELECT wert FROM meta WHERE schluessel = 'regel_auffrischen'").fetchone()
+    except sqlite3.Error:
+        return False
+    return not z
+
+
 def faellig(pfad: Path, jetzt: datetime | None = None) -> bool:
     if not Path(pfad).is_file():
         return False   # ohne Katalog gibt es nichts abzugleichen (den ersten baut der PC)
@@ -302,6 +316,9 @@ def schreiben(kat, drucke: list[dict], sprachdrucke: list[dict], bilder: Path | 
             zahl["namen_neu"] += _name_merken(kat, oracle, werte[2], "en")
             if werte[9] in sprachen_namen:
                 zahl["namen_neu"] += _name_merken(kat, oracle, gedruckter_name(objekt), werte[9])
+    regel_zeilen = {r["oracle_id"]: r for r in (regeln.regel_aus_karte(o) for o in drucke) if r}
+    if regel_zeilen:
+        regeln.schreiben(kat, list(regel_zeilen.values()))
     for objekt in sprachdrucke:
         oracle = oracle_von(objekt)
         sprache = objekt.get("lang") or ""
@@ -354,8 +371,12 @@ def neuheit_anlegen(kat) -> bool:
 
 
 def gekuerzt(karte: dict) -> dict:
-    """Karte ohne die Felder in `WEGLASSEN` (auch in den Kartenseiten)."""
+    """Karte ohne die Felder in `WEGLASSEN` (auch in den Kartenseiten); die Regeldaten (Legalität, Merkmale aus dem
+    Regeltext) kommen knapp unter `binder_regel` mit."""
     aus = {k: v for k, v in karte.items() if k not in WEGLASSEN}
+    regel = regeln.fuer_neuheit(karte)
+    if regel is not None:
+        aus["binder_regel"] = regel
     if isinstance(aus.get("card_faces"), list):
         aus["card_faces"] = [{k: v for k, v in s.items() if k not in WEGLASSEN} if isinstance(s, dict) else s
                              for s in aus["card_faces"]]
@@ -650,13 +671,25 @@ class Katalogabgleich(threading.Thread):
         self.halt.set()
 
     def einmal(self) -> dict | None:
+        offen = regeln_offen(self.katalog)
         if not faellig(self.katalog) and not saat_offen(self.katalog):
+            if offen:
+                self._regeln()
             return None
         zahl = abgleichen(self.katalog, neuheiten=True)
         log.info("Scryfall-Abgleich: %s, %s Neuheiten für den PC", kurz(zahl), zahl.get("neuheiten", 0))
+        self._regeln()
         if self.datenbank is not None:
             nach_abgleich_app(self.datenbank, self.katalog)
         return zahl
+
+    def _regeln(self) -> None:
+        """Regeldaten (Legalität, Game Changer, Tags) auffrischen; ein Fehler stört den Abgleich nicht."""
+        try:
+            zahl = regeln.auffrischen(self.katalog)
+            log.info("Regeln: %s Karten nachgeholt, %s Änderungen", zahl["regeln_neu"], zahl["aenderungen"])
+        except Exception as fehler:
+            log.warning("Regeln auffrischen fehlgeschlagen: %s", fehler)
 
     def run(self) -> None:
         self.halt.wait(60)   # erst den Serverstart abwarten

@@ -7,6 +7,9 @@
     GET   /api/deck/{id}/fehlt                    Fehlt-Liste als Textdatei
     PATCH /api/deck/{id}       {"name"?, "abgleich"?: "name"|"druck", "basics_auslassen"?: bool}
     POST  /api/deck/{id}/zeile/{zeile}/proxy  {"proxy": bool}
+    POST  /api/deck/{id}/bracket   {"bracket": 1–5 | null}   eigene Einstufung (ein Schritt mit Rückgängig, ab Version 24)
+  `GET /api/deck/{id}` liefert ab Version 24 `bewertung` (decks.kombos.bewerten): Legalität, Mindest-Bracket, Kombos
+  von Commander Spellbook (fragt im Hintergrund, wenn das Ergebnis zur Liste fehlt; nur Kartennamen), eigene Einstufung.
     POST  /api/deck/{id}/neu-laden  {"ausfuehren"?: bool, "text"? (nur Text-Decks)}   ohne „ausfuehren“ nur Vorschau
     POST  /api/deck/{id}/loeschen   {"name"}      zweite Bestätigung: Name eintippen; nur ohne Karten im Deck
   Deckbau (decks.bau):
@@ -31,8 +34,9 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
+from binderapp.db import schritte
 from binderapp.db.datenbank import aendern, loeschen, version
-from binderapp.decks import abgleich, bau, kaufliste, lesen, statistik
+from binderapp.decks import abgleich, bau, kaufliste, kombos, lesen, statistik
 from binderapp.preise import zeitplan
 from binderapp.web.helfer import Fehler, fehler
 
@@ -162,6 +166,9 @@ def routen(h) -> list[Route]:
                               if version(con) >= kaufliste.AB_VERSION else None)
             # Paket 10: Statistik der Deckliste (Katalog nur für Zeilen ohne Kartendaten)
             a["statistik"] = statistik.statistik(con, a["karten"], h.katalog)
+            # Commander-Bewertung (ab Version 24): Legalität, Mindest-Bracket, Kombos (fragt bei Bedarf im Hintergrund)
+            a["bewertung"] = (kombos.bewerten(con, h.katalog, a, a["karten"], h.schreibvorgang)
+                              if version(con) >= kombos.AB_VERSION else None)
         ordner = h.bilder / "scryfall"   # ohne Vorschaubild lädt die Oberfläche gleich das Bild von Scryfall
         for z in a["karten"]:
             z["vorschau"] = bool(z["scryfall_id"]) and (ordner / f"{z['scryfall_id']}_200.webp").is_file()
@@ -193,6 +200,24 @@ def routen(h) -> list[Route]:
             _lesen(con, deck_id)
             aendern(con, h.nutzer, abgleich.QUELLE, "deck", deck_id, felder)
             return {"id": deck_id, **felder}
+        return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
+
+    @h.schreibend
+    async def bracket(request):
+        deck_id = _deck_id(request)
+        d = await h.json_daten(request)
+        _pruefen(d, {"bracket"})
+        wert = d.get("bracket")
+        if wert is not None and (isinstance(wert, bool) or not isinstance(wert, int) or not 1 <= wert <= 5):
+            raise Fehler("„bracket“ ist 1 bis 5 oder leer.")
+
+        def arbeit(con):
+            _lesen(con, deck_id)
+            if version(con) < kombos.AB_VERSION:
+                raise Fehler("Die eigene Einstufung braucht die Datenbankversion 24. Bitte die App neu starten.", 409)
+            schritt = schritte.neuer_schritt()
+            neu = schritte.aendern_genau(con, h.nutzer, "deck", deck_id, {"bracket_eigen": wert}, schritt=schritt)
+            return {"id": deck_id, "bracket_eigen": wert, "schritt": schritt if neu else None}
         return JSONResponse(await run_in_threadpool(h.schreibvorgang, arbeit))
 
     @h.schreibend
@@ -376,6 +401,7 @@ def routen(h) -> list[Route]:
         Route("/deck/{id:int}", aendern_route, methods=["PATCH"]),
         Route("/deck/{id:int}/fehlt", fehlt),
         Route("/deck/{id:int}/zeile/{zeile:int}/proxy", proxy, methods=["POST"]),
+        Route("/deck/{id:int}/bracket", bracket, methods=["POST"]),
         Route("/deck/{id:int}/neu-laden", neu_laden, methods=["POST"]),
         Route("/deck/{id:int}/loeschen", loeschen_route, methods=["POST"]),
     ]

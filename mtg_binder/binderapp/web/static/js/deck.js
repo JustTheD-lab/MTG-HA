@@ -299,6 +299,139 @@ function ortHtml(o) {
     + `<span class="deck-ort-zusatz">${esc(mal + foil + anders)}</span></li>`;
 }
 
+// ---------- Commander-Bewertung: Plaketten je Karte, Formate, Abschnitt „Bewertung“ ----------
+const BEW_PLAKETTEN = {
+  gebannt: ['gebannt', true], nicht_legal: ['nicht legal', true], farbidentitaet: ['Farbe', true],
+  singleton: ['doppelt', true], commander_unzulaessig: ['Commander?', true],
+  game_changer: ['GC', false], extrazug: ['Extrazug', false], landzerstoerung: ['Landzerstörung', false],
+};
+const BEW_TITEL = {
+  gebannt: 'Im Commander-Format gebannt', nicht_legal: 'Im Commander-Format nicht legal',
+  farbidentitaet: 'Passt nicht zur Farbidentität des Commanders', singleton: 'Mehr als einmal im Deck',
+  commander_unzulaessig: 'Als Commander nicht zulässig', game_changer: 'Game Changer',
+  extrazug: 'Zusätzlicher Zug', landzerstoerung: 'Zerstört Länder',
+};
+const BEW_FORMAT = { legal: 'legal', not_legal: 'nicht legal', banned: 'gebannt', restricted: 'eingeschränkt' };
+const BEW_STUFEN = [[1, 'Exhibition'], [2, 'Core'], [3, 'Upgraded'], [4, 'Optimized'], [5, 'cEDH']];
+
+/** Plaketten (aus je_zeile) und Knopf „Formate“ einer Deckzeile; die Formatübersicht klappt darunter auf. */
+function plakettenHtml(k) {
+  const b = Z?.daten?.bewertung;
+  if (!b) return '';
+  const arten = (b.legalitaet?.je_zeile?.[String(k.id)] ?? []).filter((a) => BEW_PLAKETTEN[a]);
+  const hatFormate = Boolean(b.formate?.[String(k.id)]);
+  if (!arten.length && !hatFormate) return '';
+  const id = Number(k.id);
+  const inhalt = arten.map((a) => `<span class="deck-bew-plakette${BEW_PLAKETTEN[a][1] ? ' deck-bew-plakette--fehler' : ''}"`
+    + ` title="${esc(BEW_TITEL[a])}">${esc(BEW_PLAKETTEN[a][0])}</span>`).join('');
+  const knopf = hatFormate
+    ? `<button type="button" class="deck-bew-formate-knopf" data-formate="${id}" aria-expanded="false"`
+      + ` aria-controls="deck-bew-f${id}" aria-label="Formate von ${esc(k.name)} zeigen">Formate</button>` : '';
+  return `<p class="deck-bew-plaketten">${inhalt}${knopf}</p>`
+    + (hatFormate ? `<div class="deck-bew-formate" id="deck-bew-f${id}" hidden></div>` : '');
+}
+
+function formateHtml(k) {
+  const b = Z?.daten?.bewertung;
+  const f = b?.formate?.[String(k.id)] ?? {};
+  const namen = (b?.format_namen ?? []).filter(([schluessel]) => f[schluessel]);
+  if (!namen.length) return '<p class="deck-hinweis">Keine Formatdaten.</p>';
+  return '<ul class="deck-bew-formatliste">' + namen.map(([schluessel, name]) => {
+    const w = f[schluessel];
+    return `<li><span>${esc(name)}</span><span class="deck-bew-fw deck-bew-fw--${esc(w)}">${esc(BEW_FORMAT[w] ?? String(w))}</span></li>`;
+  }).join('') + '</ul>';
+}
+
+function formateUmschalten(z, knopf) {
+  const feld = z.liste.querySelector(`#${knopf.getAttribute('aria-controls')}`);
+  if (!feld) return;
+  const auf = knopf.getAttribute('aria-expanded') !== 'true';
+  if (auf) {
+    const k = (z.daten.karten ?? []).find((x) => Number(x.id) === Number(knopf.dataset.formate));
+    feld.innerHTML = k ? formateHtml(k) : '';
+  }
+  feld.hidden = !auf;
+  knopf.setAttribute('aria-expanded', String(auf));
+}
+
+const lokaleZeit = (t) => {
+  if (!t) return '';
+  const dt = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? t : `${t}Z`);
+  return Number.isNaN(dt.getTime()) ? String(t) : dt.toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+function befundListe(liste, klasse) {
+  if (!liste?.length) return '';
+  return `<ul class="deck-bew-liste ${klasse}">${liste.map((x) => `<li>${esc(x.text)}</li>`).join('')}</ul>`;
+}
+
+function kombosHtml(ko, alle) {
+  if (!ko) return '';
+  const stand = {
+    aktuell: ko.geholt ? `Stand: ${lokaleZeit(ko.geholt)}` : 'Aktuell',
+    laeuft: 'Kombos werden bei Commander Spellbook geprüft …',
+    veraltet: `Ergebnis gehört zu einer älteren Liste${ko.geholt ? ` (Stand ${lokaleZeit(ko.geholt)})` : ''}`,
+    fehler: `Commander Spellbook nicht erreichbar: ${ko.fehler ?? 'unbekannter Fehler'}`,
+    offen: 'Noch nicht geprüft',
+  }[ko.status] ?? '';
+  const liste = ko.liste ?? [];
+  const sichtbar = alle ? liste : liste.slice(0, 10);
+  const zeilen = sichtbar.map((c) => `<li>${c.zwei_karten ? '<span class="deck-bew-plakette deck-bew-plakette--zwei">2 Karten</span> ' : ''}`
+    + `<span class="deck-bew-kombo-karten">${esc((c.karten ?? []).join(' + '))}</span>`
+    + `${(c.ergebnis ?? []).length ? ` → ${esc(c.ergebnis.join(', '))}` : ''}</li>`).join('');
+  const mehr = liste.length > 10 && !alle
+    ? `<button type="button" class="knopf deck-bew-alle">Alle ${zahl(liste.length)} zeigen</button>` : '';
+  const gesamt = ko.gesamt > liste.length
+    ? `<p class="deck-hinweis">${zahl(ko.gesamt)} Kombos insgesamt, die Liste zeigt ${zahl(liste.length)}.</p>` : '';
+  return '<div class="deck-bew-block"><h3 class="deck-bew-titel etikett">Kombos</h3>'
+    + `<p class="deck-bew-stand${ko.status === 'fehler' ? ' deck-bew-stand--fehler' : ''}">${esc(stand)}</p>`
+    + (zeilen ? `<ul class="deck-bew-liste deck-bew-kombos">${zeilen}</ul>`
+      : (ko.status === 'aktuell' ? '<p class="deck-hinweis">Keine Kombos gefunden.</p>' : ''))
+    + mehr + gesamt + '</div>';
+}
+
+function bewertungHtml(b, schreiben, alle) {
+  const br = b.bracket ?? {};
+  const spanne = br.spanne ?? [br.bracket, br.bracket];
+  const bText = spanne[0] === spanne[1] ? `Bracket ${spanne[0]}` : `Bracket ${spanne[0]}–${spanne[1]}`;
+  const sb = b.kombos?.spellbook;
+  const eigen = b.bracket_eigen;
+  const zuNiedrig = eigen != null && br.bracket != null && eigen < br.bracket;
+  const optionen = '<option value="">Keine</option>'
+    + BEW_STUFEN.map(([n, t]) => `<option value="${n}"${eigen === n ? ' selected' : ''}>${n} ${t}</option>`).join('');
+  const bracket = '<div class="deck-bew-block"><h3 class="deck-bew-titel etikett">Bracket</h3>'
+    + `<p class="deck-bew-gross">${esc(bText)} <span class="deck-bew-klein">(mindestens, berechnet)</span></p>`
+    + befundListe(br.gruende, '') + befundListe(br.hinweise, 'deck-bew-gedaempft')
+    + (sb ? `<p class="deck-bew-stand">Commander Spellbook schätzt: Bracket ${esc(sb.bracket)}${sb.name ? ` (${esc(sb.name)})` : ''}</p>` : '')
+    + '<label class="deck-bew-eigen"><span>Eigene Einstufung</span>'
+    + `<select class="deck-bew-wahl" ${schreiben ? '' : 'disabled'} aria-label="Eigene Bracket-Einstufung">${optionen}</select></label>`
+    + (zuNiedrig ? '<p class="deck-bew-warn">Die eigene Einstufung liegt unter dem berechneten Mindest-Bracket.</p>' : '') + '</div>';
+  let legal;
+  if (b.katalog === false) {
+    legal = '<p class="deck-hinweis">Regeldaten fehlen noch, sie werden beim nächsten Katalogabgleich geholt.</p>';
+  } else {
+    const l = b.legalitaet ?? {};
+    legal = `<p class="deck-bew-gross deck-bew-gross--${l.legal ? 'gut' : 'schlecht'}">${l.legal ? 'Commander-legal' : 'Nicht legal'}</p>`
+      + befundListe(l.fehler, 'deck-bew-fehler') + befundListe(l.hinweise, 'deck-bew-gedaempft');
+  }
+  return bracket + '<div class="deck-bew-block"><h3 class="deck-bew-titel etikett">Legalität</h3>' + legal + '</div>'
+    + kombosHtml(b.kombos, alle);
+}
+
+/** Bei „läuft“ oder „offen“ die Ansicht nach 4 Sekunden still neu laden, höchstens 5-mal hintereinander. */
+function bewertungPlanen(z) {
+  if (z.bewZeit) { clearTimeout(z.bewZeit); z.bewZeit = null; }
+  const status = z.daten?.bewertung?.kombos?.status;
+  if (status !== 'laeuft' && status !== 'offen') { z.bewZaehler = 0; return; }
+  if (z.bewZaehler >= 5) return;
+  z.bewZeit = setTimeout(() => {
+    z.bewZeit = null;
+    if (Z !== z) return;
+    z.bewZaehler += 1;
+    laden(z, { still: true });
+  }, 4000);
+}
+
 function zeileHtml(k, schreiben) {
   const st = statusVon(k);
   const druck = k.druck_angegeben && k.set_code
@@ -313,7 +446,7 @@ function zeileHtml(k, schreiben) {
     + `<p class="deck-zeile-kopf"><span class="deck-anzahl">${zahl(k.anzahl)}×</span><span class="deck-name">${esc(k.name)}</span>`
     + `${k.foil ? '<span class="deck-foil" title="Foil">Foil</span>' : ''}</p>`
     + `<p class="deck-zeile-unter">${druck}<span class="deck-status deck-status--${st.art}">${esc(st.text)}</span>${preisHtml(k)}</p>`
-    + andereDecksHtml(k) + orte + '</div>' + proxy + '</li>';
+    + andereDecksHtml(k) + plakettenHtml(k) + orte + '</div>' + proxy + '</li>';
 }
 
 function balkenHtml(s) {
@@ -430,6 +563,8 @@ function zeichnen() {
   z.kopfZahlen.innerHTML = wertHtml(d.wert) + balkenHtml(d.summe ?? {});
   z.statistik.hidden = !d.statistik;   // ältere Antwort ohne Statistik
   if (d.statistik) z.statistikInhalt.innerHTML = statistikHtml(d.statistik);
+  z.bewertung.hidden = !d.bewertung;
+  if (d.bewertung) z.bewertungInhalt.innerHTML = bewertungHtml(d.bewertung, schreiben, z.bewAlle);
   const sm = d.summe ?? {};
   z.bauen.hidden = !schreiben || !(sm.verfuegbar > 0);
   z.bauen.querySelector('span').textContent = d.gebaut ? `Nachtrag: ${zahl(sm.verfuegbar)} verfügbar` : 'Deck bauen';
@@ -494,6 +629,7 @@ async function laden(z, { still = false } = {}) {
   z.meldung.textContent = '';
   const y = window.scrollY;
   zeichnen();
+  bewertungPlanen(z);
   if (still) window.scrollTo({ top: y, behavior: 'instant' });
 }
 
@@ -644,6 +780,7 @@ function aufraeumen() {
   if (!Z) return;
   document.removeEventListener('keydown', Z.taste);
   window.removeEventListener('binder:sitzung', Z.sitzung);
+  if (Z.bewZeit) clearTimeout(Z.bewZeit);
   Z = null;
 }
 
@@ -680,6 +817,8 @@ export async function zeigen(wurzel, parameter) {
     + `<button type="button" class="knopf deck-neu-laden" hidden>${NEU}<span>Neu laden</span></button>`
     + '<button type="button" class="knopf deck-umbenennen" hidden>Umbenennen</button>'
     + '<button type="button" class="knopf knopf-gefahr deck-loeschen" hidden>Löschen</button></div></div>'
+    + '<details class="deck-bewertung"><summary class="deck-bewertung-titel etikett">Bewertung</summary>'
+    + '<div class="deck-bewertung-inhalt"></div></details>'
     + '<details class="deck-statistik"><summary class="deck-statistik-titel etikett">Statistik</summary>'
     + '<div class="deck-statistik-inhalt"></div></details>'
     + '<div class="deck-toast" role="status" hidden></div>'
@@ -703,11 +842,35 @@ export async function zeigen(wurzel, parameter) {
     sortierung: bereich.querySelector('.deck-sortierung'),
     kauf: bereich.querySelector('.deck-kaufliste'), kaufSchalter: bereich.querySelector('.deck-kaufliste-schalter'),
     statistik: bereich.querySelector('.deck-statistik'),
+    bewertung: bereich.querySelector('.deck-bewertung'), bewertungInhalt: bereich.querySelector('.deck-bewertung-inhalt'),
+    bewZeit: null, bewZaehler: 0, bewAlle: false,
     statistikInhalt: bereich.querySelector('.deck-statistik-inhalt'),
     sort: SORTIERUNGEN.some(([s]) => s === vorliebe('deck.sort')) ? vorliebe('deck.sort') : 'gruppe',
   };
   Z = z;
   z.statistik.open = vorliebe('deck.statistik') !== 'zu';
+  z.bewertung.open = vorliebe('deck.bewertung') !== 'zu';
+  z.bewertung.addEventListener('toggle', () => vorliebe('deck.bewertung', z.bewertung.open ? 'auf' : 'zu'));
+  z.bewertungInhalt.addEventListener('click', (e) => {
+    if (!e.target.closest('.deck-bew-alle')) return;
+    z.bewAlle = true;
+    if (z.daten) zeichnen();
+  });
+  z.bewertungInhalt.addEventListener('change', async (e) => {
+    const w = e.target.closest('.deck-bew-wahl');
+    if (!w) return;
+    const bracket = w.value === '' ? null : Number(w.value);
+    w.disabled = true;
+    try {
+      const a = await senden(`/api/deck/${z.id}/bracket`, { daten: { bracket } });
+      await laden(z, { still: true });
+      toastZeigen(z.toast, bracket == null ? 'Eigene Einstufung entfernt.' : `Eigene Einstufung: Bracket ${bracket}.`,
+        { schritt: a.schritt, nachRueck: () => laden(z, { still: true }) });
+    } catch (f) {
+      toastZeigen(z.toast, f.message, { art: 'fehler' });
+      await laden(z, { still: true });
+    }
+  });
   z.statistik.addEventListener('toggle', () => vorliebe('deck.statistik', z.statistik.open ? 'auf' : 'zu'));
   z.zurSammlung.addEventListener('click', () => zurSammlung(z));
   z.sortierung.addEventListener('click', (e) => {
@@ -751,6 +914,8 @@ export async function zeigen(wurzel, parameter) {
   z.umbenennen.addEventListener('click', () => umbenennen(z));
   z.loeschen.addEventListener('click', () => loeschen(z));
   z.liste.addEventListener('click', async (e) => {
+    const fk = e.target.closest('.deck-bew-formate-knopf');
+    if (fk) { formateUmschalten(z, fk); return; }
     const b = e.target.closest('.deck-proxy');
     if (!b) return;
     b.disabled = true;

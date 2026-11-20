@@ -211,7 +211,9 @@ def bauen(
     orakel: dict[str, list] = {}  # oracle_id -> [name, rang]
     namen: dict[tuple[str, str, str], None] = {}  # (oracle_id, name, sprache)
     in_default: set[str] = set()
+    regel_zeilen: dict[str, dict] = {}  # oracle_id -> Regelzeile (Legalität, Merkmale; Tags holt das Add-on)
     sprachen = set(namenssprachen)
+    from binderapp.katalog import regeln
 
     def name_merken(oracle: str | None, name: str | None, sprache: str) -> None:
         if not oracle or not name:
@@ -241,6 +243,10 @@ def bauen(
             objekt.get("cardmarket_id"), z["besonderheiten"], z["promo"], z["set_art"],
         ))
         oracle = z["oracle_id"]
+        if oracle and oracle not in regel_zeilen:
+            r = regeln.regel_aus_karte(objekt)
+            if r:
+                regel_zeilen[oracle] = r
         if oracle:
             rang = 1 if objekt.get("layout") in NEBENKARTEN else 0
             alt = orakel.get(oracle)
@@ -305,10 +311,11 @@ def bauen(
             [(k, v[0], v[1]) for k, v in orakel.items()],
         )
         con.executemany("INSERT INTO namen (oracle_id, name, sprache, norm) VALUES (?, ?, ?, ?)", namenszeilen)
+        regeln.schreiben(con, [r for o, r in regel_zeilen.items() if o in orakel])
         con.executescript(INDIZES)
         anzahl = {
             tabelle: con.execute(f"SELECT COUNT(*) FROM {tabelle}").fetchone()[0]
-            for tabelle in ("druck", "satz", "sprachdruck", "orakel", "namen")
+            for tabelle in ("druck", "satz", "sprachdruck", "orakel", "namen", "regel")
         }
         mit_bild_zeilen = con.execute("SELECT COUNT(*) FROM druck WHERE bild_vorhanden = 1").fetchone()[0]
         meta = {

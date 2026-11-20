@@ -108,6 +108,13 @@ Beim Bauen bekommst du eine Liste zum Abhaken, die dir für jede Karte den Fundo
 wandern die Karten in der App an ihren alten Platz zurück. Eine kleine Statistik zeigt dir Manakurve, Farben und
 Kartentypen.
 
+Für Commander-Decks prüft die App, ob das Deck legal ist, und ordnet es ins offizielle Bracket-System ein. Sie
+findet gebannte Karten, Karten außerhalb der Farbidentität, doppelte Karten und unzulässige Commander-Paare und
+nennt dir das Bracket, in das dein Deck mindestens gehört, zusammen mit den Gründen dafür. Kombos erfragt sie bei
+Commander Spellbook, wozu sie nur die Kartennamen schickt. Ob dein Deck eher in Bracket 1 oder 2 gehört, hängt von
+deiner Absicht ab, darum kannst du die Einstufung selbst festlegen. Ein Tipp auf eine Karte zeigt dir außerdem, in
+welchen Formaten sie legal ist.
+
 Fehlende Karten kannst du auf die Kaufliste setzen und für jede einen Wunschpreis hinterlegen. Fällt der Preis
 darunter, markiert die App die Karte, und ein Knopf bringt dich direkt zum passenden Angebot bei Cardmarket.
 
@@ -222,13 +229,15 @@ Wünsche kannst du gern als [Issue][issues] melden.
 
 Deine Fotos und deine Sammlung bleiben bei dir. Nach außen fragt die App nur öffentliche Daten ab: Karten und Bilder
 bei Scryfall, die Preisdatei bei Cardmarket, Secret-Lair-Daten bei MTGJSON und im MTG Wiki, Decklisten bei Archidekt
-und Updates bei GitHub.
+und Updates bei GitHub. Für die Kombos eines Commander-Decks schickt sie die Kartennamen des Decks an Commander
+Spellbook.
 
 ## Datenquellen und Dank
 
 - Kartendaten und Kartenbilder: [Scryfall](https://scryfall.com)
 - Preise: Price Guide von [Cardmarket](https://www.cardmarket.com)
 - Decklisten und Secret-Lair-Daten: [Archidekt](https://archidekt.com), [MTGJSON](https://mtgjson.com) und das MTG Wiki
+- Kombos und Bracket-Schätzung: [Commander Spellbook](https://commanderspellbook.com)
 - Proxy-Druck: [Silhouette Card Maker][scm] von Alan Cha (MIT-Lizenz)
 
 MTG Binder steht in keiner Verbindung zu diesen Diensten und wird von ihnen nicht unterstützt.

@@ -198,3 +198,46 @@ a.knopf { text-decoration: none; display: inline-flex; align-items: center; just
 .deck-stat-saeule { display: block; width: 100%; max-width: 28px; border-radius: 4px 4px 0 0; background: var(--messing); }
 .deck-stat-kappe { color: var(--text-2); font-size: 0.74rem; font-variant-numeric: tabular-nums; white-space: nowrap; min-height: 1.2em; }
 .deck-stat-x { padding-top: 4px; color: var(--text-3); font-size: 0.74rem; white-space: nowrap; }
+
+/* ---------- Commander-Bewertung: Abschnitt, Plaketten, Formate ---------- */
+.deck-bewertung { margin-top: 12px; padding: 0 16px; background: var(--flaeche-2); border: 1px solid var(--linie);
+  border-radius: 12px; }
+.deck-bewertung-titel { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.deck-bewertung[open] { padding-bottom: 14px; }
+.deck-bewertung-inhalt { display: grid; gap: 16px; min-width: 0; }
+@media (min-width: 900px) { .deck-bewertung-inhalt { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; } }
+.deck-bew-block { min-width: 0; }
+.deck-bew-titel { margin: 0 0 6px; font-size: 0.78rem; }
+.deck-bew-gross { margin: 0 0 6px; font-size: 1.3rem; font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.deck-bew-gross--gut { color: #8fc4a8; }
+.deck-bew-gross--schlecht { color: var(--warnung); }
+.deck-bew-klein { font-size: 0.8rem; font-weight: 400; color: var(--text-3); letter-spacing: 0; }
+.deck-bew-liste { margin: 0 0 8px; padding-left: 18px; display: grid; gap: 3px; font-size: 0.88rem; color: var(--text-2);
+  overflow-wrap: anywhere; }
+.deck-bew-gedaempft { color: var(--text-3); font-size: 0.8rem; }
+.deck-bew-fehler { color: #e0a39b; }
+.deck-bew-stand { margin: 0 0 8px; color: var(--text-2); font-size: 0.86rem; overflow-wrap: anywhere; }
+.deck-bew-stand--fehler { color: #e0a39b; }
+.deck-bew-warn { margin: 6px 0 0; color: var(--hinweis); font-size: 0.84rem; }
+.deck-bew-eigen { display: grid; gap: 4px; margin-top: 10px; font-size: 0.84rem; color: var(--text-3); }
+.deck-bew-wahl { min-height: 44px; max-width: 100%; padding: 0 10px; font: inherit; font-size: 1rem; color: var(--text);
+  background: var(--flaeche-3); border: 1px solid var(--linie-stark); border-radius: var(--radius-klein); }
+.deck-bew-kombos { list-style: none; padding-left: 0; }
+.deck-bew-kombos li { padding: 6px 0; border-top: 1px solid var(--linie); }
+.deck-bew-kombo-karten { color: var(--text); }
+.deck-bew-alle { min-height: 44px; }
+.deck-bew-plaketten { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 0; }
+.deck-bew-plakette { display: inline-block; padding: 1px 8px; border: 1px solid var(--linie-stark); border-radius: 999px;
+  font-size: 0.72rem; line-height: 1.5; color: var(--text-2); background: var(--flaeche-3); white-space: nowrap; }
+.deck-bew-plakette--fehler { border-color: var(--warnung); color: #f1b9b0; background: rgba(196, 87, 74, 0.14); }
+.deck-bew-plakette--zwei { border-color: var(--messing); color: var(--messing-hell); }
+.deck-bew-formate-knopf { min-height: 44px; margin: -10px 0; padding: 0 8px; font: inherit; font-size: 0.74rem; color: var(--text-3);
+  background: none; border: 0; text-decoration: underline; cursor: pointer; }
+.deck-bew-formate-knopf[aria-expanded="true"] { color: var(--messing-hell); }
+.deck-bew-formate { padding: 6px 10px; background: var(--flaeche-3); border: 1px solid var(--linie); border-radius: var(--radius-klein); }
+.deck-bew-formate[hidden] { display: none; }
+.deck-bew-formatliste { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 0.82rem; }
+.deck-bew-formatliste li { display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
+.deck-bew-fw--legal { color: #8fc4a8; }
+.deck-bew-fw--not_legal, .deck-bew-fw--banned { color: #e0a39b; }
+.deck-bew-fw--restricted { color: var(--hinweis); }

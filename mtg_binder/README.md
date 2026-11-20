@@ -15,7 +15,8 @@ nach deinen eigenen Regeln sortieren lässt.
 
 Die App holt jeden Tag die Preise von Cardmarket und zeigt dir im Dashboard, was deine Sammlung wert ist und wie sie
 sich entwickelt. Sie kennt außerdem deine Decks, sagt dir, welche Karten dir noch fehlen, und zeigt dir, wenn eine
-davon unter deinen Wunschpreis fällt. Dazu kommen eine Übersicht aller Secret Lairs, der Druck von Proxys als PDF und
+davon unter deinen Wunschpreis fällt. Commander-Decks prüft sie auf Legalität und ordnet sie ins offizielle
+Bracket-System ein. Dazu kommen eine Übersicht aller Secret Lairs, der Druck von Proxys als PDF und
 Sensoren für Home Assistant.
 
 ## Was du brauchst

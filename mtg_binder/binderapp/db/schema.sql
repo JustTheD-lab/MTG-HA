@@ -282,6 +282,8 @@ CREATE TABLE IF NOT EXISTS deck (
     abgleich     TEXT NOT NULL DEFAULT 'name' CHECK (abgleich IN ('name', 'druck')),
     basics_auslassen INTEGER NOT NULL DEFAULT 1 CHECK (basics_auslassen IN (0, 1)),
     regalplatz   INTEGER NOT NULL DEFAULT 0,
+    -- ab Version 24 (Commander-Bewertung, 20.11.2026): eigene Einstufung ins Bracket-System (leer = keine)
+    bracket_eigen INTEGER CHECK (bracket_eigen IS NULL OR bracket_eigen BETWEEN 1 AND 5),
     geladen      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     angelegt     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     geaendert    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
@@ -314,6 +316,18 @@ CREATE TABLE IF NOT EXISTS deck_produkt (
     deck_karte_id INTEGER NOT NULL REFERENCES deck_karte(id) ON DELETE CASCADE,
     cardmarket_id INTEGER NOT NULL,
     PRIMARY KEY (deck_karte_id, cardmarket_id)
+);
+
+-- Antwort von Commander Spellbook je Deck (ab Version 24, Commander-Bewertung): Kombos zur Liste mit dem Stand
+-- `stand` (Prüfsumme der Liste); ein Fehler lässt das letzte Ergebnis stehen. Marktdaten-artig, ohne Historie.
+CREATE TABLE IF NOT EXISTS deck_kombo (
+    deck_id        INTEGER PRIMARY KEY REFERENCES deck(id) ON DELETE CASCADE,
+    stand          TEXT,                     -- Stand der Liste, zu dem `ergebnis` gehört
+    geholt         TEXT,                     -- Zeitpunkt des Ergebnisses (UTC)
+    ergebnis       TEXT,                     -- JSON (decks.kombos.auswerten)
+    versucht       TEXT,                     -- letzter Versuch (UTC)
+    versucht_stand TEXT,
+    fehler         TEXT                      -- Fehler des letzten Versuchs, sonst leer
 );
 
 -- Haken der Entnahme beim Deckbau (ab Version 8), bis „Fertig“ (dann wandern die Karten ins Deck). `abgehakt` = 0:
@@ -541,4 +555,4 @@ CREATE INDEX IF NOT EXISTS i_umraeum_nutzer   ON umraeum_haken(nutzer_id);
 -- ab Version 23: Kaufliste
 CREATE INDEX IF NOT EXISTS i_kauf_produkt_cm  ON kauf_produkt(cardmarket_id);
 
-PRAGMA user_version = 23;
+PRAGMA user_version = 24;

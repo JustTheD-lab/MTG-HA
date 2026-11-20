@@ -1,5 +1,21 @@
 # Änderungen
 
+## 0.58.0
+- **Commander-Bewertung in der Deckansicht.** Ein neuer Abschnitt „Bewertung“ zeigt, ob das Deck Commander-legal ist
+  (gebannte und nicht legale Karten, Karten außerhalb der Farbidentität, doppelte Karten, unzulässiger Commander
+  oder ein ungültiges Paar aus Partner, Background oder Doctor's Companion), und ordnet es ins offizielle
+  Bracket-System ein. Die App rechnet ein Mindest-Bracket mit Begründung (Game Changer, Massen-Landzerstörung,
+  Extrazüge, Zwei-Karten-Kombos); ob ein Deck in Bracket 1 oder 2 bzw. 4 oder 5 gehört, entscheidet die Absicht,
+  darum lässt sich je Deck eine eigene Einstufung festlegen (mit Rückgängig).
+- **Kombos über Commander Spellbook.** Hat sich die Liste geändert, fragt die App dort nach Kombos und merkt sich die
+  Antwort. Gesendet werden nur Kartennamen und Anzahl. Ohne Netz bleibt der letzte Stand mit Datum stehen.
+- An jeder Karte stehen Kennzeichen (gebannt, Game Changer, Extrazug …); ein Tipp darauf zeigt die Legalität der
+  Karte in allen Formaten.
+- Der Katalog bekommt die Regeldaten (Legalität in allen Formaten, Game Changer, Merkmale für den Deckbau). Das
+  Add-on holt sie beim ersten Start selbst von Scryfall (einige Minuten im Hintergrund) und frischt Banns, Game
+  Changer und die Scryfall-Tags für Extrazüge und Massen-Landzerstörung täglich auf.
+- Datenbank: **Schema Version 24** (Migration 23 → 24 beim Start: eigene Einstufung je Deck, Ablage der Kombos).
+
 ## 0.57.0
 - **Knopf „Cardmarket“ in der Kartenansicht.** Unter Name und Druck jeder geöffneten Karte (Binder, Kiste, Sammlung,
   Dashboard, Prüfen) führt ein Knopf direkt zur Seite genau dieses Drucks bei Cardmarket; bei Foil-Karten zeigt er nur
