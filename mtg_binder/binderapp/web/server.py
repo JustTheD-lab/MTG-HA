@@ -10,7 +10,7 @@ Lesen (offen wie bisher):
   GET    /api/binder/{id}               Binder mit allen Seiten (Art, Fotostatus), Taschen und Karten
   GET    /api/binder/{id}/verlauf       Änderungen an Binder und Seiten (neueste zuerst)
   GET    /api/karte/{id}                eine Karte mit Lage und Änderungshistorie
-  GET    /api/suche?q=TEXT              Karten über alle Binder (Name enthält TEXT)
+  GET    /api/suche?q=TEXT              Karten in Bindern, Kisten und Decks (Scryfall-Syntax, scryfallsuche.py)
   GET    /api/sitzung                   angemeldet? Schreiben eingerichtet? Größenlimit
   GET    /api/verarbeiter               Lebenszeichen des Verarbeiters und Länge der Warteschlange
   GET    /bilder/{art}/{schluessel}_{breite}.webp   art = foto | scryfall, breite = 200 | 400 | 672
@@ -61,8 +61,9 @@ from binderapp.db import leeren, seiten
 from binderapp.db.datenbank import MINDEST, aendern, einfuegen, mit_scan_ausschnitt, schreiben, verbinden, version
 from binderapp.db.seiten import Fehler
 from binderapp.preise import gewinn, werte
+from binderapp.katalog import kartentext
 from binderapp.web import (abzug, bearbeiten, dashboard, decks, hochladen, kaufliste, kisten, kistenschreiben, manabox, pc,
-                           proxy, pruefen, regeln, sammlung, scan, secretlair, sets, verwaltung)
+                           proxy, pruefen, regeln, sammlung, scan, scryfallsuche, secretlair, sets, verwaltung)
 from binderapp.web.anmeldung import COOKIE, DAUER, Anmeldung
 from binderapp.web.helfer import Helfer
 from binderapp.web.speicher import MELDUNG as MELDUNG_SPEICHER
@@ -158,6 +159,24 @@ JOIN seite s ON s.id = t.seite_id
 JOIN binder b ON b.id = s.binder_id
 WHERE k.nutzer_id = ? AND k.name LIKE ? ESCAPE '\\'
 ORDER BY k.name, b.regalplatz, s.nummer
+LIMIT 50
+"""
+# Ab Version 8: Scryfall-Suche (scryfallsuche) über Binder, Kisten und Decks (Wunsch des Nutzers, 20.11.2026);
+# {wo} ist die übersetzte Bedingung (nur `?`-Platzhalter)
+SQL_SUCHE_V8 = """
+SELECT k.id, k.name, k.set_code, k.nummer, k.sprache, k.status, k.geprueft, COALESCE(k.bild, kd.bild) AS bild,
+       t.ausschnitt, t.zeile, t.spalte, s.nummer AS seite, b.id AS binder_id, b.name AS binder_name,
+       k.kiste_id, ki.name AS kiste_name, k.deck_id, de.name AS deck_name
+FROM karte k
+LEFT JOIN kartendaten kd ON kd.scryfall_id = k.scryfall_id
+LEFT JOIN tasche t ON t.id = k.tasche_id
+LEFT JOIN seite s ON s.id = t.seite_id
+LEFT JOIN binder b ON b.id = s.binder_id
+LEFT JOIN kiste ki ON ki.id = k.kiste_id
+LEFT JOIN deck de ON de.id = k.deck_id
+WHERE k.nutzer_id = ? AND (b.id IS NOT NULL OR k.kiste_id IS NOT NULL OR k.deck_id IS NOT NULL) AND {wo}
+ORDER BY k.name COLLATE NOCASE, (CASE WHEN b.id IS NOT NULL THEN 0 WHEN k.kiste_id IS NOT NULL THEN 1 ELSE 2 END),
+         COALESCE(b.regalplatz, ki.regalplatz, de.regalplatz), s.nummer, k.id
 LIMIT 50
 """
 
@@ -376,7 +395,20 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
             preise = werte.verlauf_karte(con, k["id"])   # Low, Durchschnitt 7 Tage, Veränderungen (ab Version 4)
             heute = werte.preise_fuer_karten(con, [k["id"]]).get(k["id"], {}).get("wert")
             bilanz = gewinn.karte(con, k, heute)   # Paket 8: Kaufpreis gegen heutigen Wert (ab Version 11)
+            oracle = None
+            if version(con) >= 3 and k["scryfall_id"]:
+                z = con.execute("SELECT oracle_id FROM kartendaten WHERE scryfall_id = ?", (k["scryfall_id"],)).fetchone()
+                oracle = z[0] if z else None
+            oracle = oracle or k["oracle_id"]
         antwort = dict(k)
+        # Englischer Kartentext aus dem Katalog (20.11.2026): je Seite Name, Typ, Text, Stärke/Widerstand, Loyalität
+        antwort["kartentext"] = None
+        if oracle and katalog is not None and Path(katalog).is_file():
+            try:
+                with closing(verbinden(katalog, nur_lesen=True)) as kat:
+                    antwort["kartentext"] = kartentext.lesen(kat, oracle)
+            except Exception as f:   # ein kaputter Katalog darf die Kartenansicht nicht verhindern
+                log.warning("Kartentext nicht lesbar: %s", f)
         antwort["foil"] = bool(antwort["foil"])
         antwort["geprueft"] = bool(antwort["geprueft"])
         antwort["set"] = antwort.pop("set_code")
@@ -394,9 +426,19 @@ def erstellen(daten: Path = STANDARD_DATEN, fotos: Path | None = None, konfig: P
         text = request.query_params.get("q", "").strip()
         if len(text) < 2:
             return JSONResponse({"treffer": []})
-        muster = "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         with closing(db()) as con:
-            zeilen = con.execute(SQL_SUCHE, (NUTZER, muster)).fetchall()
+            neu = version(con) >= 8
+        if neu:   # erst übersetzen (fragt womöglich Scryfall), dann die Datenbank öffnen
+            try:
+                wo, werte_ = scryfallsuche.bedingung(text, katalog) or ("1", [])
+            except Fehler as f:
+                return fehler(str(f), f.status)
+        with closing(db()) as con:
+            if neu:
+                zeilen = con.execute(SQL_SUCHE_V8.replace("{wo}", wo), (NUTZER, *werte_)).fetchall()
+            else:
+                muster = "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+                zeilen = con.execute(SQL_SUCHE, (NUTZER, muster)).fetchall()
         treffer = [{**dict(z), "set": z["set_code"], "geprueft": bool(z["geprueft"]),
                     "markierung": markierung(z["status"])} for z in zeilen]
         for t in treffer:

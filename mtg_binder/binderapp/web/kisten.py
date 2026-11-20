@@ -40,6 +40,7 @@ from binderapp.db.erkennung import SCAN_MARKE, ZURUECK_MARKE
 from binderapp.db.seiten import EIGENE_FARBE
 from binderapp.preise import gewinn, werte
 from binderapp.sortieren import einsortieren
+from binderapp.web import scryfallsuche
 from binderapp.web.helfer import Fehler, fehler
 
 __all__ = ["routen"]
@@ -306,9 +307,10 @@ class Anfrage(NamedTuple):
     fach: str | None = None   # Filter auf ein Fach: Dann muss vorher `fach_vorbereiten` laufen
 
 
-def anfrage_lesen(query_params, kiste_id: int | None, nutzer: int) -> Anfrage:
+def anfrage_lesen(query_params, kiste_id: int | None, nutzer: int, katalog=None) -> Anfrage:
     """Prüft alle Parameter und baut die WHERE-Bedingungen (nur mit `?`-Platzhaltern).
-    `kiste_id` None: Bereich ganze Sammlung, dann sind auch Ort, Quelle, Doppel und deren Gruppen erlaubt."""
+    `kiste_id` None: Bereich ganze Sammlung, dann sind auch Ort, Quelle, Doppel und deren Gruppen erlaubt.
+    `katalog`: Pfad des Scryfall-Katalogs für Kartentext und Legalität in der Suche `q` (sonst fragt sie Scryfall)."""
     sammlung = kiste_id is None
     skalare = (*SKALARE, *(SAMMLUNG_SKALARE if sammlung else KISTEN_SKALARE))
     listen = (*LISTEN, *SAMMLUNG_LISTEN) if sammlung else LISTEN
@@ -413,13 +415,11 @@ def anfrage_lesen(query_params, kiste_id: int | None, nutzer: int) -> Anfrage:
     if anzahl_min is not None:
         where.append("k.anzahl >= ?")
         args.append(anzahl_min)
-    text = (_skalar(roh, "q") or "").strip()
-    if len(text) > NAME_LAENGE:
-        raise Fehler(f"Der Suchtext ist zu lang (höchstens {NAME_LAENGE} Zeichen).")
-    if text:
-        muster = "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        where.append("(k.name LIKE ? ESCAPE '\\' OR kd.name LIKE ? ESCAPE '\\')")
-        args += [muster, muster]
+    # Suchtext in der Syntax von Scryfall (20.11.2026); einzelne Wörter suchen weiter im Namen
+    suche = scryfallsuche.bedingung(_skalar(roh, "q") or "", katalog)
+    if suche is not None:
+        where.append(suche[0])
+        args += suche[1]
     return Anfrage(sort, richtung, gruppe, ab, anzahl, tuple(where), tuple(args), kiste_id, fach)
 
 
@@ -812,7 +812,7 @@ def routen(h) -> list[Route]:
     @_lesen
     def karten(request):
         kiste_id = _kiste_id(request)
-        a = anfrage_lesen(request.query_params, kiste_id, h.nutzer)
+        a = anfrage_lesen(request.query_params, kiste_id, h.nutzer, h.katalog_pfad)
         with closing(h.db()) as con:
             con.execute("BEGIN")  # ein Stand für alle Abfragen dieser Antwort
             _ab_version_3(con, 404)

@@ -47,7 +47,7 @@ from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from binderapp.katalog import regeln
+from binderapp.katalog import kartentext, regeln
 from binderapp.katalog.bau import NAMENSSPRACHEN, NEBENKARTEN, SPALTEN_DRUCK, _namensvarianten, gedruckter_name, oracle_von
 from binderapp.katalog.kartendaten import zeile
 from binderapp.katalog.suche import normalisiere
@@ -319,6 +319,9 @@ def schreiben(kat, drucke: list[dict], sprachdrucke: list[dict], bilder: Path | 
     regel_zeilen = {r["oracle_id"]: r for r in (regeln.regel_aus_karte(o) for o in drucke) if r}
     if regel_zeilen:
         regeln.schreiben(kat, list(regel_zeilen.values()))
+    text_zeilen = {z["oracle_id"]: z for z in (kartentext.aus_karte(o) for o in drucke) if z}
+    if text_zeilen:
+        kartentext.schreiben(kat, list(text_zeilen.values()))
     for objekt in sprachdrucke:
         oracle = oracle_von(objekt)
         sprache = objekt.get("lang") or ""
@@ -377,6 +380,9 @@ def gekuerzt(karte: dict) -> dict:
     regel = regeln.fuer_neuheit(karte)
     if regel is not None:
         aus["binder_regel"] = regel
+    text = kartentext.fuer_neuheit(karte)   # Kartentext für Kartenansicht und Suche (20.11.2026)
+    if text is not None:
+        aus["binder_text"] = text
     if isinstance(aus.get("card_faces"), list):
         aus["card_faces"] = [{k: v for k, v in s.items() if k not in WEGLASSEN} if isinstance(s, dict) else s
                              for s in aus["card_faces"]]
@@ -675,13 +681,26 @@ class Katalogabgleich(threading.Thread):
         if not faellig(self.katalog) and not saat_offen(self.katalog):
             if offen:
                 self._regeln()
+            if kartentext.offen(self.katalog):
+                self._texte()
             return None
         zahl = abgleichen(self.katalog, neuheiten=True)
         log.info("Scryfall-Abgleich: %s, %s Neuheiten für den PC", kurz(zahl), zahl.get("neuheiten", 0))
         self._regeln()
+        if kartentext.offen(self.katalog):
+            self._texte()
         if self.datenbank is not None:
             nach_abgleich_app(self.datenbank, self.katalog)
         return zahl
+
+    def _texte(self) -> None:
+        """Kartentexte einmal für alle Karten nachholen (rund 500 Anfragen, gut 5 Minuten); ein Fehler stört den
+        Abgleich nicht, der nächste Blick macht weiter."""
+        try:
+            zahl = kartentext.nachholen(self.katalog, halt=self.halt.is_set)
+            log.info("Kartentexte: %s von %s nachgeholt", zahl["texte_neu"], zahl["offen"])
+        except Exception as fehler:
+            log.warning("Kartentexte nachholen fehlgeschlagen: %s", fehler)
 
     def _regeln(self) -> None:
         """Regeldaten (Legalität, Game Changer, Tags) auffrischen; ein Fehler stört den Abgleich nicht."""

@@ -1,5 +1,18 @@
 # Änderungen
 
+## 0.59.0
+- **Suchen wie bei Scryfall.** Das Suchfeld im Regal, in der Gesamtsammlung und in jeder Kiste versteht die Syntax
+  von Scryfall, zum Beispiel `t:goblin c:r mv<=2`, `o:"draw a card" f:commander`, `id<=esper`, `is:foil`, Klammern,
+  `or` und `-` zum Ausschließen. Einzelne Wörter suchen wie bisher im Namen, auch im gedruckten deutschen Namen. Die
+  meisten Begriffe beantwortet die App selbst; nur Ausgefallenes wie `otag:` fragt sie bei Scryfall nach (nur der
+  Suchbegriff geht hinaus) und gleicht das Ergebnis mit der Sammlung ab.
+- Die Suche im Regal findet jetzt auch Karten in Kisten und Decks, nicht mehr nur in Bindern.
+- **Kartentext in der Kartenansicht.** Jede Karte zeigt ihren englischen Regeltext mit Stärke und Widerstand bzw.
+  Loyalität, bei doppelseitigen Karten jede Seite mit Name, Kosten und Typ.
+- Der Katalog bekommt die Kartentexte. Das Add-on holt sie beim ersten Start einmal von Scryfall (gut fünf Minuten
+  im Hintergrund); bis dahin fehlt der Text in der Kartenansicht, und Textsuchen laufen über Scryfall.
+- Keine Änderung an der Datenbank.
+
 ## 0.58.0
 - **Commander-Bewertung in der Deckansicht.** Ein neuer Abschnitt „Bewertung“ zeigt, ob das Deck Commander-legal ist
   (gebannte und nicht legale Karten, Karten außerhalb der Farbidentität, doppelte Karten, unzulässiger Commander

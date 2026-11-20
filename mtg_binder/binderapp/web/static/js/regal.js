@@ -3,7 +3,7 @@
 // Darunter ein zweiter Regalboden „Kisten“ (Bulkkisten ab Datenbankversion 3): Antippen zieht die Kiste
 // nach vorn, dann öffnet sich die Kistenansicht. Im Kopf stehen Binder und Kisten mit ihren Karten getrennt
 // (nie zusammengezählt), die Prüfen-Pille und der Zustand der Erkennung.
-// Darüber die Suche über alle Binder mit Treffern als Karteikarten.
+// Darüber die Suche über Binder, Kisten und Decks (Scryfall-Syntax) mit Treffern als Karteikarten.
 import { holen, senden, esc, gehe, bildUrl, bildSrcset, bewegungReduziert, euro, scryfallBild } from './gemeinsam.js';
 import { knopf as anmeldeKnopf, angemeldet, laden, sitzung } from './anmeldung.js';
 import { dialog, dialogOffen } from './dialog.js';
@@ -407,6 +407,14 @@ function titelAnpassen() {
 
 // ---------- Suche (Karteikasten) ----------
 
+/** Kurze Hilfe zur Scryfall-Syntax unter „keine Treffer“ und Fehlermeldungen. */
+const SUCHHILFE = '<p class="regal-treffer-hinweis">Suche wie bei Scryfall, z. B. <code>t:goblin</code>, '
+  + '<code>o:"draw a card"</code>, <code>c:rg</code>, <code>id&lt;=esper</code>, <code>mv&lt;=2</code>, '
+  + '<code>r:mythic</code>, <code>s:neo</code>, <code>is:foil</code>, <code>f:commander</code>, '
+  + '<code>-t:land</code>, <code>(… or …)</code>. Einzelne Wörter suchen im Namen. '
+  + '<a href="https://scryfall.com/docs/syntax" target="_blank" rel="noopener noreferrer">Alle Begriffe bei Scryfall'
+  + '<span aria-hidden="true"> ↗</span></a></p>';
+
 function markierungsText(t) {
   if (t.markierung === 'unsicher') return t.geprueft ? 'Erkennung unsicher – von dir geprüft' : 'Erkennung unsicher';
   if (t.markierung === 'druck_offen') return t.geprueft ? 'Druck unsicher – von dir geprüft' : 'Name sicher, Druck offen';
@@ -447,13 +455,22 @@ function karteikarteHtml(t) {
   const lage = [t.seite != null && `Seite ${t.seite}`, t.zeile != null && `Zeile ${t.zeile}, Spalte ${t.spalte}`]
     .filter(Boolean).join(' · ');
   const hinweis = markierungsText(t);
-  const ziel = `#/binder/${t.binder_id}/${t.seite ?? 1}/karte/${t.id}`;
+  // Treffer liegen in einem Binder, einer Kiste oder einem Deck (Scryfall-Suche, 20.11.2026)
+  let ziel = `#/binder/${t.binder_id}/${t.seite ?? 1}/karte/${t.id}`;
+  let ort = t.binder_name;
+  if (t.binder_id == null && t.kiste_id != null) {
+    ziel = `#/kiste/${Number(t.kiste_id)}/karte/${t.id}`;
+    ort = `Kiste ${t.kiste_name ?? ''}`.trim();
+  } else if (t.binder_id == null && t.deck_id != null) {
+    ziel = `#/sammlung/karte/${t.id}`;
+    ort = `Deck ${t.deck_name ?? ''}`.trim();
+  }
   return `<li><a class="regal-karteikarte${t.geprueft ? ' regal-karte--geprueft' : ''}" href="${ziel}">`
     + vorschauHtml(t)
     + '<span class="regal-karte-text">'
     + `<span class="regal-karte-name">${esc(t.name)}</span>`
     + (daten ? `<span class="regal-karte-daten">${esc(daten)}</span>` : '')
-    + `<span class="regal-karte-ort">${esc(t.binder_name)}</span>`
+    + `<span class="regal-karte-ort">${esc(ort)}</span>`
     + (lage ? `<span class="regal-karte-lage">${esc(lage)}</span>` : '')
     + (hinweis ? `<span class="regal-karte-hinweis">${esc(hinweis)}</span>` : '')
     + '</span></a></li>';
@@ -485,17 +502,19 @@ async function suchen() {
   try {
     antwort = await holen(`/api/suche?q=${encodeURIComponent(text)}`);
   } catch (fehler) {
-    console.error(fehler);
     if (zustand && meine === zustand.suchlauf) {
-      trefferZeigen('<p class="regal-treffer-kopf">Die Suche ist gerade nicht erreichbar.</p>',
-        'Die Suche ist gerade nicht erreichbar.');
+      // Falsche Scryfall-Syntax (400) oder Scryfall nicht erreichbar (503): den Satz des Servers zeigen
+      const satz = fehler?.fehler || 'Die Suche ist gerade nicht erreichbar.';
+      if (!fehler?.fehler) console.error(fehler);
+      trefferZeigen(`<p class="regal-treffer-kopf">${esc(satz)}</p>${SUCHHILFE}`, satz);
     }
     return;
   }
   if (!zustand || meine !== zustand.suchlauf) return;   // inzwischen neu getippt
   const liste = antwort.treffer ?? [];
   if (!liste.length) {
-    trefferZeigen(`<p class="regal-treffer-kopf">Keine Karte unter „${esc(text)}“ gefunden.</p>`, 'Keine Treffer');
+    trefferZeigen(`<p class="regal-treffer-kopf">Keine Karte unter „${esc(text)}“ gefunden.</p>${SUCHHILFE}`,
+      'Keine Treffer');
     return;
   }
   const kopf = `${mehrzahl(liste.length, 'Treffer', 'Treffer')} für „${text}“`;
@@ -643,11 +662,11 @@ export async function zeigen(wurzel, parameter, vorher) {
     + '<div class="regal-status"><span class="regal-erkennung" hidden></span>'
     + '<button type="button" class="knopf regal-pruefen" hidden></button></div>'
     + '<div class="regal-aktionen"></div></header>'
-    + '<form class="regal-kasten" role="search" aria-label="Karten in allen Bindern suchen" autocomplete="off">'
+    + '<form class="regal-kasten" role="search" aria-label="Karten in der Sammlung suchen" autocomplete="off">'
     + `<label class="nur-vorleser" for="regal-suche">Karte suchen</label><div class="regal-kasten-feld">${LUPE}`
     + '<input id="regal-suche" class="regal-kasten-eingabe" type="search" name="q" autocomplete="off"'
     + ' autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-controls="regal-treffer"'
-    + ' placeholder="Karte in allen Bindern suchen">'
+    + ' maxlength="300" placeholder="Karte suchen, auch wie bei Scryfall (t:goblin o:haste)">'
     + `<button type="button" class="regal-kasten-leer" aria-label="Suche leeren" hidden>${KREUZ}</button>`
     + '</div></form>'
     + '<p class="nur-vorleser" role="status" aria-live="polite"></p>'

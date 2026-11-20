@@ -65,7 +65,11 @@ ansehen und ganz nach Wunsch sortieren, gruppieren und filtern, auch wenn mehrer
 Fächern und Trennkarten bildest du die Aufteilung deiner echten Kisten nach.
 
 Die Gesamtsammlung zeigt alle Karten aus Bindern, Kisten und Decks an einem Ort, und die Suche verrät dir, wo eine
-Karte liegt. In der Set-Übersicht siehst du, wie vollständig jedes Set ist und welche Karten dir noch fehlen, auf
+Karte liegt. Sie versteht die Syntax von Scryfall, sodass du etwa mit `t:goblin c:r mv<=2` alle günstigen roten
+Goblins oder mit `o:"draw a card" f:commander` passende Karten für dein Deck findest. Die meisten Begriffe beantwortet
+die App selbst, ohne Internet; nur Ausgefallenes wie `otag:` fragt sie bei Scryfall nach und gleicht das Ergebnis mit
+deiner Sammlung ab. Tippst du eine Karte an, steht neben Preis und Daten auch ihr englischer Kartentext, bei
+doppelseitigen Karten für jede Seite. In der Set-Übersicht siehst du, wie vollständig jedes Set ist und welche Karten dir noch fehlen, auf
 Wunsch gleich mit Preis und als Liste zum Kopieren. Karten, von denen du mehr besitzt, als du brauchst, findest du
 unter „Überzählige“ und kannst sie als Verkaufsliste herausgeben. Eine bestehende Sammlung aus ManaBox übernimmst du
 einfach per CSV-Import.

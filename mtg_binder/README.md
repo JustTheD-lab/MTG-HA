@@ -11,7 +11,8 @@ Karte, und du blätterst digital durch deine Binder.
 
 Deine Binder stehen als Buchrücken in einem digitalen Regal, und du kannst sie aufschlagen und durchblättern wie die
 echten. Für deinen Bulk gibt es Kisten, die du mit dem Handy über einem Kartenauswurf in einem Rutsch einscannst und
-nach deinen eigenen Regeln sortieren lässt.
+nach deinen eigenen Regeln sortieren lässt. Gesucht wird wie bei Scryfall, etwa mit `t:goblin o:haste`, und jede
+Karte zeigt dir ihren englischen Kartentext.
 
 Die App holt jeden Tag die Preise von Cardmarket und zeigt dir im Dashboard, was deine Sammlung wert ist und wie sie
 sich entwickelt. Sie kennt außerdem deine Decks, sagt dir, welche Karten dir noch fehlen, und zeigt dir, wenn eine

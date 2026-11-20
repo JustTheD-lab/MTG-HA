@@ -212,8 +212,9 @@ def bauen(
     namen: dict[tuple[str, str, str], None] = {}  # (oracle_id, name, sprache)
     in_default: set[str] = set()
     regel_zeilen: dict[str, dict] = {}  # oracle_id -> Regelzeile (Legalität, Merkmale; Tags holt das Add-on)
+    text_zeilen: dict[str, dict] = {}   # oracle_id -> Kartentext (Kartenansicht, Suche)
     sprachen = set(namenssprachen)
-    from binderapp.katalog import regeln
+    from binderapp.katalog import kartentext, regeln
 
     def name_merken(oracle: str | None, name: str | None, sprache: str) -> None:
         if not oracle or not name:
@@ -247,6 +248,10 @@ def bauen(
             r = regeln.regel_aus_karte(objekt)
             if r:
                 regel_zeilen[oracle] = r
+        if oracle and oracle not in text_zeilen:
+            t = kartentext.aus_karte(objekt)
+            if t:
+                text_zeilen[oracle] = t
         if oracle:
             rang = 1 if objekt.get("layout") in NEBENKARTEN else 0
             alt = orakel.get(oracle)
@@ -312,10 +317,11 @@ def bauen(
         )
         con.executemany("INSERT INTO namen (oracle_id, name, sprache, norm) VALUES (?, ?, ?, ?)", namenszeilen)
         regeln.schreiben(con, [r for o, r in regel_zeilen.items() if o in orakel])
+        kartentext.schreiben(con, [t for o, t in text_zeilen.items() if o in orakel])
         con.executescript(INDIZES)
         anzahl = {
             tabelle: con.execute(f"SELECT COUNT(*) FROM {tabelle}").fetchone()[0]
-            for tabelle in ("druck", "satz", "sprachdruck", "orakel", "namen", "regel")
+            for tabelle in ("druck", "satz", "sprachdruck", "orakel", "namen", "regel", "kartentext")
         }
         mit_bild_zeilen = con.execute("SELECT COUNT(*) FROM druck WHERE bild_vorhanden = 1").fetchone()[0]
         meta = {
@@ -328,6 +334,8 @@ def bauen(
             "namenssprachen": ",".join(namenssprachen),
             **{f"zeilen_{k}": str(v) for k, v in anzahl.items()},
             "drucke_mit_bild": str(mit_bild_zeilen),
+            # die Texte kommen vollständig aus den Scryfall-Daten: Das Add-on muss nichts nachholen
+            "kartentext_nachgeholt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         }
         con.executemany("INSERT INTO meta VALUES (?, ?)", list(meta.items()))
         con.commit()

@@ -126,7 +126,7 @@ def routen(h) -> list[Route]:
 
     @k_._lesen
     def karten(request):
-        a = k_.anfrage_lesen(request.query_params, None, h.nutzer)
+        a = k_.anfrage_lesen(request.query_params, None, h.nutzer, h.katalog_pfad)
         with closing(h.db()) as con:
             con.execute("BEGIN")  # ein Stand für alle Abfragen dieser Antwort
             k_._ab_version_3(con, 404)

@@ -336,6 +336,40 @@ function gewinnHtml(k) {
     </section>`;
 }
 
+/** Eine Zeile Regeltext: Erinnerungstext kursiv, Symbole wie {T} oder {G} als kleine Marken. */
+function regelzeileHtml(zeile) {
+  return esc(zeile)
+    .replace(/\(([^()]*)\)/g, '<i class="karte-erinnerung">($1)</i>')
+    .replace(/\{([^}]{1,6})\}/g, '<span class="karte-symbol">$1</span>');
+}
+
+/** Englischer Kartentext aus dem Katalog (Wunsch des Nutzers, 20.11.2026): Regeltext, Stärke/Widerstand bzw.
+    Loyalität, bei mehrseitigen Karten jede Seite mit Name, Kosten und Typ. Ohne Katalogtext kein Abschnitt. */
+function kartentextHtml(k) {
+  const seiten = Array.isArray(k.kartentext) ? k.kartentext.filter((x) => x && x.name) : [];
+  if (!seiten.length) return '';
+  const mehrere = seiten.length > 1;
+  const seiteHtml = (x) => {
+    const kopf = mehrere
+      ? `<p class="karte-text-kopf"><span class="karte-text-name">${esc(x.name)}</span>`
+        + (x.manakosten ? ` <span class="karte-text-kosten">${regelzeileHtml(x.manakosten)}</span>` : '')
+        + (x.typzeile ? `<span class="karte-neben">${esc(x.typzeile)}</span>` : '') + '</p>'
+      : '';
+    const zeilen = String(x.text ?? '').split('\n').filter((z) => z.trim())
+      .map((z) => `<p>${regelzeileHtml(z)}</p>`).join('');
+    const werte = [];
+    if (x.staerke != null || x.widerstand != null) werte.push(`${x.staerke ?? '–'}/${x.widerstand ?? '–'}`);
+    if (x.loyalitaet != null) werte.push(`Loyalität ${x.loyalitaet}`);
+    if (x.verteidigung != null) werte.push(`Verteidigung ${x.verteidigung}`);
+    return `<div class="karte-text-seite">${kopf}${zeilen}`
+      + (werte.length ? `<p class="karte-text-werte">${esc(werte.join(' · '))}</p>` : '') + '</div>';
+  };
+  return `<section class="karte-text" aria-labelledby="karte-text-titel">
+      <h3 class="etikett" id="karte-text-titel">Kartentext <span class="karte-text-sprache">(englisch)</span></h3>
+      <div lang="en">${seiten.map(seiteHtml).join('')}</div>
+    </section>`;
+}
+
 /** Dezente Herkunft der Karte, ganz unten auf der Tafel. */
 function quelleHtml(k) {
   const text = { manabox: 'aus ManaBox', manuell: 'von Hand angelegt' }[k.quelle];
@@ -397,6 +431,7 @@ function inhaltHtml(k) {
       <h2 id="karte-titel" class="karte-name">${esc(k.name)}</h2>
       ${druck ? `<p class="karte-druck">${esc(druck)}</p>` : ''}
       ${aktionenHtml(k)}
+      ${kartentextHtml(k)}
       ${preiseHtml(k)}
       ${gewinnHtml(k)}
       ${datenHtml(k)}

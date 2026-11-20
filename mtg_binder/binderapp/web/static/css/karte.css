@@ -196,6 +196,23 @@
 .karte-quelle { margin: 1rem 0 0; padding-top: 0.8rem; border-top: 1px solid var(--linie); }
 
 /* Preise (Cardmarket) */
+/* Kartentext (englisch, Oracle) aus dem Katalog, 20.11.2026 */
+.karte-text { margin: 1rem 0 0.4rem; }
+.karte-text h3 { margin: 0 0 0.4rem; }
+.karte-text-sprache { text-transform: none; letter-spacing: 0; }
+.karte-text-seite { padding: 0.55rem 0.7rem; border-radius: 6px; background: var(--flaeche-3); line-height: 1.45; }
+.karte-text-seite + .karte-text-seite { margin-top: 0.45rem; }
+.karte-text-seite p { margin: 0 0 0.35rem; }
+.karte-text-seite p:last-child { margin-bottom: 0; }
+.karte-text-kopf { padding-bottom: 0.3rem; border-bottom: 1px solid var(--linie-stark); }
+.karte-text-name { font-weight: 600; }
+.karte-text-werte { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.karte-erinnerung { color: var(--text-2); }
+.karte-symbol {
+  display: inline-block; min-width: 1.15em; padding: 0 0.22em; margin: 0 0.05em; border-radius: 0.6em;
+  font-size: 0.78em; line-height: 1.35; text-align: center; vertical-align: 0.08em; font-weight: 600;
+  background: var(--flaeche-hover); color: inherit;
+}
 .karte-preise { margin: 1rem 0 0.4rem; }
 .karte-preise h3 { margin: 0 0 0.4rem; }
 .preis-tabelle { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.92rem; }

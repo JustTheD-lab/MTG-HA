@@ -445,7 +445,7 @@ def routen(h) -> list[Route]:
         d = await h.json_daten(request)
         if set(d) - {"karten", "auswahl"} or ("karten" in d) == ("auswahl" in d):
             raise Fehler("Bitte entweder „karten“ (Liste von IDs) oder „auswahl“ angeben.")
-        ids, a = auswahl_lesen(d, h.nutzer)
+        ids, a = await run_in_threadpool(auswahl_lesen, d, h.nutzer, h.katalog_pfad)  # Suche: Katalog, ggf. Scryfall
         return JSONResponse(await _ausfuehren(lambda con: zurueckstellen(con, h.nutzer, auswahl_ids(con, h.nutzer, ids, a))))
 
     def zurueck_liste(request):

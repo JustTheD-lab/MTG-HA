@@ -140,7 +140,7 @@ function filterLesen(roh, optionen) {
   f.mw_bis = ganz(o.mw_bis, 0, 20);
   f.foil = o.foil === 0 || o.foil === 1 ? o.foil : null;
   f.anzahl_min = ganz(o.anzahl_min, 1, 999);
-  f.q = typeof o.q === 'string' ? o.q.slice(0, 60) : '';
+  f.q = typeof o.q === 'string' ? o.q.slice(0, 300) : '';   // Scryfall-Syntax (20.11.2026)
   f.ort = liste('ort').filter((w) => /^[kbd][0-9]{1,9}$/.test(w));       // nur in der Sammlung wirksam
   f.quelle = liste('quelle', QUELLEN);
   f.doppel = o.doppel === 1 ? 1 : null;
@@ -190,7 +190,7 @@ function aktiveFilter(s) {
     if (f.doppel === 1) ergebnis.push({ name: 'doppel', wert: '1', text: 'Mögliche Doppel' });
   }
   if (f.anzahl_min !== null) ergebnis.push({ name: 'anzahl_min', wert: '', text: `Anzahl ab ${f.anzahl_min}` });
-  if (f.q.trim()) ergebnis.push({ name: 'q', wert: '', text: `Name „${f.q.trim()}“` });
+  if (f.q.trim()) ergebnis.push({ name: 'q', wert: '', text: `Suche „${f.q.trim()}“` });
   return ergebnis;
 }
 
@@ -446,8 +446,10 @@ function geruestHtml(s) {
         </div>
       </div>
       <div class="kiste-suchzeile">
-        <input type="search" class="feld kiste-suche" placeholder="Im Namen suchen" aria-label="Im Namen suchen"
-          autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="60">
+        <input type="search" class="feld kiste-suche" placeholder="Suchen, auch wie bei Scryfall (t:goblin)"
+          aria-label="Karten suchen: Name oder Scryfall-Syntax wie t:goblin, o:haste, c:rg, mv<=2"
+          title="Name oder Scryfall-Syntax, z. B. t:goblin o:haste c:rg mv<=2 is:foil (Hilfe: scryfall.com/docs/syntax)"
+          autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="300">
         <button type="button" class="knopf kiste-filterknopf" aria-expanded="false" aria-controls="kiste-filter">${SYM.filter}<span>Filter</span><span class="kiste-filterzahl" hidden></span></button>
         <button type="button" class="knopf kiste-statknopf" aria-expanded="false" aria-controls="kiste-statistik">${SYM.balken}<span class="kiste-statknopf-text">Statistik</span></button>
       </div>

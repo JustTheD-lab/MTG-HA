@@ -9,10 +9,16 @@ export function adresse(pfad) {
   return String(pfad).replace(/^\/+/, '');
 }
 
-/** Holt JSON von der Schnittstelle, z. B. holen('/api/regal'). Wirft bei Fehlern. */
+/** Holt JSON von der Schnittstelle, z. B. holen('/api/regal'). Wirft bei Fehlern; der Fehler trägt dann
+    `status` und `fehler` (der Satz des Servers, z. B. zu einer falschen Suche), `message` bleibt „pfad: status“. */
 export async function holen(pfad) {
   const antwort = await fetch(adresse(pfad), { headers: { Accept: 'application/json' } });
-  if (!antwort.ok) throw new Error(`${pfad}: ${antwort.status}`);
+  if (!antwort.ok) {
+    const f = new Error(`${pfad}: ${antwort.status}`);
+    f.status = antwort.status;
+    try { f.fehler = (await antwort.json())?.fehler ?? null; } catch { f.fehler = null; }
+    throw f;
+  }
   return antwort.json();
 }
 

@@ -106,7 +106,7 @@ def verschieben(con, nutzer: int, ids: list[int], ziel: int) -> dict:
             "schon_dort": schon_dort, "taschen_leer": leer, "summe": {"posten": nachher[0], "karten": nachher[1]}}
 
 
-def auswahl_lesen(d: dict, nutzer: int) -> tuple:
+def auswahl_lesen(d: dict, nutzer: int, katalog=None) -> tuple:
     """Gewählte Karten aus der Anfrage: (IDs, None) bei „karten“, sonst (None, geprüfte Abfrage) bei „auswahl“."""
     if "karten" in d:
         liste = d["karten"]
@@ -123,7 +123,7 @@ def auswahl_lesen(d: dict, nutzer: int) -> tuple:
     if not isinstance(abfrage, str) or len(abfrage) > ABFRAGE_MAX:
         raise Fehler("„abfrage“ ist ungültig.")
     # dieselbe Prüfung wie beim Blättern; Sortierung, Seite und Gruppe ändern die Auswahl nicht
-    return None, anfrage_lesen(QueryParams(abfrage), bereich, nutzer)
+    return None, anfrage_lesen(QueryParams(abfrage), bereich, nutzer, katalog)
 
 
 def auswahl_ids(con, nutzer: int, ids: list[int] | None, a) -> list[int]:
@@ -258,7 +258,7 @@ def routen(h) -> list[Route]:
         if unbekannt or ("karten" in d) == ("auswahl" in d):
             raise Fehler("Bitte „ziel“ und entweder „karten“ (Liste von IDs) oder „auswahl“ angeben.")
         ziel = _ganzzahl(d.get("ziel"), "ziel", 1, GROSSE_ID - 1)
-        ids, a = auswahl_lesen(d, h.nutzer)
+        ids, a = await run_in_threadpool(auswahl_lesen, d, h.nutzer, h.katalog_pfad)  # Suche: Katalog, ggf. Scryfall
 
         def arbeit(con):
             _ab_version_3(con, 409)
@@ -273,7 +273,7 @@ def routen(h) -> list[Route]:
         if unbekannt or "kaufpreis" not in d or ("karten" in d) == ("auswahl" in d):
             raise Fehler("Bitte „kaufpreis“ (Euro oder null) und entweder „karten“ (Liste von IDs) oder „auswahl“ angeben.")
         preis = gewinn.preis_pruefen(d["kaufpreis"])
-        ids, a = auswahl_lesen(d, h.nutzer)
+        ids, a = await run_in_threadpool(auswahl_lesen, d, h.nutzer, h.katalog_pfad)  # Suche: Katalog, ggf. Scryfall
 
         def arbeit(con):
             _ab_version_3(con, 409)
